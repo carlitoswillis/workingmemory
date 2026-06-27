@@ -1,6 +1,22 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
 import type { LISTS } from "@/lib/lists";
 import { listLabel } from "@/lib/lists";
@@ -11,12 +27,13 @@ import {
   editItemAction,
   historyAction,
   moveItemAction,
+  reorderItemAction,
   setDailyDoneAction,
   setRecurrenceAction,
   toggleDoneAction,
 } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
-import ItemCard from "./ItemCard";
+import SortableItemCard from "./SortableItemCard";
 
 type ListDef = (typeof LISTS)[number];
 
@@ -78,6 +95,37 @@ export default function CardPanel({
     if (!t) return;
     setChildDraft("");
     startTransition(() => addChildAction(item.id, t));
+  }
+
+  // Local (optimistic) order of the sub-cards so drag-reorder feels instant; re-syncs
+  // whenever the server order/positions actually change.
+  const [kids, setKids] = useState<Item[]>(childItems);
+  const kidsSig = childItems.map((c) => `${c.id}:${c.position}`).join("|");
+  useEffect(() => setKids(childItems), [kidsSig]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const childSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function onChildDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldI = kids.findIndex((k) => k.id === active.id);
+    const newI = kids.findIndex((k) => k.id === over.id);
+    if (oldI < 0 || newI < 0) return;
+    const reordered = arrayMove(kids, oldI, newI);
+    setKids(reordered);
+    const prev = reordered[newI - 1]?.position;
+    const next = reordered[newI + 1]?.position;
+    let pos: number;
+    if (prev != null && next != null) pos = (prev + next) / 2;
+    else if (prev != null) pos = prev + 1000;
+    else if (next != null) pos = next - 1000;
+    else pos = Date.now();
+    const moved = reordered[newI];
+    startTransition(() => reorderItemAction(moved.id, moved.list, pos));
   }
 
   useEffect(() => setTitle(item.text), [item.text]);
@@ -195,18 +243,29 @@ export default function CardPanel({
             )}
           </div>
 
-          {childItems.length > 0 && (
-            <div className="mb-2 flex flex-col gap-1.5">
-              {childItems.map((child) => (
-                <ItemCard
-                  key={child.id}
-                  item={child}
-                  allLists={allLists}
-                  childItems={childrenByParent.get(child.id)}
-                  onOpenCard={onOpenCard}
-                />
-              ))}
-            </div>
+          {kids.length > 0 && (
+            <DndContext
+              sensors={childSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onChildDragEnd}
+            >
+              <SortableContext
+                items={kids.map((k) => k.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="mb-2 flex flex-col gap-1.5">
+                  {kids.map((child) => (
+                    <SortableItemCard
+                      key={child.id}
+                      item={child}
+                      allLists={allLists}
+                      childItems={childrenByParent.get(child.id)}
+                      onOpenCard={onOpenCard}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
 
           <form onSubmit={addChild}>
