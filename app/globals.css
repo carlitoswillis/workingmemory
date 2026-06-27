@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Nocturne: the mind at dusk (matte, low-key) ──────────────────────────
+   Warm amber = now / attention. Cool faded blue = the past. Restrained:
+   color carries meaning, not light bloom. */
+:root {
+  --bg-0: #0b0e1a;
+  --bg-1: #0e1124;
+  --surface: #141a2e;
+  --surface-2: #19213b;
+  --veil: #232b45;
+  --veil-soft: #1a2037;
+  --text-hi: #ecebf4;
+  --text-mid: #a7acc4;
+  --text-lo: #6f7596;
+  --now: #e3a866;
+  --past: #6e8bc4;
+  --done: #6fb89c;
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, var(--bg-1), var(--bg-0) 55%);
+  background-attachment: fixed;
+  color: var(--text-hi);
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.font-display {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+}
+
+/* The Today column: a quiet warm-tinted surface, no glow. */
+.col-now {
+  background: rgba(28, 26, 40, 0.5);
+  border-color: rgba(227, 168, 102, 0.18);
+}
+
+/* Card actions: visible by default (so they work on touch); on devices that
+   truly hover, reveal them on hover to stay low-key. */
+.card-actions {
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .card-actions {
+    opacity: 0;
+  }
+  .group:hover .card-actions,
+  .group:focus-within .card-actions {
+    opacity: 1;
+  }
+}
+
+/* ── Motion (gentle) ─────────────────────────────────────────────────── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card-in {
+  animation: rise 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.check-pop {
+  animation: pop 0.2s ease-out;
+}
+
+.memory-mode {
+  filter: saturate(0.5) brightness(0.96);
+  transition: filter 0.45s ease;
+}
+
+::selection {
+  background: rgba(227, 168, 102, 0.22);
+}
+
+* {
+  scrollbar-color: var(--veil) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

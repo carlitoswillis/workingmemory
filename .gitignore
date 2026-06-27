@@ -1,0 +1,13 @@
+/node_modules
+/.next
+/out
+/build
+next-env.d.ts
+
+# local working-memory database (rebuildable cache of your own data — keep it off git)
+/data
+
+.DS_Store
+*.pem
+.env*.local
+npm-debug.log*
