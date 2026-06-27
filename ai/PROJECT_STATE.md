@@ -26,18 +26,20 @@ a real structure without losing its looseness.
 - **Live against a hosted Supabase project** (owner's free-tier account). Runs locally
   with `npm run dev`; not deployed to a host yet. Under **git** (`main`); **committing
   as we go** now (see AGENTS.md — adopted 2026-06-26).
-- Cross-list drag-and-drop shipped + owner-tested. **Next addition: multi-select cards
-  and drag them together.**
+- Cross-list drag-and-drop shipped + owner-tested. **Paused here for now**; next up
+  (backlog): multi-select drag.
 
 ## Active Tasks
-- [ ] **Multi-select drag**: select multiple cards (click / cmd-click to toggle) and drag
-      them together into another list/position. dnd-kit has no built-in multi-drag — track
-      a selected-id set, drag the primary with a count badge in the `DragOverlay`, and on
-      drop apply the move to ALL selected (new list + spaced positions). Watch the gesture
-      conflicts: selection vs. click-to-open-panel vs. drag. Not auto-testable here —
-      build → owner-tests → adjust.
+- (nothing in progress — paused 2026-06-26; pick next from Backlog)
 
 ## Backlog
+- [ ] **Multi-select drag** (owner request, 2026-06-26): select multiple cards and drag
+      them together into another list / position. Proposed gesture (confirm before
+      building): ⌘/Ctrl-click toggles a card into the selection, shift-click selects a
+      range, plain click still opens the panel, dragging a selected card moves the whole
+      set. dnd-kit has no built-in multi-drag — track a selected-id set, show a count badge
+      in the `DragOverlay`, and on drop move ALL selected (new list + spaced positions).
+      Not auto-testable here.
 - [ ] **Streaks for daily tasks**: "done N days running" + which days, surfaced from the
       event log. (Daily reset shipped; streak display deferred. To record per-day
       completions in history, add `completed_on` to the `log_item_event` trigger.)
