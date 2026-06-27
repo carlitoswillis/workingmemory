@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-06-26_
+_Last updated: 2026-06-27_
 
 ## Product Vision
 A "working memory" web app (→ mobile later) — systematize the running note of what's
@@ -23,14 +23,19 @@ brain dump, recurring daily/weekly checklists, life areas). This app gives that 
 a real structure without losing its looseness.
 
 ## Current Focus
-- **Live against a hosted Supabase project** (owner's free-tier account). Runs locally
-  with `npm run dev`; not deployed to a host yet. Under **git** (`main`); **committing
-  as we go** now (see AGENTS.md — adopted 2026-06-26).
-- Cross-list drag-and-drop shipped + owner-tested. **Paused here for now**; next up
-  (backlog): multi-select drag.
+- **LOCAL-FIRST as of 2026-06-27**: pivoted OFF hosted Supabase to a local **SQLite** file
+  (`/data/wm.db`, gitignored) — single-user, offline, no auth. Owner wanted their data on
+  their own machine. Runs with `npm run dev`. History is still trigger-driven (now SQLite
+  triggers in `lib/schema.ts`); time-travel unchanged. This reverses the 2026-06-26
+  "product for real users / multi-user" framing — back to a personal tool (multi-user +
+  mobile/RLS are deferred, see Product Vision note).
+- The hosted Supabase data was fully exported + verified first (`backups/<stamp>/`,
+  items=24 / item_events=52 / profiles=1) and re-imported into SQLite. Nothing lost.
+- Under **git** (`main`); **committing as we go** (AGENTS.md). The local pivot is built +
+  self-verified but **not yet committed** — awaiting owner test.
 
 ## Active Tasks
-- (nothing in progress — paused 2026-06-26; pick next from Backlog)
+- (nothing in progress — local pivot built 2026-06-27, awaiting owner test before commit)
 
 ## Backlog
 - [ ] **Multi-select drag** (owner request, 2026-06-26): select multiple cards and drag
@@ -65,9 +70,49 @@ a real structure without losing its looseness.
 - [ ] Decide standalone vs. folding into AIA2ndBrain (kept standalone — the change-
       tracked board is a distinct product from the PARA note-filer).
 
+### Someday / maybe (bottom-of-pile, low priority)
+- [ ] **Re-introduce multi-user + auth** (reverses the 2026-06-27 local pivot; "someday
+      maybe" vibes — only if this becomes a shared product). Sketch of what it would take:
+      - **Storage**: SQLite is single-file/single-user. Going multi-user means a real
+        server DB again — most likely back to **Postgres** (self-hosted or Supabase). The
+        schema + triggers in `lib/schema.ts` port back to Postgres (that's where they came
+        from); keep them DB-side so history stays automatic.
+      - **Per-user isolation**: re-add a `user_id` on every row and **row-level security**
+        (or app-level scoping if not on Postgres/Supabase). We deliberately dropped both;
+        they'd come back together.
+      - **Auth**: re-add a login gate (Supabase Auth, or another provider) + session
+        middleware + `requireUser()` in actions + login/sign-out UI. All of that was
+        removed — git history (the local-pivot commit) is the reference for what to restore.
+      - **Sync/offline**: decide whether local-first stays (local SQLite as a cache that
+        syncs to the server) or we go server-only. Local-first + sync is the hard part.
+      - **Data**: migrate each user's local `wm.db` up into the shared DB on first login.
+      - Reuses the original 2026-06-26 multi-user thinking (Supabase + RLS + mobile via the
+        same client) — see the Product Vision note. This is the inverse of the work logged
+        in Completed ("Local-first pivot"), so that commit is the cleanest undo reference.
+
 ## Completed
+- [x] **Local-first pivot: SQLite + no auth** (2026-06-27). Moved the entire data layer
+      off hosted Supabase onto a local **better-sqlite3** file (`/data/wm.db`). New
+      `lib/schema.ts` (tables + ported history triggers, exported separately so imports
+      don't fire them) + `lib/db.ts` (singleton connection, WAL, FKs on). Rewrote
+      `lib/queries.ts` + `app/actions.ts` onto SQLite (booleans ↔ 0/1, `randomUUID` ids).
+      Deleted all of Supabase/auth: `middleware.ts`, `lib/supabase/`, `app/login`,
+      `app/auth`, sign-out form; dropped `@supabase/*`, added `better-sqlite3` +
+      `serverComponentsExternalPackages`. Dropped `user_id` from types; `profiles` →
+      single `'local'` row. Existing data exported, verified, and re-imported via
+      `scripts/import-backup.ts` (items=24 / item_events=52 / profiles=1, history intact).
+      Verified: tsc, `node lib/timetravel.test.ts`, trigger smoke-test (all 7 event types),
+      `npm run build`, and a live `npm run dev` 200 rendering real imported cards.
+- [x] **Cards within cards (sub-cards)** (2026-06-27): a child is a real item with a
+      `parent_id` FK (inherits history, recurrence, done, panel). Arbitrary depth (no
+      re-parenting ⇒ no cycles). Managed in CardPanel ("Sub-cards": add-input + child rows
+      that open their own panel, ↰ back-link); board cards show a `↳ done/total` badge;
+      board + time-machine snapshot filter to `parent_id IS NULL`. Gaps: siblings not
+      drag-reorderable; archiving a parent leaves children hidden (not cascade-archived);
+      `parent_id` not history-logged. (Originally `0005_subcards.sql` on Postgres; the
+      column is now part of the SQLite schema in `lib/schema.ts`.)
 - [x] Scaffold: Next.js App Router + TS + Tailwind. (Briefly tried local SQLite —
-      `node:sqlite`/better-sqlite3 — then pivoted to multi-user.)
+      `node:sqlite`/better-sqlite3 — then pivoted to multi-user, then back to local 2026-06-27.)
 - [x] **Schema + triggers + RLS** (`0001_init.sql`): `items` + `item_events`; history
       written by Postgres triggers (`log_item_event`, `SECURITY DEFINER`); `updated_at`
       touch trigger; row-level security so each user only sees their own rows; the events

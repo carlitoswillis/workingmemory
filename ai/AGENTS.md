@@ -3,11 +3,13 @@
 PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 
 ## Project Context
-- **Objective**: A multi-user "working memory" board web app (mobile later) where every
-  change is tracked so you can time-travel the board. Product for real users; the moat is
-  a queryable history of your attention + AI over it. See `PROJECT_STATE.md`.
-- **Stack**: Next.js (App Router) + React 18 + TS + Tailwind; Supabase (Postgres + Auth +
-  RLS); @dnd-kit; hosted DB (free tier). Runs locally against the hosted project.
+- **Objective**: A single-user, local "working memory" board web app where every change is
+  tracked so you can time-travel the board. Personal tool; the value is a queryable,
+  append-only history of your attention + (later) AI over it. See `PROJECT_STATE.md`.
+- **Stack** (LOCAL-FIRST as of 2026-06-27): Next.js (App Router) + React 18 + TS + Tailwind;
+  **better-sqlite3** local file at `/data/wm.db`; @dnd-kit. No auth, no network, no Supabase
+  — it was removed when the data moved local (see PROJECT_STATE "Local-first pivot"). The
+  old hosted Supabase data was exported to `backups/<stamp>/` and re-imported.
 
 ## Version control — COMMIT AS YOU GO (adopted 2026-06-26)
 - **Commit each logical change as you finish it.** Don't let a large uncommitted diff pile
@@ -21,12 +23,17 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 - Never `git push` or open PRs unless explicitly asked.
 
 ## Architecture Constraints
-- **History is DB-driven**: never log events in app code — Postgres triggers
-  (`log_item_event`) write `item_events` on insert/update. App actions do plain CRUD.
-- **Isolation is RLS**: every table is row-level-security scoped to `auth.uid()`. Don't
-  rely on app code for per-user separation.
-- **Migrations**: SQL files in `supabase/migrations/`, applied to the hosted DB via `psql`
-  (local Supabase/Docker was abandoned). Add a new numbered file per schema change.
+- **History is DB-driven**: never log events in app code — **SQLite triggers** in
+  `lib/schema.ts` write `item_events` on insert/update. App actions do plain CRUD.
+- **Single-user / local**: no auth, no RLS, no `user_id`. One SQLite file, one user. Don't
+  re-introduce auth or per-user scoping without an explicit owner decision.
+- **Schema**: defined in `lib/schema.ts` (`CREATE_TABLES` + `CREATE_TRIGGERS`, kept separate
+  so the importer can load data before triggers exist). `lib/db.ts` applies it idempotently
+  on first connection — no migration runner. The old `supabase/migrations/*.sql` are kept
+  only as historical reference of the schema's evolution.
+- **booleans ↔ 0/1**: SQLite stores `done`/`archived` as integers; `lib/queries.ts` maps
+  rows to the boolean `Item` shape. Bind `done ? 1 : 0` in writes (better-sqlite3 rejects JS
+  booleans).
 - **Single sources of truth**: columns in `lib/lists.ts`, row shapes in `lib/types.ts`.
 
 ## Coding Conventions

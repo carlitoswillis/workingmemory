@@ -2,15 +2,21 @@
 
 PURPOSE: Technical design and data flow of the Working Memory app.
 
-## Overview
-A multi-user board web app (mobile later). Next.js (App Router) serves the UI;
-**Supabase** provides Postgres (data), Auth (accounts), and row-level security
-(per-user isolation). History is written by **database triggers**, so every client —
-this web app, future mobile, any direct API call — records it automatically. The same
-`supabase-js` client will back the future mobile apps.
+> **⚠️ LOCAL-FIRST PIVOT (2026-06-27).** The app no longer uses Supabase, Auth, or RLS.
+> Data lives in a local **SQLite** file (`/data/wm.db`) via `better-sqlite3`; it's
+> single-user and offline. The Overview, "Auth & data access", and "Database" sections
+> below have been updated. Any remaining mention of Supabase/RLS/`auth.uid()`/`supabase-js`
+> elsewhere in this doc is **historical** — the design (trigger-driven history, append-only
+> event log, pure time-travel reconstruction) is unchanged; only the storage engine moved.
 
-Currently runs locally (`npm run dev`) against a **hosted** Supabase project (the
-owner's free tier). Not deployed; not yet under git.
+## Overview
+A single-user, local board web app. Next.js (App Router) serves the UI; a local **SQLite**
+file (`better-sqlite3`) holds the data. History is written by **database triggers**
+(`lib/schema.ts`), so every write records its own history automatically — the app does
+plain CRUD. There is no auth and no network; it's your machine, your file.
+
+Runs locally with `npm run dev`. Under git (`main`). The previous hosted-Supabase data was
+exported + verified to `backups/<stamp>/` and re-imported into SQLite.
 
 ## System Components
 
@@ -45,27 +51,30 @@ owner's free tier). Not deployed; not yet under git.
   the draggable.
 - `TimeMachineBar.tsx` — the 🕰 control; rewind to reconstruct the board as of a past time.
 
-### 3. Auth & data access (`middleware.ts`, `lib/`)
-- `middleware.ts` → `lib/supabase/middleware.ts` — refreshes the session every request,
-  redirects unauthenticated users to `/login` (except `/login`, `/auth/*`).
-- `lib/supabase/server.ts` / `client.ts` — per-request server client (session cookies)
-  and the browser client.
-- `lib/queries.ts` — reads: `getItems` (by `position`), `getHistory`, `getBoardAt`
-  (time-travel reconstruction), `getListOrder` (from `profiles`).
-- `app/actions.ts` — server actions (`"use server"`): each calls `requireUser()`, runs
-  plain CRUD on the authed client, `revalidatePath("/")`. No event-logging in app code.
-  Includes `reorderItemAction`, `saveListOrderAction`, `setRecurrenceAction`,
-  `setDailyDoneAction`, plus add/edit/move/done/archive.
+### 3. Data access (`lib/`) — no auth layer
+- `lib/db.ts` — opens the single SQLite connection (`/data/wm.db`), WAL + foreign keys on,
+  applies `lib/schema.ts` idempotently. Reused across dev hot-reloads via a global.
+- `lib/schema.ts` — `CREATE_TABLES` + `CREATE_TRIGGERS` (separate exports so the importer
+  can load rows before triggers exist). The history triggers live here.
+- `lib/queries.ts` — synchronous reads: `getItems` (by `position`; maps 0/1 → booleans via
+  `rowToItem`), `getHistory`, `getBoardAt` (time-travel reconstruction), `getListOrder`
+  (from the single `profiles` row).
+- `app/actions.ts` — server actions (`"use server"`): plain CRUD via `better-sqlite3`
+  prepared statements, then `revalidatePath("/")`. No auth gate, no event-logging in app
+  code. Includes `addChildAction`, `reorderItemAction`, `saveListOrderAction`,
+  `setRecurrenceAction`, `setDailyDoneAction`, plus add/edit/move/done/archive.
 - `lib/lists.ts` — the columns (single source of truth) + `orderLists`. `lib/types.ts` —
-  DB row shapes. `lib/timetravel.ts` — pure reconstruction. `lib/recurrence.ts` —
+  row shapes. `lib/timetravel.ts` — pure reconstruction. `lib/recurrence.ts` —
   `localToday` + `effectiveDone`.
+- `scripts/import-backup.ts` — one-off: builds `/data/wm.db` from a `backups/<stamp>/`
+  folder (tables → rows → triggers, in that order).
 
-### 4. Database (`supabase/migrations/`)
-- `0001_init.sql` — `items`, `item_events`, triggers, RLS.
-- `0002_card_details.sql` — `details` column; trigger logs detail edits.
-- `0003_ordering.sql` — `position` default + backfill; **`profiles`** table (per-user
-  column order) + RLS.
-- `0004_recurrence.sql` — `recurrence` + `completed_on` columns.
+### 4. Database — local SQLite (`lib/schema.ts`)
+Schema is code, applied on first connection (no migration runner). Tables: `items`,
+`item_events` (append-only history), `profiles` (single `'local'` row holding `list_order`).
+`items.parent_id` gives sub-cards (self-ref FK, `on delete cascade`). `done`/`archived` are
+0/1 integers; timestamps are ISO-8601 text. The old `supabase/migrations/0001`–`0005` SQL
+files remain only as a record of how the schema evolved.
 
 ## Data Model — append-only, enforced in the database
 

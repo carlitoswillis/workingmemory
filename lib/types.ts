@@ -1,16 +1,17 @@
 import type { ListId } from "./lists";
 
-// Mirrors the Postgres tables (see supabase/migrations). `done`/`archived` are
-// real booleans now (Postgres), and `id` is a uuid string.
+// Mirrors the local SQLite tables (see lib/schema.ts). In the DB `done`/`archived`
+// are 0/1 integers; the data layer (lib/queries.ts) maps them to booleans here.
+// `id` is a uuid string. Single-user/offline now — no user_id.
 export interface Item {
   id: string;
-  user_id: string;
   text: string;
   details: string;
   list: ListId;
   done: boolean;
   recurrence: string; // 'none' | 'daily'
   completed_on: string | null; // YYYY-MM-DD a daily task was last checked off
+  parent_id: string | null; // a sub-card's parent item; null = top-level board card
   position: number;
   archived: boolean;
   created_at: string;
@@ -20,7 +21,6 @@ export interface Item {
 export interface ItemEvent {
   id: number;
   item_id: string;
-  user_id: string;
   type: string; // created | edited | moved | completed | reopened | archived
   field: string | null;
   old_value: string | null;

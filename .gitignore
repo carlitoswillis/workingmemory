@@ -8,7 +8,11 @@ next-env.d.ts
 # local working-memory database (rebuildable cache of your own data — keep it off git)
 /data
 
+# downloaded backups of the hosted DB (your personal data — never commit)
+/backups
+
 .DS_Store
 *.pem
 .env*.local
 npm-debug.log*
+.aider*
