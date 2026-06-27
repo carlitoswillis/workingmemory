@@ -15,12 +15,14 @@ export default function Column({
   list,
   allLists,
   items,
+  childrenByParent,
   onOpenCard,
   dragHandleProps,
 }: {
   list: ListDef;
   allLists: readonly ListDef[];
   items: Item[];
+  childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dragHandleProps?: any;
@@ -91,6 +93,7 @@ export default function Column({
                 key={item.id}
                 item={item}
                 allLists={allLists}
+                childItems={childrenByParent.get(item.id)}
                 onOpenCard={onOpenCard}
               />
             ))}
@@ -111,7 +114,13 @@ export default function Column({
           </p>
           <div className="flex flex-col gap-1.5">
             {done.map((item) => (
-              <ItemCard key={item.id} item={item} allLists={allLists} onOpenCard={onOpenCard} />
+              <ItemCard
+                key={item.id}
+                item={item}
+                allLists={allLists}
+                childItems={childrenByParent.get(item.id)}
+                onOpenCard={onOpenCard}
+              />
             ))}
           </div>
         </div>

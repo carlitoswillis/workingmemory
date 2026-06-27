@@ -13,6 +13,7 @@ type ListDef = (typeof LISTS)[number];
 export default function SortableItemCard(props: {
   item: Item;
   allLists: readonly ListDef[];
+  childItems?: Item[];
   onOpenCard: (item: Item) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

@@ -8,6 +8,7 @@ export interface BoardItemAt {
   details: string;
   list: ListId;
   done: boolean;
+  parent_id: string | null; // null = top-level board card (children are hidden)
   existed: boolean; // was it created on or before T?
   archived: boolean; // was it archived at T?
 }
@@ -59,7 +60,16 @@ export function reconstructItemAt(
   const created = events.find((e) => e.type === "created");
   const bornAt = created ? ms(created.at) : ms(item.created_at);
 
-  return { id: item.id, text, details, list, done, existed: bornAt <= tt, archived };
+  return {
+    id: item.id,
+    text,
+    details,
+    list,
+    done,
+    parent_id: item.parent_id ?? null,
+    existed: bornAt <= tt,
+    archived,
+  };
 }
 
 /**

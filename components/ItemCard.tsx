@@ -18,10 +18,12 @@ const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
 export default function ItemCard({
   item,
+  childItems,
   onOpenCard,
 }: {
   item: Item;
   allLists: readonly ListDef[];
+  childItems?: Item[];
   onOpenCard: (item: Item) => void;
 }) {
   const isDaily = item.recurrence === "daily";
@@ -40,6 +42,8 @@ export default function ItemCard({
   }
 
   const hasDetails = item.details.trim().length > 0;
+  const subTotal = childItems?.length ?? 0;
+  const subDone = childItems?.filter((c) => effectiveDone(c)).length ?? 0;
 
   // Signature: a muted warm left edge that tracks recency (no glow; dim when done).
   const amt = recencyAmount(item.updated_at) * (doneLocal ? 0.18 : 1);
@@ -85,6 +89,14 @@ export default function ItemCard({
           {item.text}
         </button>
 
+        {subTotal > 0 && (
+          <span
+            className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"
+            title={`${subDone} of ${subTotal} sub-cards done`}
+          >
+            ↳ {subDone}/{subTotal}
+          </span>
+        )}
         {isDaily && (
           <span className="mt-[1px] shrink-0 text-[11px] leading-none text-[var(--text-lo)]" title="Repeats daily" aria-hidden>
             ↻

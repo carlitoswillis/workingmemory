@@ -5,6 +5,7 @@ import type { Item, ItemEvent } from "@/lib/types";
 import type { LISTS } from "@/lib/lists";
 import { listLabel } from "@/lib/lists";
 import {
+  addChildAction,
   archiveItemAction,
   editDetailsAction,
   editItemAction,
@@ -15,6 +16,7 @@ import {
   toggleDoneAction,
 } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
+import ItemCard from "./ItemCard";
 
 type ListDef = (typeof LISTS)[number];
 
@@ -47,17 +49,36 @@ const fmt = (iso: string) =>
 
 export default function CardPanel({
   item,
+  parent,
   allLists,
+  childItems,
+  childrenByParent,
+  onOpenCard,
   onClose,
 }: {
   item: Item;
+  parent: Item | null;
   allLists: readonly ListDef[];
+  childItems: Item[];
+  childrenByParent: Map<string, Item[]>;
+  onOpenCard: (item: Item) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
+  const [childDraft, setChildDraft] = useState("");
   const [events, setEvents] = useState<ItemEvent[] | null>(null);
   const [, startTransition] = useTransition();
+
+  const subDone = childItems.filter((c) => effectiveDone(c)).length;
+
+  function addChild(e: React.FormEvent) {
+    e.preventDefault();
+    const t = childDraft.trim();
+    if (!t) return;
+    setChildDraft("");
+    startTransition(() => addChildAction(item.id, t));
+  }
 
   useEffect(() => setTitle(item.text), [item.text]);
   useEffect(() => setDetails(item.details), [item.details]);
@@ -96,6 +117,17 @@ export default function CardPanel({
         onClick={(e) => e.stopPropagation()}
         className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
       >
+        {parent && (
+          <button
+            onClick={() => onOpenCard(parent)}
+            className="mb-3 flex max-w-full items-center gap-1 self-start truncate rounded-md px-1 py-0.5 text-xs text-[var(--text-lo)] hover:text-[var(--text-mid)]"
+            title={`Back to “${parent.text}”`}
+          >
+            <span aria-hidden>↰</span>
+            <span className="truncate">{parent.text}</span>
+          </button>
+        )}
+
         <div className="mb-5 flex items-center justify-between gap-3">
           <button
             onClick={toggleDone}
@@ -134,7 +166,7 @@ export default function CardPanel({
           onChange={(e) => setTitle(e.target.value)}
           onBlur={saveTitle}
           rows={2}
-          className="w-full resize-none rounded-lg border border-transparent bg-transparent px-1 py-1 font-display text-xl font-medium leading-snug text-[var(--text-hi)] hover:border-[var(--veil-soft)] focus:border-[var(--now)] focus:bg-[var(--bg-0)] focus:outline-none"
+          className="w-full shrink-0 resize-none rounded-lg border border-transparent bg-transparent px-1 py-1 font-display text-xl font-medium leading-snug text-[var(--text-hi)] hover:border-[var(--veil-soft)] focus:border-[var(--now)] focus:bg-[var(--bg-0)] focus:outline-none"
         />
 
         {/* Details */}
@@ -147,8 +179,46 @@ export default function CardPanel({
           onBlur={saveDetails}
           placeholder="Add context, links, the why… (Enter for a new line)"
           rows={6}
-          className="w-full resize-y rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 font-display text-sm italic leading-relaxed text-[var(--text-hi)] placeholder:not-italic placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
+          className="w-full shrink-0 resize-y rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 font-display text-sm italic leading-relaxed text-[var(--text-hi)] placeholder:not-italic placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
         />
+
+        {/* Sub-cards: each is a real item (own panel + history). Click one to dive in. */}
+        <div className="mt-5">
+          <div className="mb-1 flex items-baseline justify-between px-1">
+            <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+              Sub-cards
+            </label>
+            {childItems.length > 0 && (
+              <span className="text-[11px] tabular-nums text-[var(--text-lo)]">
+                {subDone}/{childItems.length} done
+              </span>
+            )}
+          </div>
+
+          {childItems.length > 0 && (
+            <div className="mb-2 flex flex-col gap-1.5">
+              {childItems.map((child) => (
+                <ItemCard
+                  key={child.id}
+                  item={child}
+                  allLists={allLists}
+                  childItems={childrenByParent.get(child.id)}
+                  onOpenCard={onOpenCard}
+                />
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={addChild}>
+            <input
+              value={childDraft}
+              onChange={(e) => setChildDraft(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Add a sub-card…"
+              className="w-full rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
+            />
+          </form>
+        </div>
 
         {/* List + archive */}
         <div className="mt-4 flex items-center gap-2">

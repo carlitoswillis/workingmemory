@@ -33,11 +33,28 @@ type Grouped = Record<string, Item[]>;
 
 const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5";
 
-// Group items into per-list arrays, preserving their (position-sorted) order.
+// Group TOP-LEVEL items into per-list arrays, preserving their (position-sorted)
+// order. Sub-cards (parent_id set) never render as board cards — they live inside
+// their parent's panel.
 function groupItems(items: Item[], lists: readonly ListDef[]): Grouped {
   const by: Grouped = {};
   for (const l of lists) by[l.id] = [];
-  for (const it of items) (by[it.list] ??= []).push(it);
+  for (const it of items) {
+    if (it.parent_id) continue;
+    (by[it.list] ??= []).push(it);
+  }
+  return by;
+}
+
+// Map each parent id → its direct children, in board order.
+function groupChildren(items: Item[]): Map<string, Item[]> {
+  const by = new Map<string, Item[]>();
+  for (const it of items) {
+    if (!it.parent_id) continue;
+    const arr = by.get(it.parent_id);
+    if (arr) arr.push(it);
+    else by.set(it.parent_id, [it]);
+  }
   return by;
 }
 
@@ -50,6 +67,11 @@ export default function Board({
 }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const openCard = openCardId ? items.find((i) => i.id === openCardId) ?? null : null;
+  const openParent =
+    openCard?.parent_id ? items.find((i) => i.id === openCard.parent_id) ?? null : null;
+
+  // Direct children per parent — drives the panel's sub-cards and the board badge.
+  const childrenByParent = groupChildren(items);
 
   // Time machine
   const [tmValue, setTmValue] = useState("");
@@ -196,7 +218,7 @@ export default function Board({
             <SnapshotColumn
               key={list.id}
               list={list}
-              items={snapshot.filter((i) => i.list === list.id)}
+              items={snapshot.filter((i) => i.list === list.id && !i.parent_id)}
             />
           ))}
         </div>
@@ -216,6 +238,7 @@ export default function Board({
                   list={list}
                   allLists={orderedLists}
                   items={itemsByList[list.id] ?? []}
+                  childrenByParent={childrenByParent}
                   onOpenCard={(item) => setOpenCardId(item.id)}
                 />
               ))}
@@ -235,7 +258,15 @@ export default function Board({
       )}
 
       {openCard && (
-        <CardPanel item={openCard} allLists={lists} onClose={() => setOpenCardId(null)} />
+        <CardPanel
+          item={openCard}
+          parent={openParent}
+          allLists={lists}
+          childItems={childrenByParent.get(openCard.id) ?? []}
+          childrenByParent={childrenByParent}
+          onOpenCard={(item) => setOpenCardId(item.id)}
+          onClose={() => setOpenCardId(null)}
+        />
       )}
     </>
   );

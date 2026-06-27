@@ -13,6 +13,7 @@ export default function SortableColumn(props: {
   list: ListDef;
   allLists: readonly ListDef[];
   items: Item[];
+  childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

@@ -40,22 +40,22 @@ const events = [
 
 // just after create, before any edit
 eq("at T0+2h: original text, original list, not done", reconstructItemAt(item as any, events as any, "2026-06-01T12:00:00.000Z"), {
-  id: "i1", text: "draft idea", details: "", list: "braindump", done: false, existed: true, archived: false,
+  id: "i1", text: "draft idea", details: "", list: "braindump", done: false, parent_id: null, existed: true, archived: false,
 });
 
 // after edit, before move
 eq("at T2+2h: edited text, still braindump, not done", reconstructItemAt(item as any, events as any, "2026-06-02T12:00:00.000Z"), {
-  id: "i1", text: "real idea", details: "", list: "braindump", done: false, existed: true, archived: false,
+  id: "i1", text: "real idea", details: "", list: "braindump", done: false, parent_id: null, existed: true, archived: false,
 });
 
 // after move, before complete
 eq("at T3+2h: today, not yet done", reconstructItemAt(item as any, events as any, "2026-06-03T12:00:00.000Z"), {
-  id: "i1", text: "real idea", details: "", list: "today", done: false, existed: true, archived: false,
+  id: "i1", text: "real idea", details: "", list: "today", done: false, parent_id: null, existed: true, archived: false,
 });
 
 // after everything = current
 eq("at T4+2h: current state", reconstructItemAt(item as any, events as any, "2026-06-05T00:00:00.000Z"), {
-  id: "i1", text: "real idea", details: "", list: "today", done: true, existed: true, archived: false,
+  id: "i1", text: "real idea", details: "", list: "today", done: true, parent_id: null, existed: true, archived: false,
 });
 
 // --- details are time-traveled too ---
