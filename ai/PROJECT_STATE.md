@@ -24,20 +24,18 @@ a real structure without losing its looseness.
 
 ## Current Focus
 - **Live against a hosted Supabase project** (owner's free-tier account). Runs locally
-  with `npm run dev`; **not deployed** to a host yet, and **not yet under git / no
-  commits** (owner aware — fine for now).
-- Big design + interaction pass shipped (see Completed). **Next addition: cross-list
-  drag-and-drop.**
+  with `npm run dev`; not deployed to a host yet. Under **git** (`main`); **committing
+  as we go** now (see AGENTS.md — adopted 2026-06-26).
+- Cross-list drag-and-drop shipped + owner-tested. **Next addition: multi-select cards
+  and drag them together.**
 
 ## Active Tasks
-- [ ] **Cross-list drag-and-drop** — drag a card from one column into another. This is
-      the multi-container dnd-kit pattern: unify card dragging under ONE board-level
-      `DndContext` (today each column has its own), use `onDragOver` to move a card
-      between the per-list arrays mid-drag, and `onDragEnd` to persist new `list` +
-      `position`. Column dragging (also board-level) coexists by branching on
-      `active.data.type` ('card' vs 'column'). Add a `DragOverlay` for a clean preview.
-      NOTE: drag behavior can't be auto-tested in the agent sandbox (no browser) — expect
-      a build → owner-tests → adjust loop.
+- [ ] **Multi-select drag**: select multiple cards (click / cmd-click to toggle) and drag
+      them together into another list/position. dnd-kit has no built-in multi-drag — track
+      a selected-id set, drag the primary with a count badge in the `DragOverlay`, and on
+      drop apply the move to ALL selected (new list + spaced positions). Watch the gesture
+      conflicts: selection vs. click-to-open-panel vs. drag. Not auto-testable here —
+      build → owner-tests → adjust.
 
 ## Backlog
 - [ ] **Streaks for daily tasks**: "done N days running" + which days, surfaced from the
@@ -62,7 +60,6 @@ a real structure without losing its looseness.
 - [ ] Search across items + their history.
 - [ ] Optional **Notion sync/export** for power users — your DB stays the source of
       truth; Notion is just a mirror. (A feature, never the backend.)
-- [ ] Put the project under **git** and make a first commit (currently uncommitted).
 - [ ] Decide standalone vs. folding into AIA2ndBrain (kept standalone — the change-
       tracked board is a distinct product from the PARA note-filer).
 
@@ -93,8 +90,12 @@ a real structure without losing its looseness.
 - [x] **Drag-and-drop (dnd-kit)**: reorder cards within a list (`SortableItemCard`,
       per-column `DndContext`) and reorder columns (`SortableColumn`, board-level, grip on
       the header). Column order persisted per-user in a new **`profiles` table** (RLS);
-      card order via a `position` column (`0003`, epoch-ms, backfilled). Cross-list drag
-      is the one remaining piece (see Active Tasks).
+      card order via a `position` column (`0003`, epoch-ms, backfilled).
+- [x] **Cross-list drag** (drag a card between columns): unified all cards under one
+      board-level `DndContext`; `onDragOver` moves a card between per-list arrays mid-drag
+      (a ref avoids stale state), `onDragEnd` persists new `list` + `position`; a
+      `DragOverlay` shows the floating preview. Column vs. card drag branch on
+      `active.data.type`. Owner-tested working.
 - [x] **Daily-refreshing tasks** (`0004`): `recurrence` + `completed_on`; a daily task is
       "done" only if checked off today, so it resets at local midnight with no destructive
       writes. `lib/recurrence.ts` (`localToday`, `effectiveDone`); ↻ badge on cards;

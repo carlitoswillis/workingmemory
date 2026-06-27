@@ -3,6 +3,7 @@
 /out
 /build
 next-env.d.ts
+*.tsbuildinfo
 
 # local working-memory database (rebuildable cache of your own data — keep it off git)
 /data

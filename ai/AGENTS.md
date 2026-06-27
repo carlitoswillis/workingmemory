@@ -1,25 +1,50 @@
 # Agent Guidelines (AGENTS.md)
 
-PURPOSE: This is the authoritative rulebook for AI assistants. It defines the 'how' and 'what' of the codebase.
+PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 
 ## Project Context
-- **Objective**: 
-- **Stack**: 
+- **Objective**: A multi-user "working memory" board web app (mobile later) where every
+  change is tracked so you can time-travel the board. Product for real users; the moat is
+  a queryable history of your attention + AI over it. See `PROJECT_STATE.md`.
+- **Stack**: Next.js (App Router) + React 18 + TS + Tailwind; Supabase (Postgres + Auth +
+  RLS); @dnd-kit; hosted DB (free tier). Runs locally against the hosted project.
+
+## Version control — COMMIT AS YOU GO (adopted 2026-06-26)
+- **Commit each logical change as you finish it.** Don't let a large uncommitted diff pile
+  up. One coherent change = one commit (e.g. "add cross-list drag", "fix Enter bug").
+- Write clear, present-tense messages describing the *what/why*. End commit messages with
+  the Co-Authored-By trailer.
+- **Stay on `main`** (owner's convention for this solo repo) unless asked otherwise.
+- **Commit only when the owner approves a change** — typically after they've tested it.
+  Don't commit work the owner is still evaluating.
+- Do not commit build artifacts (`.next/`, `tsconfig.tsbuildinfo`) — keep them gitignored.
+- Never `git push` or open PRs unless explicitly asked.
 
 ## Architecture Constraints
-- **API Structure**: 
-- **Database**: 
-- **Markdown Persistence**: All state must be tracked in `/ai`
+- **History is DB-driven**: never log events in app code — Postgres triggers
+  (`log_item_event`) write `item_events` on insert/update. App actions do plain CRUD.
+- **Isolation is RLS**: every table is row-level-security scoped to `auth.uid()`. Don't
+  rely on app code for per-user separation.
+- **Migrations**: SQL files in `supabase/migrations/`, applied to the hosted DB via `psql`
+  (local Supabase/Docker was abandoned). Add a new numbered file per schema change.
+- **Single sources of truth**: columns in `lib/lists.ts`, row shapes in `lib/types.ts`.
 
 ## Coding Conventions
-- **Explicit over Implicit**: Avoid hidden logic, reflection, or complex inheritance.
-- **Verification First**: All changes must be verified via tests and the project's own startup scripts.
-- **Compact Context**: Keep context files task-scoped and minimal.
+- **Explicit over implicit**: avoid hidden logic and clever indirection.
+- **Verify before declaring done**: `npx tsc --noEmit`, `npm run build`, and run the unit
+  test (`node lib/timetravel.test.ts`). Note: drag interactions can't be auto-tested here
+  (no browser) — flag those for owner testing.
+- **Match the owner's taste**: low-key, matte (no glow), thin/uniform cards, smooth on
+  desktop AND mobile. See the design notes in `ARCHITECTURE.md`.
+- **Keep `/ai` current**: update `PROJECT_STATE.md` as work lands.
 
+## Navigation (priority flow)
+1. **START HERE**: `PROJECT_STATE.md` — current focus, active task, backlog, completed.
+2. **Rules**: this file (`AGENTS.md`).
+3. **Design/data**: `ARCHITECTURE.md`.
+4. If out of sync, refresh from the code + git log.
 
-## How to Navigate This Workspace (Priority Flow)
-To minimize token waste and maximize focus, follow this priority sequence:
-1. **START HERE**: Read `CURRENT_STATE.md`. It defines the current high-level objective (currently Phase 1: YouTube Integration).
-2. **Operational Rules**: Read `AGENTS.md` (this file). Adhere strictly to these constraints.
-3. **Task Details**: Read `TASKS.md` to see the specific backlog and active items. and implementation history.
-4. **Self-Correction**: If you feel your understanding of the project state is out of sync, you may run `./scripts/ai-context.sh` to refresh your local context bundle.
+## Gotchas
+- Dev 404s everything / won't start → stale `.next`: `rm -rf .next && npm run dev`.
+- Stale process holding port 3000 → `lsof -ti tcp:3000 | xargs kill -9` before restart.
+- dnd-kit + inputs: stop propagation so the keyboard sensor doesn't hijack Enter.
