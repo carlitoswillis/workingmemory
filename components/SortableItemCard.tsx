@@ -14,6 +14,9 @@ export default function SortableItemCard(props: {
   item: Item;
   allLists: readonly ListDef[];
   childItems?: Item[];
+  selected?: boolean;
+  muted?: boolean;
+  onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

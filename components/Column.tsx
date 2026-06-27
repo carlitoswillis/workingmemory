@@ -16,6 +16,9 @@ export default function Column({
   allLists,
   items,
   childrenByParent,
+  selection,
+  activeId,
+  onSelect,
   onOpenCard,
   dragHandleProps,
 }: {
@@ -23,10 +26,16 @@ export default function Column({
   allLists: readonly ListDef[];
   items: Item[];
   childrenByParent: Map<string, Item[]>;
+  selection: Set<string>;
+  activeId: string | null;
+  onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dragHandleProps?: any;
 }) {
+  // While dragging a multi-selection, dim the other selected cards (they'll snap to
+  // the dropped block on release).
+  const mutedId = (id: string) => activeId != null && id !== activeId && selection.has(id);
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -94,6 +103,9 @@ export default function Column({
                 item={item}
                 allLists={allLists}
                 childItems={childrenByParent.get(item.id)}
+                selected={selection.has(item.id)}
+                muted={mutedId(item.id)}
+                onSelect={onSelect}
                 onOpenCard={onOpenCard}
               />
             ))}
@@ -119,6 +131,8 @@ export default function Column({
                 item={item}
                 allLists={allLists}
                 childItems={childrenByParent.get(item.id)}
+                selected={selection.has(item.id)}
+                onSelect={onSelect}
                 onOpenCard={onOpenCard}
               />
             ))}

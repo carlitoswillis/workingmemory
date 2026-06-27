@@ -14,6 +14,9 @@ export default function SortableColumn(props: {
   allLists: readonly ListDef[];
   items: Item[];
   childrenByParent: Map<string, Item[]>;
+  selection: Set<string>;
+  activeId: string | null;
+  onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

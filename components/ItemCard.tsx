@@ -19,11 +19,17 @@ const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 export default function ItemCard({
   item,
   childItems,
+  selected = false,
+  muted = false,
+  onSelect,
   onOpenCard,
 }: {
   item: Item;
   allLists: readonly ListDef[];
   childItems?: Item[];
+  selected?: boolean;
+  muted?: boolean;
+  onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
 }) {
   const isDaily = item.recurrence === "daily";
@@ -51,7 +57,11 @@ export default function ItemCard({
 
   return (
     <div
-      className="card-in group rounded-lg border border-[var(--veil-soft)] bg-[var(--surface)] transition-colors duration-150 hover:border-[var(--veil)] hover:bg-[var(--surface-2)]"
+      className={`card-in group rounded-lg border bg-[var(--surface)] transition-colors duration-150 ${
+        selected
+          ? "border-[var(--now)] bg-[var(--surface-2)] ring-1 ring-[var(--now)]"
+          : "border-[var(--veil-soft)] hover:border-[var(--veil)] hover:bg-[var(--surface-2)]"
+      } ${muted ? "opacity-40" : ""}`}
       style={{ borderLeft: `2px solid ${edge}` }}
     >
       <div className="flex items-start gap-2 py-1.5 pl-2 pr-2">
@@ -80,7 +90,13 @@ export default function ItemCard({
         </button>
 
         <button
-          onClick={() => onOpenCard(item)}
+          onClick={(e) => {
+            // ⌘/Ctrl-click toggles selection, Shift-click extends a range; a plain
+            // click still opens the card. (Mac ⌘ or Windows/Linux Ctrl.)
+            if (onSelect && (e.metaKey || e.ctrlKey)) onSelect(item, "toggle");
+            else if (onSelect && e.shiftKey) onSelect(item, "range");
+            else onOpenCard(item);
+          }}
           onKeyDown={(e) => e.stopPropagation()}
           className={`min-w-0 flex-1 break-words text-left text-[13.5px] leading-snug ${
             doneLocal ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"

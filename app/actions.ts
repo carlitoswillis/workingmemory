@@ -86,12 +86,42 @@ export async function reorderItemAction(id: string, list: string, position: numb
   revalidatePath("/");
 }
 
+// Move/reorder many cards at once (multi-select drag) — one transaction so the
+// board never sees a half-applied move.
+export async function reorderItemsAction(
+  updates: { id: string; list: string; position: number }[],
+) {
+  const valid = updates.filter((u) => isListId(u.list));
+  if (valid.length === 0) return;
+  const stmt = db.prepare("update items set position = ?, list = ? where id = ?");
+  const run = db.transaction((rows: typeof valid) => {
+    for (const r of rows) stmt.run(r.position, r.list, r.id);
+  });
+  run(valid);
+  revalidatePath("/");
+}
+
 export async function saveListOrderAction(order: string[]) {
   const valid = order.filter(isListId);
   db.prepare(
     `insert into profiles (id, list_order, updated_at) values ('local', ?, ?)
      on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
   ).run(JSON.stringify(valid), new Date().toISOString());
+  revalidatePath("/");
+}
+
+// The daily note is a SINGLE pinned item with list='note' (body in `details`), so every
+// edit is change-tracked + time-traveled — the time machine is the journal. There's only
+// ever one; you clear and rewrite it each day rather than spawning new ones. This just
+// creates it the first time (idempotent).
+export async function createNoteAction() {
+  const existing = db
+    .prepare("select id from items where list = 'note' and archived = 0 and parent_id is null limit 1")
+    .get();
+  if (existing) return;
+  db.prepare(
+    "insert into items (id, text, list, details) values (?, 'Daily note', 'note', '')",
+  ).run(randomUUID());
   revalidatePath("/");
 }
 

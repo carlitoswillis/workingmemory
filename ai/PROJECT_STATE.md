@@ -35,16 +35,35 @@ a real structure without losing its looseness.
   self-verified but **not yet committed** — awaiting owner test.
 
 ## Active Tasks
-- (nothing in progress — local pivot built 2026-06-27, awaiting owner test before commit)
+- **Multi-select drag** — BUILT 2026-06-27, awaiting owner test (drag isn't auto-testable
+  here). ⌘/Ctrl-click toggles a card into the selection, Shift-click extends a range within
+  a column, plain click still opens the panel; dragging any selected card moves the whole
+  set into the target list as a contiguous block (spaced positions, board reading order).
+  Count badge in the `DragOverlay`, selected-card ring, dimmed non-active members mid-drag,
+  a bottom selection pill, and Esc to clear. New `reorderItemsAction` (one transaction).
+  tsc + build + dev-render pass.
+- **Undo for moves** — BUILT 2026-06-27, awaiting owner test. ⌘/Ctrl-Z (or an Undo pill)
+  reverts the last card move (single or multi). Client-side stack: `onDragStart` captures
+  each dragged card's origin (list+position), the drop pushes it, undo restores via
+  `reorderItemsAction`. Session-only (clears on reload); typing in a field is ignored so
+  native text-undo still works. NOTE: the CardPanel "move to list" dropdown isn't undoable
+  yet (only drag moves).
+- **Sub-card reorder** — BUILT 2026-06-27, awaiting owner test. The CardPanel "Sub-cards"
+  list is now drag-sortable (its own `DndContext` + `SortableItemCard`, optimistic local
+  order re-synced from server positions). Persists via `reorderItemAction`. Closes the
+  earlier sub-cards v1 gap.
+- **Daily note** — BUILT 2026-06-27, awaiting owner test. A single pinned note in its own
+  board column (leftmost). It's an `item` with `list='note'`, body stored in `details`, so
+  every edit is change-tracked + time-traveled — the **time machine is the journal**.
+  Carries over day to day; you clear + rewrite it each day (no "New note" — that was tried
+  then removed because it spawned archived copies with no browse UI; the time machine is how
+  you revisit past days). `createNoteAction` just creates the one note if missing
+  (idempotent); editing reuses `editDetailsAction`. Shown read-only in the time-machine
+  snapshot (`SnapshotNoteColumn`). No schema change (reuses items). `list='note'` is a
+  sentinel — filtered out of board columns, not a valid drag/move target. (Cleaned up 5
+  archived test notes left over from the removed New-note flow.)
 
 ## Backlog
-- [ ] **Multi-select drag** (owner request, 2026-06-26): select multiple cards and drag
-      them together into another list / position. Proposed gesture (confirm before
-      building): ⌘/Ctrl-click toggles a card into the selection, shift-click selects a
-      range, plain click still opens the panel, dragging a selected card moves the whole
-      set. dnd-kit has no built-in multi-drag — track a selected-id set, show a count badge
-      in the `DragOverlay`, and on drop move ALL selected (new list + spaced positions).
-      Not auto-testable here.
 - [ ] **Streaks for daily tasks**: "done N days running" + which days, surfaced from the
       event log. (Daily reset shipped; streak display deferred. To record per-day
       completions in history, add `completed_on` to the `log_item_event` trigger.)
