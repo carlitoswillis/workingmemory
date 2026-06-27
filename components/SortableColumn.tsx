@@ -16,7 +16,7 @@ export default function SortableColumn(props: {
   onOpenCard: (item: Item) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: props.list.id });
+    useSortable({ id: props.list.id, data: { type: "column" } });
 
   return (
     <div

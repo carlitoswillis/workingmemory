@@ -1,25 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { useState, useTransition } from "react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Item } from "@/lib/types";
 import type { LISTS } from "@/lib/lists";
-import { addItemAction, reorderItemAction } from "@/app/actions";
+import { addItemAction } from "@/app/actions";
 import { effectiveDone } from "@/lib/recurrence";
 import ItemCard from "./ItemCard";
 import SortableItemCard from "./SortableItemCard";
@@ -43,44 +28,10 @@ export default function Column({
   const [draft, setDraft] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const allOpen = items.filter((i) => !effectiveDone(i));
+  // Daily tasks done *today* count as done; tomorrow they're open again.
+  const open = items.filter((i) => !effectiveDone(i));
   const done = items.filter((i) => effectiveDone(i));
-  const byId = new Map(items.map((i) => [i.id, i]));
-
-  // Optimistic card order (re-syncs from the server on every data change).
-  const [order, setOrder] = useState<string[]>(allOpen.map((i) => i.id));
-  useEffect(() => setOrder(allOpen.map((i) => i.id)), [items]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const openItems = [
-    ...order.map((id) => byId.get(id)).filter((i): i is Item => !!i && !i.done),
-    ...allOpen.filter((i) => !order.includes(i.id)),
-  ];
-  const openIds = openItems.map((i) => i.id);
-
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  function onCardDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldI = openIds.indexOf(String(active.id));
-    const newI = openIds.indexOf(String(over.id));
-    if (oldI < 0 || newI < 0) return;
-    const newIds = arrayMove(openIds, oldI, newI);
-    setOrder(newIds);
-    const arr = newIds.map((id) => byId.get(id)).filter((i): i is Item => !!i);
-    const prev = arr[newI - 1]?.position;
-    const next = arr[newI + 1]?.position;
-    let pos: number;
-    if (prev != null && next != null) pos = (prev + next) / 2;
-    else if (prev != null) pos = prev + 1000;
-    else if (next != null) pos = next - 1000;
-    else pos = byId.get(String(active.id))?.position ?? 0;
-    startTransition(() => reorderItemAction(String(active.id), list.id, pos));
-  }
+  const openIds = open.map((i) => i.id);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -116,7 +67,7 @@ export default function Column({
             </h2>
           </div>
           <span className="font-grotesk text-[11px] tabular-nums text-[var(--text-lo)]">
-            {allOpen.length || ""}
+            {open.length || ""}
           </span>
         </div>
         <p className="mt-0.5 text-[11px] leading-tight text-[var(--text-lo)]">{list.hint}</p>
@@ -133,22 +84,20 @@ export default function Column({
       </form>
 
       <div className="flex flex-1 flex-col gap-1.5">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCardDragEnd}>
-          <SortableContext items={openIds} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-1.5">
-              {openItems.map((item) => (
-                <SortableItemCard
-                  key={item.id}
-                  item={item}
-                  allLists={allLists}
-                  onOpenCard={onOpenCard}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+        <SortableContext items={openIds} strategy={verticalListSortingStrategy}>
+          <div className="flex min-h-[8px] flex-col gap-1.5">
+            {open.map((item) => (
+              <SortableItemCard
+                key={item.id}
+                item={item}
+                allLists={allLists}
+                onOpenCard={onOpenCard}
+              />
+            ))}
+          </div>
+        </SortableContext>
 
-        {openItems.length === 0 && done.length === 0 && (
+        {open.length === 0 && done.length === 0 && (
           <p className="px-1.5 pt-2 font-display text-xs italic text-[var(--text-lo)]">
             nothing here yet
           </p>
@@ -162,12 +111,7 @@ export default function Column({
           </p>
           <div className="flex flex-col gap-1.5">
             {done.map((item) => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                allLists={allLists}
-                onOpenCard={onOpenCard}
-              />
+              <ItemCard key={item.id} item={item} allLists={allLists} onOpenCard={onOpenCard} />
             ))}
           </div>
         </div>
