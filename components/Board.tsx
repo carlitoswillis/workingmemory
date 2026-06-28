@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -20,17 +20,18 @@ import {
   rectSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import type { Item } from "@/lib/types";
+import type { Item, ItemEvent } from "@/lib/types";
 import type { LISTS, ListId } from "@/lib/lists";
-import type { BoardItemAt } from "@/lib/timetravel";
+import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
-  boardAtAction,
   reorderItemAction,
   reorderItemsAction,
   saveListOrderAction,
+  timelineDataAction,
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
 import CardPanel from "./CardPanel";
+import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
 import TimeMachineBar from "./TimeMachineBar";
 
@@ -112,11 +113,32 @@ export default function Board({
     setOpenCardId(item.id);
   }
 
-  // Time machine
-  const [tmValue, setTmValue] = useState("");
-  const [asOf, setAsOf] = useState<string | null>(null);
+  // Time machine. The full (small, single-user) event log is shipped to the client once,
+  // so the scrubber reconstructs any past moment locally with no per-tick round-trip.
+  const [timeline, setTimeline] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
+  const [now] = useState(() => Date.now());
+  const [valueMs, setValueMs] = useState<number | null>(null); // null = live board
   const [snapshot, setSnapshot] = useState<BoardItemAt[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [openSnapId, setOpenSnapId] = useState<string | null>(null);
+  const loading = timeline === null;
+
+  useEffect(() => {
+    let alive = true;
+    timelineDataAction().then((d) => alive && setTimeline(d));
+    return () => {
+      alive = false;
+    };
+  }, [items]); // refresh the timeline whenever the live board changes
+
+  // Distinct moments the board actually changed — the scrubber's ticks + snap points.
+  const markers = useMemo(() => {
+    if (!timeline) return [] as number[];
+    const set = new Set<number>();
+    for (const e of timeline.events) set.add(new Date(e.at).getTime());
+    return [...set].filter((m) => m <= now).sort((a, b) => a - b);
+  }, [timeline, now]);
+  const minMs = markers[0] ?? now;
+  const asOf = valueMs != null ? new Date(valueMs).toISOString() : null;
 
   // Column order (optimistic; persisted per-user)
   const [listOrder, setListOrder] = useState<string[]>(lists.map((l) => l.id));
@@ -252,18 +274,37 @@ export default function Board({
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  async function applyTimeMachine() {
-    if (!tmValue) return;
-    setLoading(true);
-    const iso = new Date(tmValue).toISOString();
-    setSnapshot(await boardAtAction(iso));
-    setAsOf(iso);
-    setLoading(false);
+  // Scrub to a moment: reconstruct the board locally (pure fn over the shipped log).
+  function pickMoment(ms: number) {
+    if (!timeline) return;
+    const clamped = Math.max(minMs, Math.min(ms, now));
+    setValueMs(clamped);
+    setSnapshot(reconstructBoardAt(timeline.items, timeline.events, new Date(clamped).toISOString()));
   }
   function backToNow() {
+    setValueMs(null);
     setSnapshot(null);
-    setAsOf(null);
+    setOpenSnapId(null);
   }
+
+  // Snapshot lookups for the read-only past panel.
+  const snapById = useMemo(() => {
+    const m = new Map<string, BoardItemAt>();
+    for (const s of snapshot ?? []) m.set(s.id, s);
+    return m;
+  }, [snapshot]);
+  const snapChildren = useMemo(() => {
+    const m = new Map<string, BoardItemAt[]>();
+    for (const s of snapshot ?? []) {
+      if (!s.parent_id) continue;
+      const arr = m.get(s.parent_id);
+      if (arr) arr.push(s);
+      else m.set(s.parent_id, [s]);
+    }
+    return m;
+  }, [snapshot]);
+  const openSnap = openSnapId ? snapById.get(openSnapId) ?? null : null;
+  const openSnapParent = openSnap?.parent_id ? snapById.get(openSnap.parent_id) ?? null : null;
 
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
@@ -407,13 +448,14 @@ export default function Board({
   return (
     <>
       <TimeMachineBar
-        value={tmValue}
-        onChange={setTmValue}
-        onApply={applyTimeMachine}
-        onLive={backToNow}
-        loading={loading}
+        markers={markers}
+        minMs={minMs}
+        nowMs={now}
+        valueMs={valueMs}
         active={snapshot !== null}
-        asOf={asOf}
+        loading={loading}
+        onPick={pickMoment}
+        onLive={backToNow}
       />
 
       {snapshot ? (
@@ -426,6 +468,8 @@ export default function Board({
               key={list.id}
               list={list}
               items={snapshot.filter((i) => i.list === list.id && !i.parent_id)}
+              childrenByParent={snapChildren}
+              onOpenCard={setOpenSnapId}
             />
           ))}
         </div>
@@ -521,6 +565,17 @@ export default function Board({
           onClose={() => setOpenCardId(null)}
         />
       )}
+
+      {snapshot && openSnap && (
+        <SnapshotCardPanel
+          item={openSnap}
+          parent={openSnapParent}
+          childItems={snapChildren.get(openSnap.id) ?? []}
+          asOf={asOf}
+          onOpenCard={setOpenSnapId}
+          onClose={() => setOpenSnapId(null)}
+        />
+      )}
     </>
   );
 }
@@ -548,8 +603,19 @@ function SnapshotNoteColumn({ body }: { body: string }) {
   );
 }
 
-// Read-only thin column for the time-machine snapshot.
-function SnapshotColumn({ list, items }: { list: ListDef; items: BoardItemAt[] }) {
+// Read-only thin column for the time-machine snapshot. Cards click open a read-only
+// past panel (details + sub-cards as of then); a ↳ badge counts reconstructed sub-cards.
+function SnapshotColumn({
+  list,
+  items,
+  childrenByParent,
+  onOpenCard,
+}: {
+  list: ListDef;
+  items: BoardItemAt[];
+  childrenByParent: Map<string, BoardItemAt[]>;
+  onOpenCard: (id: string) => void;
+}) {
   const open = items.filter((i) => !i.done);
   const done = items.filter((i) => i.done);
   return (
@@ -563,17 +629,34 @@ function SnapshotColumn({ list, items }: { list: ListDef; items: BoardItemAt[] }
         </div>
       </div>
       <div className="flex flex-col gap-1.5">
-        {[...open, ...done].map((item) => (
-          <div
-            key={item.id}
-            className="rounded-lg border border-[var(--veil-soft)] border-l-2 border-l-[var(--past)] bg-[var(--surface)] py-1.5 pl-2 pr-1.5 text-[13.5px] leading-snug"
-            title={item.details.trim() ? `${item.text}\n\n${item.details}` : item.text}
-          >
-            <span className={item.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-mid)]"}>
-              {item.text}
-            </span>
-          </div>
-        ))}
+        {[...open, ...done].map((item) => {
+          const kids = childrenByParent.get(item.id) ?? [];
+          const kidsDone = kids.filter((c) => c.done).length;
+          const hasDetails = item.details.trim().length > 0;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onOpenCard(item.id)}
+              className="flex w-full items-start gap-2 rounded-lg border border-[var(--veil-soft)] border-l-2 border-l-[var(--past)] bg-[var(--surface)] py-1.5 pl-2 pr-1.5 text-left text-[13.5px] leading-snug transition-colors hover:bg-[var(--surface-2)]"
+              title={item.details.trim() ? `${item.text}\n\n${item.details}` : item.text}
+            >
+              <span className={`min-w-0 flex-1 break-words ${item.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-mid)]"}`}>
+                {item.text}
+              </span>
+              {kids.length > 0 && (
+                <span
+                  className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"
+                  title={`${kidsDone} of ${kids.length} sub-cards done then`}
+                >
+                  ↳ {kidsDone}/{kids.length}
+                </span>
+              )}
+              {hasDetails && (
+                <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--past)" }} aria-hidden />
+              )}
+            </button>
+          );
+        })}
         {items.length === 0 && (
           <p className="px-1.5 font-display text-xs italic text-[var(--text-lo)]">— empty then —</p>
         )}

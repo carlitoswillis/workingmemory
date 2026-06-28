@@ -97,6 +97,36 @@ body {
   transition: filter 0.45s ease;
 }
 
+/* Time-machine scrubber: a small, matte handle riding the change-tick track. */
+.tm-range {
+  height: 16px;
+}
+.tm-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: var(--now);
+  border: 2px solid var(--bg-0);
+  cursor: grab;
+}
+.tm-range:active::-webkit-slider-thumb {
+  cursor: grabbing;
+}
+.tm-range::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: var(--now);
+  border: 2px solid var(--bg-0);
+  cursor: grab;
+}
+.tm-range::-webkit-slider-runnable-track,
+.tm-range::-moz-range-track {
+  background: transparent;
+}
+
 ::selection {
   background: rgba(227, 168, 102, 0.22);
 }

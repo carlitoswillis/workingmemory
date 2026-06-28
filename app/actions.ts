@@ -4,9 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { isListId } from "@/lib/lists";
 import db from "@/lib/db";
-import { getBoardAt, getHistory } from "@/lib/queries";
-import type { ItemEvent } from "@/lib/types";
-import type { BoardItemAt } from "@/lib/timetravel";
+import { getHistory, getTimelineData } from "@/lib/queries";
+import type { Item, ItemEvent } from "@/lib/types";
 
 // Mutations are plain CRUD against the local SQLite file — the DB triggers append
 // the history events (see lib/schema.ts). Single-user/offline: no auth, no RLS.
@@ -129,6 +128,8 @@ export async function historyAction(id: string): Promise<ItemEvent[]> {
   return getHistory(id);
 }
 
-export async function boardAtAction(t: string): Promise<BoardItemAt[]> {
-  return getBoardAt(t);
+// Ship the whole (small, single-user) event log to the client so the time-machine
+// scrubber can reconstruct any past moment locally — no per-tick server round-trip.
+export async function timelineDataAction(): Promise<{ items: Item[]; events: ItemEvent[] }> {
+  return getTimelineData();
 }

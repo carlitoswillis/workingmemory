@@ -35,6 +35,24 @@ a real structure without losing its looseness.
   self-verified but **not yet committed** — awaiting owner test.
 
 ## Active Tasks
+- **Fluid time machine + robust past exploration** — BUILT 2026-06-28, awaiting owner test.
+  Two parts:
+  1. **Scrubber rewind** (`TimeMachineBar.tsx` rewritten): a timeline whose ticks are the real
+     moments the board changed. Drag the handle (soft-snaps to the nearest change on release),
+     ◀/▶ step change-to-change, relative chips (1h/6h/yesterday/last week), and the old exact
+     `datetime-local` demoted to a collapsible "exact time…". Board re-renders **live as you
+     drag** — reconstruction is now **client-side**: `timelineDataAction()` ships the whole
+     (tiny, single-user) item+event log once on mount, and `pickMoment` runs the pure
+     `reconstructBoardAt` locally (no per-tick round-trip). `boardAtAction` kept but unused by
+     this path. New `.tm-range` thumb styling in `globals.css`.
+  2. **Robust past exploration**: snapshot cards are now **clickable → read-only
+     `SnapshotCardPanel`** showing details + reconstructed **sub-cards** (click a child to drill
+     in, ↰ back-link). Snapshot columns gained the `↳ done/total` sub-card badge + a details
+     dot. Sub-card data was already in the snapshot (`reconstructBoardAt` keeps `parent_id`
+     rows); the old render just dropped it. **Past stays strictly read-only** — no edit
+     controls, no history timeline (owner chose "details + sub-cards" depth). Verified: tsc,
+     `node lib/timetravel.test.ts` (10/10), `npm run build`. Scrub/click/drag need owner
+     testing (no browser here).
 - **Multi-select drag** — BUILT 2026-06-27, awaiting owner test (drag isn't auto-testable
   here). ⌘/Ctrl-click toggles a card into the selection, Shift-click extends a range within
   a column, plain click still opens the panel; dragging any selected card moves the whole
@@ -83,6 +101,27 @@ a real structure without losing its looseness.
 - [ ] **Archive view** — browse / restore archived items (archiving keeps full history;
       no UI to see them yet).
 - [ ] Quick-capture: a keyboard-first "dump to Brain Dump" always in reach.
+- [ ] **Capture-from-anywhere via email → append to the Note** (owner idea, 2026-06-27;
+      planned, NOT to be built yet). Text/email a thought while away from the machine and
+      have it land in the daily Note (could also route to Brain Dump). Stays local-first,
+      $0, no deploy, no paid service.
+      - **Transport (free):** a throwaway email inbox (e.g. Gmail). Capture by emailing it —
+        a one-tap iOS **Shortcut**, the Mail app, or a carrier **SMS→email gateway** (free
+        but flaky; recommend the Shortcut).
+      - **Ingest:** the local machine *pulls* over IMAP (it reaches out — nothing listens on
+        the internet) and appends each new message to the active Note's `details`. The
+        existing details-edit trigger logs it, so captures are journaled + time-traveled for
+        free. Mark messages `\Seen` so they aren't re-ingested.
+      - **OWNER CONSTRAINT: no all-day polling / no always-on daemon.** Pull only on demand:
+        a "Pull inbox" button in the app and/or `npm run note:poll`, OR fetch-on-app-open,
+        OR IMAP IDLE *only while the app is open* (push while present, nothing in the
+        background). Decide which when we build it.
+      - **Sketch:** `scripts/note-inbox.ts` using `imapflow` + `mailparser`; reuse `lib/db`;
+        creds in `.env.local` (gitignored) loaded via `node --env-file=.env.local …`.
+      - **Caveats:** pull means a capture only lands when you run the fetch / open the app;
+        carrier SMS→email gateways are unreliable and some are deprecated.
+      - **Pairs with:** Quick-capture (above) and Deploy (a hosted endpoint would later allow
+        true push via an email/SMS webhook, e.g. Cloudflare Email Routing or Twilio).
 - [ ] Search across items + their history.
 - [ ] Optional **Notion sync/export** for power users — your DB stays the source of
       truth; Notion is just a mirror. (A feature, never the backend.)

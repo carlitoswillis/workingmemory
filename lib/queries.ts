@@ -1,7 +1,6 @@
 import db from "./db";
 import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
-import { reconstructBoardAt, type BoardItemAt } from "./timetravel";
 
 // Reads from the local SQLite store. SQLite stores done/archived as 0/1, so map
 // every row through `rowToItem` to get the boolean shape the app expects.
@@ -52,12 +51,13 @@ export function getHistory(itemId: string): ItemEvent[] {
     .all(itemId) as ItemEvent[];
 }
 
-// Reconstruct the whole board as it was at time `t`. Include archived items — they
-// may have been visible then. Pure reconstruction lives in lib/timetravel.ts.
-export function getBoardAt(t: string): BoardItemAt[] {
+// All items + events for client-side time-travel. Shipped once when the user opens
+// the time machine so the scrubber can reconstruct any past moment locally (the data
+// is tiny + single-user) with no per-tick server round-trip.
+export function getTimelineData(): { items: Item[]; events: ItemEvent[] } {
   const items = (db.prepare("select * from items").all() as ItemRow[]).map(rowToItem);
   const events = db
     .prepare("select * from item_events order by at asc")
     .all() as ItemEvent[];
-  return reconstructBoardAt(items, events, t);
+  return { items, events };
 }
