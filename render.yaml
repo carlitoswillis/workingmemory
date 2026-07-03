@@ -1,0 +1,32 @@
+# Render blueprint — the $0 deploy path (free web service, no persistent disk).
+# Works BECAUSE the disk is disposable by design: scripts/start.sh restores the
+# owner DB from the Litestream replica (R2/B2) on every boot, and demo boards
+# are ephemeral anyway. Tradeoff vs Fly: free services spin down after 15 idle
+# minutes and cold-start in ~1 min.
+#
+# Set in the Render dashboard (Environment → Secret):
+#   OWNER_SECRET                  openssl rand -base64 32
+#   LITESTREAM_REPLICA_URL        s3://<bucket>/owner-wm?endpoint=https://<account>.r2.cloudflarestorage.com
+#   LITESTREAM_ACCESS_KEY_ID      bucket access key
+#   LITESTREAM_SECRET_ACCESS_KEY  bucket secret
+services:
+  - type: web
+    name: workingmemory-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEMO_MODE
+        value: "1"
+      - key: DATA_DIR
+        value: /data
+      - key: PORT
+        value: "3000"
+      - key: OWNER_SECRET
+        sync: false
+      - key: LITESTREAM_REPLICA_URL
+        sync: false
+      - key: LITESTREAM_ACCESS_KEY_ID
+        sync: false
+      - key: LITESTREAM_SECRET_ACCESS_KEY
+        sync: false

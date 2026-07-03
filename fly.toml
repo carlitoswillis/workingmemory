@@ -1,0 +1,42 @@
+# Fly.io config (portfolio plan Phase 2). Deploy: `fly launch --copy-config`
+# (accept the existing config), create the volume, then set secrets:
+#
+#   fly volumes create wm_data --size 1
+#   fly secrets set OWNER_SECRET=<openssl rand -base64 32> \
+#     LITESTREAM_REPLICA_URL='s3://<bucket>/owner-wm?endpoint=https://<account>.r2.cloudflarestorage.com' \
+#     LITESTREAM_ACCESS_KEY_ID=<r2 key> LITESTREAM_SECRET_ACCESS_KEY=<r2 secret>
+#
+# app name is claimed at `fly launch` time — adjust if taken.
+app = "workingmemory-demo"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  DEMO_MODE = "1"
+  DATA_DIR = "/data"
+  PORT = "3000"
+
+[mounts]
+  source = "wm_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Scale to zero when idle — free-tier friendly; auto_start wakes it on the
+  # next request (cold start is a few seconds, fine for a portfolio demo).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

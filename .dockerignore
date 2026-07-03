@@ -1,0 +1,20 @@
+# Mirrors .gitignore plus everything the image builds itself or must never contain.
+node_modules
+.next
+tsconfig.tsbuildinfo
+
+# Data + secrets stay out of images, always.
+data
+backups
+.env*
+!.env.local.example
+
+# Repo meta / tooling
+.git
+.claude
+.aider*
+.DS_Store
+ai
+supabase
+README.md
+LICENSE

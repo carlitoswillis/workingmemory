@@ -74,6 +74,24 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
   Litestream will replicate in Phase 2). `GET /api/export` (cookie or
   `Authorization: Bearer <OWNER_SECRET>`) streams a consistent `db.backup()` snapshot —
   never a raw copy of a live WAL-mode file. With `DEMO_MODE` off none of this runs.
+- **Migration / restore (`PUT /api/import`, same auth)** — replaces the owner DB with an
+  uploaded snapshot after verifying magic bytes + `integrity_check` + expected tables;
+  `replaceOwnerDb()` in `lib/db.ts` closes the live handle and renames atomically, so a
+  bad upload changes nothing. `scripts/push-local-db.sh` wraps the cutover (snapshot
+  local `data/wm.db` → upload → compare printed counts); `scripts/pull-backup.sh` is the
+  reverse daily Mac-side backup (→ `backups/pull/<stamp>/`, verified, pruned to 30).
+
+### 5. Deploy (portfolio plan Phase 2 — hosted demo + owner board)
+`Dockerfile` (node:22-slim, multi-stage; better-sqlite3 uses its prebuilt linux binary;
+Litestream baked in) with `scripts/start.sh` as entrypoint: when `LITESTREAM_REPLICA_URL`
+is set it runs `litestream restore -if-db-not-exists` then the app under `litestream
+replicate -exec`, so the owner DB continuously replicates to object storage (R2/B2) and
+a fresh disk self-heals on boot — the disk is disposable by design (demo boards are NOT
+replicated on purpose). `GET /api/health` is the platform probe (deliberately no SQLite —
+it must not defeat the demo idle-TTL sweep). Two platform configs, owner picks one:
+`fly.toml` (persistent volume, scale-to-zero, ~$2–5/mo) or `render.yaml` (free tier, no
+disk — viable purely because of restore-on-boot; 15-min idle spin-down, ~1-min cold
+start). Env surface: `DEMO_MODE`, `DATA_DIR`, `OWNER_SECRET`, `LITESTREAM_*`.
 - `lib/demo/seed.ts` — pure, deterministic seed generator: an authored SCRIPT of actions
   is replayed to produce item rows + ~3 weeks of event history that are consistent by
   construction (events emitted exactly as the triggers would write them). Tested by

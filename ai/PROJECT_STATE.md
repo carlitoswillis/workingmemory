@@ -40,6 +40,40 @@ a real structure without losing its looseness.
   + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
+- **Deploy prep + migration tooling (portfolio plan Phase 2, code side)** — BUILT
+  2026-07-03. Everything up to the actual hosting signup is ready:
+  - `Dockerfile` (node:22-slim multi-stage; better-sqlite3 installs its prebuilt linux
+    binary in-image; Litestream v0.3.13 baked in) + `.dockerignore` (data/backups/env
+    never enter images) + `scripts/start.sh` entrypoint (`litestream restore
+    -if-db-not-exists` then `replicate -exec next start` when `LITESTREAM_REPLICA_URL`
+    is set; plain `next start` otherwise — so the disk is fully disposable; demo boards
+    are deliberately NOT replicated).
+  - `GET /api/health` (no SQLite on purpose — must not defeat idle-TTL sweeps).
+  - `fly.toml` (volume at /data, scale-to-zero, health check; ~$2-5/mo, no free tier
+    anymore) AND `render.yaml` (free tier, no disk — works because of restore-on-boot;
+    15-min spin-down / ~1-min cold start is the tradeoff). Owner picks one.
+  - **Migration = `PUT /api/import`** (same auth as export: owner cookie or bearer
+    secret; verifies magic bytes + `integrity_check` + expected tables BEFORE swapping;
+    `replaceOwnerDb()` in `lib/db.ts` closes the live handle and renames atomically) +
+    `scripts/push-local-db.sh` (consistent `db.backup()` snapshot of local `data/wm.db`
+    → upload → prints both sides' counts for the cutover check). Dry-run verified
+    against a scratch hosted instance with the REAL local DB: 41 items / 131 events
+    round-tripped, integrity ok; garbage/non-SQLite uploads rejected 400 with the live
+    DB untouched; unauth 401. If Litestream is running, restart the machine after an
+    import (fresh generation).
+  - `scripts/pull-backup.sh` (Mac-side daily pull → `backups/pull/<stamp>/wm.db`,
+    verifies integrity + prints counts, prunes to last 30, never touches the old
+    Supabase export dirs; cron line in the header). Tested live.
+  - Docker image BUILD + SMOKE-TESTED locally (2026-07-03, arm64): container serves
+    /api/health, seeded demo boards, accepted the real-DB migration push (41/131) and
+    exported it back out integrity-ok. Litestream itself not yet exercised (needs a
+    bucket) — the Phase 2 restore drill still stands.
+  - GitHub Actions CI added (`.github/workflows/ci.yml`: tsc, npm test, next build) —
+    Phase 3 head start; badge goes in the README pass.
+  - REMAINING (needs owner accounts): pick Fly (~$2-5/mo, snappier) vs Render (free,
+    ~1-min cold start after 15 idle min), create R2/B2 bucket + litestream secrets,
+    deploy, run the restore drill, then cutover via `push-local-db.sh` and set up the
+    daily pull cron.
 - **Single-owner auth + export (portfolio plan Phase 1b)** — BUILT 2026-07-03,
   self-verified end-to-end. One `OWNER_SECRET` env var guards the owner's real board on
   the hosted instance (no user tables, no per-user schema). `lib/auth.ts` mints stateless

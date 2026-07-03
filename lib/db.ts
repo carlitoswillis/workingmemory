@@ -231,3 +231,48 @@ export function getDb(): Database.Database {
 export function getOwnerDb(): Database.Database {
   return DEMO_MODE ? ownerDb() : localDb();
 }
+
+// Replace the owner DB file with an uploaded snapshot (the one-time cutover
+// migration of the local wm.db to the hosted instance, and the disaster-
+// recovery path from any pulled backup). Verifies the incoming bytes as a
+// sane Working Memory DB BEFORE touching the live file, then closes the open
+// handle and swaps atomically. Throws (changing nothing) on a bad snapshot.
+// NOTE for Phase 2: if Litestream is replicating this file, restart the
+// machine after an import so it snapshots a fresh generation.
+export function replaceOwnerDb(snapshot: Buffer): { items: number; events: number } {
+  const file = DEMO_MODE ? path.join(DATA_DIR, "owner", "wm.db") : path.join(DATA_DIR, "wm.db");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const incoming = `${file}.incoming`;
+  fs.writeFileSync(incoming, snapshot);
+
+  let counts: { items: number; events: number };
+  const check = new Database(incoming, { readonly: true });
+  try {
+    const ic = check.pragma("integrity_check", { simple: true });
+    if (ic !== "ok") throw new Error(`integrity_check: ${ic}`);
+    counts = {
+      items: (check.prepare("select count(*) c from items").get() as { c: number }).c,
+      events: (check.prepare("select count(*) c from item_events").get() as { c: number }).c,
+    };
+  } catch (e) {
+    check.close();
+    fs.rmSync(incoming, { force: true });
+    throw e instanceof Error ? e : new Error(String(e));
+  }
+  check.close();
+
+  if (DEMO_MODE) {
+    try {
+      globalForDb.__wmOwnerDb?.close();
+    } catch {}
+    globalForDb.__wmOwnerDb = undefined;
+  } else {
+    try {
+      globalForDb.__wmDb?.close();
+    } catch {}
+    globalForDb.__wmDb = undefined;
+  }
+  for (const f of [`${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true });
+  fs.renameSync(incoming, file); // next getDb()/getOwnerDb() reopens lazily
+  return counts;
+}
