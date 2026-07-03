@@ -23,21 +23,25 @@ brain dump, recurring daily/weekly checklists, life areas). This app gives that 
 a real structure without losing its looseness.
 
 ## Current Focus
-- **LOCAL-FIRST as of 2026-06-27**: pivoted OFF hosted Supabase to a local **SQLite** file
-  (`/data/wm.db`, gitignored) — single-user, offline, no auth. Owner wanted their data on
-  their own machine. Runs with `npm run dev`. History is still trigger-driven (now SQLite
-  triggers in `lib/schema.ts`); time-travel unchanged. This reverses the 2026-06-26
-  "product for real users / multi-user" framing — back to a personal tool (multi-user +
-  mobile/RLS are deferred, see Product Vision note).
-- The hosted Supabase data was fully exported + verified first (`backups/<stamp>/`,
-  items=24 / item_events=52 / profiles=1) and re-imported into SQLite. Nothing lost.
-- Under **git** (`main`); **committing as we go** (AGENTS.md). The local pivot and all
-  subsequent features are committed.
-- **PORTFOLIO DEPLOYMENT in progress (2026-07-02)**: executing
-  `ai/plans/2026-07-02-portfolio-deployment.md` — live hosted demo (per-visitor
-  ephemeral boards behind a `DEMO_MODE` flag) + single-owner auth (hosted instance
-  becomes the owner's primary board) + Fly.io/Docker deploy with Litestream durability
-  + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
+- **HOSTED-PRIMARY as of 2026-07-03**: the owner's board now lives on the hosted
+  instance (https://workingmemory.onrender.com, single-owner auth via `/login`);
+  the local `data/wm.db` is frozen pre-cutover history, and the Mac's role is
+  **backup destination** (daily launchd pull → `backups/pull/`). Durability is
+  Litestream → B2 (restore-on-boot, drill passed 2026-07-03). This inverts the
+  2026-06-27 local-first pivot's *storage location* but keeps its spirit: still
+  single-user, still SQLite, still your own data — verified local copies daily,
+  and `push-local-db.sh`/`pull-backup.sh` can move the file either way at will.
+  It is still NOT multi-user (that stays someday/maybe).
+- Data model unchanged: SQLite + trigger-driven history (`lib/schema.ts`),
+  time-travel intact. `DEMO_MODE=1` on the hosted instance gives visitors
+  throwaway per-cookie boards; the owner cookie routes to the real board.
+- Under **git** (`main`, pushed to github.com/carlitoswillis/workingmemory);
+  **committing as we go** (AGENTS.md). Pushes auto-deploy the hosted instance
+  (Render blueprint) — every deploy doubles as a restore drill.
+- **PORTFOLIO DEPLOYMENT (2026-07-02 plan): all phases built and live** — demo
+  mode (Phase 1), single-owner auth + export (Phase 1b), Docker/Litestream
+  deploy + migration tooling (Phase 2), deployed + cut over 2026-07-03 (see
+  Active Tasks). Remaining polish from that plan: README pass with CI badge.
 
 ## Active Tasks
 - **✅ DEPLOYED + CUT OVER (2026-07-03): `ai/plans/2026-07-03-free-deploy-runbook.md`
@@ -189,6 +193,10 @@ a real structure without losing its looseness.
   archived test notes left over from the removed New-note flow.)
 
 ## Backlog
+- [ ] **Owner test pass on the live board** (one session, now easy since the hosted
+      board is primary): scrubber rewind + snapshot drill-down, multi-select drag,
+      undo for moves, sub-card reorder, daily note — all BUILT and self-verified
+      but marked "awaiting owner test" in Active Tasks since late June.
 - [ ] **Streaks for daily tasks**: "done N days running" + which days, surfaced from the
       event log. (Daily reset shipped; streak display deferred. To record per-day
       completions in history, add `completed_on` to the `log_item_event` trigger.)
@@ -199,8 +207,16 @@ a real structure without losing its looseness.
       to `useOptimistic` for instant feedback everywhere (done/text/details already are).
 - [ ] **Richer details**: markdown rendering / checklists / links in the per-card details
       (today it's plain text, already change-tracked + time-traveled).
-- [ ] **Deploy**: Vercel (free Hobby) against the hosted Supabase project.
-- [ ] **Mobile apps** (React Native / Expo) — reuse the same `supabase-js` client + RLS.
+- [ ] **README pass + CI badge** (portfolio plan Phase 3 leftover): the repo is
+      public and recruiters may land on it before the app; CI is already green.
+- [ ] **Owner-side housekeeping from the 2026-07-03 deploy**: delete the unused
+      `NEXT_PUBLIC_SUPABASE_*` and `BACKBLAZE_KEY_NAME` env vars from the Render
+      dashboard (nothing reads them); decide whether the historical `supabase/`
+      migrations dir stays in the repo (git history preserves it either way).
+- [ ] **Mobile apps** (React Native / Expo) — would talk to the hosted instance;
+      needs a real HTTP API first (today writes go through Next server actions,
+      which aren't callable from a native app). (Original supabase-js/RLS plan
+      died with the 2026-06-27 pivot.)
 - [ ] **Weekly-reset + weekday-specific recurring tasks** (e.g. the note's "Wednesdays:
       no car, do laundry"). Lower priority than the daily reset that already shipped.
 - [ ] **Life-area tags** (Maintenance / Health / Career / Recreation) as a cross-cutting
@@ -209,26 +225,21 @@ a real structure without losing its looseness.
       no UI to see them yet).
 - [ ] Quick-capture: a keyboard-first "dump to Brain Dump" always in reach.
 - [ ] **Capture-from-anywhere via email → append to the Note** (owner idea, 2026-06-27;
-      planned, NOT to be built yet). Text/email a thought while away from the machine and
-      have it land in the daily Note (could also route to Brain Dump). Stays local-first,
-      $0, no deploy, no paid service.
-      - **Transport (free):** a throwaway email inbox (e.g. Gmail). Capture by emailing it —
-        a one-tap iOS **Shortcut**, the Mail app, or a carrier **SMS→email gateway** (free
-        but flaky; recommend the Shortcut).
-      - **Ingest:** the local machine *pulls* over IMAP (it reaches out — nothing listens on
-        the internet) and appends each new message to the active Note's `details`. The
-        existing details-edit trigger logs it, so captures are journaled + time-traveled for
-        free. Mark messages `\Seen` so they aren't re-ingested.
-      - **OWNER CONSTRAINT: no all-day polling / no always-on daemon.** Pull only on demand:
-        a "Pull inbox" button in the app and/or `npm run note:poll`, OR fetch-on-app-open,
-        OR IMAP IDLE *only while the app is open* (push while present, nothing in the
-        background). Decide which when we build it.
-      - **Sketch:** `scripts/note-inbox.ts` using `imapflow` + `mailparser`; reuse `lib/db`;
-        creds in `.env.local` (gitignored) loaded via `node --env-file=.env.local …`.
-      - **Caveats:** pull means a capture only lands when you run the fetch / open the app;
-        carrier SMS→email gateways are unreliable and some are deprecated.
-      - **Pairs with:** Quick-capture (above) and Deploy (a hosted endpoint would later allow
-        true push via an email/SMS webhook, e.g. Cloudflare Email Routing or Twilio).
+      NOT to be built until owner green-lights a plan). **UNBLOCKED by the 2026-07-03
+      deploy** — the design flips from IMAP-pull to webhook-push:
+      - **New shape (hosted, $0):** an inbound-email service (e.g. Cloudflare Email
+        Routing, free) receives mail at a private address and POSTs it to an
+        authenticated `POST /api/capture` route on the hosted instance, which appends
+        to the daily Note's `details` (or routes to Brain Dump). The existing
+        details-edit trigger journals it — captures are time-traveled for free.
+        No daemon, no polling: the hosted server is already always-on (modulo the
+        free tier's 15-min spin-down, which inbound webhooks simply wake).
+      - **Send side:** email from anywhere; a one-tap iOS Shortcut can front it.
+      - **Auth:** shared secret in the webhook URL/header; rate-limit like /login.
+      - The old IMAP-pull sketch (`imapflow` + `mailparser`, on-demand only, owner's
+        no-background-process constraint) is superseded but preserved in git history
+        (this file, pre-2026-07-03) if the hosted path ever goes away.
+      - **Pairs with:** Quick-capture (above).
 - [ ] Search across items + their history.
 - [ ] Optional **Notion sync/export** for power users — your DB stays the source of
       truth; Notion is just a mirror. (A feature, never the backend.)
