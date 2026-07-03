@@ -41,7 +41,8 @@ a real structure without losing its looseness.
 
 ## Active Tasks
 - **✅ DEPLOYED + CUT OVER (2026-07-03): `ai/plans/2026-07-03-free-deploy-runbook.md`
-  executed** — live at https://workingmemory-demo.onrender.com (Render free +
+  executed** — live at https://workingmemory.onrender.com (owner renamed the
+  service from workingmemory-demo on 2026-07-03; the old subdomain 404s) (Render free +
   B2 bucket `wm-owner-carlitoswillis`, endpoint `s3.us-east-005.backblazeb2.com`,
   replica prefix `owner-wm`). Real DB migrated (41 items / 131 events), restore
   drill PASSED (restart wiped the disk, board came back from B2, fresh Litestream
@@ -60,11 +61,16 @@ a real structure without losing its looseness.
   then restarting. If an import ever misbehaves again: check the bucket for
   multiple `owner-wm/generations/<id>/` dirs and prune the small (~2.5KB
   snapshot = empty board) ones; real-data snapshots are ~18KB+.
-  REMAINING (owner, runbook §6-7): freeze pre-cutover local file
+  Daily Mac backup: runbook §7's crontab was replaced by a **launchd
+  LaunchAgent** (`~/Library/LaunchAgents/com.carlitoswillis.wm-backup.plist`,
+  daily 09:15, logs to `backups/pull/backup.log`, env in `~/.wm-backup.env`
+  chmod 600) because launchd catches up on wake — cron silently skips jobs
+  whose time passes while the Mac sleeps. Verified live via `launchctl
+  kickstart gui/501/com.carlitoswillis.wm-backup` → ok 41/131.
+  REMAINING (owner): freeze pre-cutover local file
   (`cp data/wm.db backups/pre-cutover-$(date +%Y%m%d).db`; hosted board is now
-  primary — stop editing local), install the daily pull cron (`pull-backup.sh`
-  verified working 5x today), and delete the two stale `REPLICA_URL_2/_3` lines
-  from `.env.local` (one of them caused failure #1).
+  primary — stop editing local), and delete the two stale `REPLICA_URL_2/_3`
+  lines from `.env.local` (one of them caused failure #1).
 - **Deploy prep + migration tooling (portfolio plan Phase 2, code side)** — BUILT
   2026-07-03. Everything up to the actual hosting signup is ready:
   - `Dockerfile` (node:22-slim multi-stage; better-sqlite3 installs its prebuilt linux
