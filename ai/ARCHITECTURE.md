@@ -115,8 +115,8 @@ start). Env surface: `DEMO_MODE`, `DATA_DIR`, `OWNER_SECRET`, `LITESTREAM_*`.
 Schema is code, applied on first connection (no migration runner). Tables: `items`,
 `item_events` (append-only history), `profiles` (single `'local'` row holding `list_order`).
 `items.parent_id` gives sub-cards (self-ref FK, `on delete cascade`). `done`/`archived` are
-0/1 integers; timestamps are ISO-8601 text. The old `supabase/migrations/0001`–`0005` SQL
-files remain only as a record of how the schema evolved.
+0/1 integers; timestamps are ISO-8601 text. (The Postgres-era `supabase/migrations/`
+SQL files were deleted 2026-07-03 — git history keeps the schema-evolution record.)
 
 ## Data Model — append-only, enforced in the database
 

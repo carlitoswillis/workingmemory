@@ -41,7 +41,7 @@ a real structure without losing its looseness.
 - **PORTFOLIO DEPLOYMENT (2026-07-02 plan): all phases built and live** — demo
   mode (Phase 1), single-owner auth + export (Phase 1b), Docker/Litestream
   deploy + migration tooling (Phase 2), deployed + cut over 2026-07-03 (see
-  Active Tasks). Remaining polish from that plan: README pass with CI badge.
+  Active Tasks). README pass with CI badge done 2026-07-03 — plan complete.
 
 ## Active Tasks
 - **✅ DEPLOYED + CUT OVER (2026-07-03): `ai/plans/2026-07-03-free-deploy-runbook.md`
@@ -73,8 +73,8 @@ a real structure without losing its looseness.
   kickstart gui/501/com.carlitoswillis.wm-backup` → ok 41/131.
   REMAINING (owner): freeze pre-cutover local file
   (`cp data/wm.db backups/pre-cutover-$(date +%Y%m%d).db`; hosted board is now
-  primary — stop editing local), and delete the two stale `REPLICA_URL_2/_3`
-  lines from `.env.local` (one of them caused failure #1).
+  primary — stop editing local). (The stale `REPLICA_URL_2/_3` `.env.local`
+  lines are gone — owner deleted them 2026-07-03.)
 - **Deploy prep + migration tooling (portfolio plan Phase 2, code side)** — BUILT
   2026-07-03. Everything up to the actual hosting signup is ready:
   - `Dockerfile` (node:22-slim multi-stage; better-sqlite3 installs its prebuilt linux
@@ -193,7 +193,7 @@ a real structure without losing its looseness.
   archived test notes left over from the removed New-note flow.)
 
 ## Backlog
-- [ ] **Owner test pass on the live board** (one session, now easy since the hosted
+- [x] **Owner test pass on the live board** (one session, now easy since the hosted
       board is primary): scrubber rewind + snapshot drill-down, multi-select drag,
       undo for moves, sub-card reorder, daily note — all BUILT and self-verified
       but marked "awaiting owner test" in Active Tasks since late June.
@@ -207,12 +207,14 @@ a real structure without losing its looseness.
       to `useOptimistic` for instant feedback everywhere (done/text/details already are).
 - [ ] **Richer details**: markdown rendering / checklists / links in the per-card details
       (today it's plain text, already change-tracked + time-traveled).
-- [ ] **README pass + CI badge** (portfolio plan Phase 3 leftover): the repo is
-      public and recruiters may land on it before the app; CI is already green.
-- [ ] **Owner-side housekeeping from the 2026-07-03 deploy**: delete the unused
-      `NEXT_PUBLIC_SUPABASE_*` and `BACKBLAZE_KEY_NAME` env vars from the Render
-      dashboard (nothing reads them); decide whether the historical `supabase/`
-      migrations dir stays in the repo (git history preserves it either way).
+- [x] **README pass + CI badge** — DONE 2026-07-03: full rewrite for the
+      SQLite/hosted era (live-demo link, origin story, time-machine pitch,
+      $0-deploy section, CI badge). Old Supabase-era README is in git history.
+- [ ] **Owner-side housekeeping from the 2026-07-03 deploy** (one click left):
+      delete the unused `NEXT_PUBLIC_SUPABASE_*` and `BACKBLAZE_KEY_NAME` env
+      vars from the Render dashboard (nothing reads them). Done on 2026-07-03:
+      `supabase/` migrations dir deleted (git history keeps it; ARCHITECTURE.md
+      + AGENTS.md pointers updated), `.env.local` pruned to live secrets only.
 - [ ] **Mobile apps** (React Native / Expo) — would talk to the hosted instance;
       needs a real HTTP API first (today writes go through Next server actions,
       which aren't callable from a native app). (Original supabase-js/RLS plan

@@ -1,81 +1,110 @@
 # Working Memory
 
-A board for what's on your mind — **now, and everything it used to be.** Capture
-thoughts, sort them across a few lists, check off what's done — and because every
-change to every card is recorded, you can **time-travel** the whole board to any past
-moment and replay any card's history.
+**A board for what's on your mind — and a time machine for what used to be.**
 
-Built to systematize the messy running note most people (me) keep: today's priorities,
-what you're focused on, what's parked, and a raw brain-dump inbox. It's a product for
-real users — the wedge vs. Trello/Notion/Linear is the thing they don't do: a queryable
-memory of your attention (and, soon, AI on top of it).
+[![CI](https://github.com/carlitoswillis/workingmemory/actions/workflows/ci.yml/badge.svg)](https://github.com/carlitoswillis/workingmemory/actions/workflows/ci.yml)
 
-## Lists
+**Live demo: [workingmemory.onrender.com](https://workingmemory.onrender.com)** — no
+signup; you get your own throwaway board, pre-loaded with three weeks of history so
+the time machine has somewhere to go. (Free-tier hosting: first load after an idle
+spell takes ~a minute. It's warming up. Think of it as the app remembering.)
 
-| List | What goes here |
-|---|---|
-| **Today** | What you're actually doing today |
-| **Focus** | Currently on your mind / in progress |
-| **Waiting / Later** | Parked — not now, but don't forget |
-| **Backlog** | Someday / maybe |
-| **Brain Dump** | Capture now, sort later |
+## Why this exists
+
+For years I kept one perpetually rewritten note: today's priorities at the top,
+things I was waiting on, a brain-dump section at the bottom, recurring checklists
+wedged in between. It worked — right up until I asked it a question it couldn't
+answer: *what was I actually worried about three weeks ago?* The note only ever
+knew **now**. Every rewrite quietly destroyed the previous me.
+
+Todo apps don't fix this. Trello, Notion, Linear — they're all excellent at
+*current state* and amnesiac about everything else. Done items vanish, edits
+overwrite, and the history of your attention — what occupied you, for how long,
+what got stuck — is the exhaust they throw away.
+
+Working Memory keeps the exhaust. It's a small kanban-ish board (Today · Focus ·
+Waiting/Later · Backlog · Brain Dump, plus a pinned daily note) where **every
+change to every card is recorded in an append-only event log**. The board shows
+now; the 🕰 time machine scrubs backward through every moment the board ever
+changed and re-renders it as it was — read-only, drill-down and all.
+
+Some one-liners for what that buys you:
+
+- **Your attention, queryable.** "What was on my mind before vacation?" is a
+  scrub, not an archaeology dig.
+- **The daily note is a journal you never had to keep.** You just rewrite one
+  note each morning; the time machine keeps every version.
+- **Done doesn't mean gone.** Completing, archiving, editing — nothing is
+  destructive, ever. The event log is immutable by construction.
+- **The moat is the log.** Eventually: AI over your event stream — a weekly
+  review that writes itself. The substrate is already being laid down.
 
 ## What it does
 
-- **Thin, low-key cards** — a card is one wrapping line (recency-tinted left edge ·
-  checkbox · title). Click a card to open a **detail panel** for easy editing: title,
-  details/notes, move-to-list, archive, timestamps, and the full history.
-- **Time travel** — every edit, move, complete, reopen, and archive is logged. Open the
-  🕰 time machine, pick a past date, and the board re-renders as it was then.
-- **Drag-and-drop** — reorder cards within a list, and drag the column grips to rearrange
-  the board (your column order is saved per account).
-- **Daily-refreshing tasks** — mark a card *Repeat daily*; it counts as done only for
-  today and quietly resets at your local midnight (nothing is deleted).
-- **Per-account & private** — each user only ever sees their own board, enforced in the
-  database by row-level security.
+- **Thin, low-key cards** — one wrapping line (recency-tinted edge · checkbox ·
+  title). Click for a detail panel: notes, move, archive, sub-cards, full history.
+- **Time travel** — a scrubber whose ticks are the real moments the board
+  changed. Drag it and the board re-renders live; click into past cards, even
+  their sub-cards. The past is strictly read-only.
+- **Sub-cards** — cards within cards, arbitrary depth, each with its own history.
+- **Daily-refreshing tasks** — "repeat daily" cards reset at your local midnight
+  without deleting anything (a daily task is only "done" if done *today*).
+- **Multi-select drag, undo, cross-list drag** — ⌘-click to select several cards
+  and move them as a block; ⌘Z takes it back.
+- **Demo mode** — `DEMO_MODE=1` gives every visitor an isolated, rate-limited,
+  auto-expiring board seeded with fabricated-but-consistent history.
 
-## The core idea: nothing is ever lost
+## How nothing is ever lost
 
-Every item is append-only at heart. Editing text, moving lists, completing, reopening,
-archiving — each appends a row to an `item_events` log instead of overwriting. **This
-logging is done by Postgres triggers**, so every client (this web app, future mobile
-apps, any direct API call) records history automatically and can't forget. The board
-shows the *current* state; history and time-travel replay the rest. (See
-`ai/ARCHITECTURE.md`.)
+History isn't an app feature that can be forgotten in some code path — it's
+**SQLite triggers**. Every insert/update on `items` appends to `item_events` at
+the database layer, so any client (this app, a script, future mobile) records
+history just by writing. Time travel is a pure function that replays events
+backward from now. See [`ai/ARCHITECTURE.md`](ai/ARCHITECTURE.md).
 
-## Getting started
+## Run it locally
 
-You need a Supabase project (the free tier is plenty). Then:
+Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.
 
 ```bash
-# 1. point the app at your project
-cp .env.local.example .env.local      # set NEXT_PUBLIC_SUPABASE_URL + anon/publishable key
-
-# 2. apply the schema (Supabase SQL editor, or psql against your DB)
-#    run each file in supabase/migrations/ in order (0001 → 0004)
-
-# 3. run it
 npm install
-npm run dev                            # → http://localhost:3000
+npm run dev        # → http://localhost:3000, data lives in ./data/wm.db
+npm run dev:demo   # the hosted-demo experience (per-visitor ephemeral boards)
+npm test           # time-travel, demo-seed, and auth test suites
 ```
 
-Sign up with an email + password and you're on your own board. (If you keep email
-confirmation on in Supabase, click the link it sends before signing in.)
+## Deploy your own (the $0 stack)
 
-> Dev tip: if the app ever 404s everything or won't start, clear the Next cache:
-> `rm -rf .next && npm run dev`.
+The hosted instance runs the `Dockerfile` on Render's free tier with **no
+persistent disk** — by design. [Litestream](https://litestream.io) continuously
+replicates the owner's DB to a Backblaze B2 bucket and restores it on every
+boot, so the disk is disposable and **every deploy is a restore drill**. Demo
+boards are deliberately not replicated (throwaway by design).
+
+- `render.yaml` — free tier blueprint (what the live demo runs)
+- `fly.toml` — the ~$3/mo no-cold-start alternative
+- `ai/plans/2026-07-03-free-deploy-runbook.md` — the full runbook, including the
+  two failures you'll hit if you deviate (schemeless replica URLs; slim images
+  shipping no CA certs)
+
+Owner data stays owner-owned: `GET /api/export` streams a consistent snapshot,
+`PUT /api/import` migrates one in (integrity-checked before swap), and
+`scripts/push-local-db.sh` / `scripts/pull-backup.sh` move the file either
+direction. A daily launchd job pulls a verified backup to my Mac — the cloud is
+the working copy, not the only copy.
 
 ## Stack
 
-- **Next.js (App Router) + React 18 + TypeScript** — server components + server actions
-- **Supabase** — Postgres (item + append-only event store, history written by triggers),
-  Auth (accounts), and row-level security (per-user isolation). The same `supabase-js`
-  client will power the future mobile apps.
-- **@dnd-kit** — accessible drag-and-drop (cards + columns, desktop + touch)
-- **Tailwind CSS** + **Fraunces / Space Grotesk** — the dark, matte "Nocturne" look
+- **Next.js 14 (App Router) + React 18 + TypeScript** — server components + actions
+- **better-sqlite3** — one file per board; history via triggers in `lib/schema.ts`
+- **Litestream + Backblaze B2** — streaming replication, restore-on-boot
+- **@dnd-kit** — accessible drag-and-drop (cards, columns, multi-select)
+- **Tailwind CSS + Fraunces / Space Grotesk** — the matte "Nocturne" look
 
 ## Status & roadmap
 
-See `ai/PROJECT_STATE.md` for the live log. **Next up: cross-list drag-and-drop** (drag a
-card between columns). Then: an **AI weekly review** over your event stream, streaks for
-daily tasks, deploy (Vercel), and mobile (React Native, same Supabase + RLS).
+Live log in [`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md). Next up: capture-from-
+anywhere (email → daily note via webhook), streaks for daily tasks, an archive
+view, and the big one — **AI over the event stream**.
+
+MIT © Carlitos Willis

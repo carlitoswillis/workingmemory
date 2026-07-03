@@ -29,8 +29,8 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
   re-introduce auth or per-user scoping without an explicit owner decision.
 - **Schema**: defined in `lib/schema.ts` (`CREATE_TABLES` + `CREATE_TRIGGERS`, kept separate
   so the importer can load data before triggers exist). `lib/db.ts` applies it idempotently
-  on first connection — no migration runner. The old `supabase/migrations/*.sql` are kept
-  only as historical reference of the schema's evolution.
+  on first connection — no migration runner. (The Postgres-era `supabase/migrations/`
+  dir was deleted 2026-07-03; git history keeps it.)
 - **booleans ↔ 0/1**: SQLite stores `done`/`archived` as integers; `lib/queries.ts` maps
   rows to the boolean `Item` shape. Bind `done ? 1 : 0` in writes (better-sqlite3 rejects JS
   booleans).
