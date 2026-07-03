@@ -202,12 +202,13 @@ a real structure without losing its looseness.
       completions in history, add `completed_on` to the `log_item_event` trigger.)
 - [ ] **AI integration** (the real differentiator — point an LLM at the event stream):
       weekly review that writes itself; auto-triage of brain-dumps; "ask your history".
-      **CHOSEN AS NEXT TASK 2026-07-03**; owner requires it be **model-agnostic**
-      (not Claude-only) — plan written, awaiting owner sign-off:
-      `ai/plans/2026-07-03-ai-weekly-review.md` (env-configured provider
-      abstraction: openai-compatible adapter covers OpenRouter/Ollama/OpenAI/etc.,
-      plus a native anthropic adapter; no SDKs). `item_events` is the substrate
-      and the moat.
+      Plan exists (`ai/plans/2026-07-03-ai-weekly-review.md`); owner reversed
+      the model-agnostic requirement 2026-07-03 ("fuck it lets just use
+      claude") — build the native Anthropic adapter only, skip the
+      openai-compatible one (the tiny provider interface can stay so agnostic
+      remains a 40-line add later). Deferred: owner chose to tackle a
+      different backlog item first. `item_events` is the substrate and the
+      moat.
 - [ ] **Fuller optimistic UI**: add + cross-list move still round-trip the server; lift
       to `useOptimistic` for instant feedback everywhere (done/text/details already are).
 - [ ] **Richer details**: markdown rendering / checklists / links in the per-card details
