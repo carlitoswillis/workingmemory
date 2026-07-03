@@ -1,9 +1,10 @@
-import db from "./db";
+import { getDb } from "./db";
 import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
 
-// Reads from the local SQLite store. SQLite stores done/archived as 0/1, so map
-// every row through `rowToItem` to get the boolean shape the app expects.
+// Reads from the SQLite store for the current request (the one local file, or a
+// per-visitor demo DB — lib/db.ts decides). SQLite stores done/archived as 0/1,
+// so map every row through `rowToItem` to get the boolean shape the app expects.
 
 type ItemRow = Omit<Item, "done" | "archived"> & { done: number; archived: number };
 
@@ -25,7 +26,7 @@ function rowToItem(r: ItemRow): Item {
 }
 
 export function getItems(): Item[] {
-  const rows = db
+  const rows = getDb()
     .prepare("select * from items where archived = 0 order by position asc, created_at asc")
     .all() as ItemRow[];
   return rows.map(rowToItem);
@@ -33,7 +34,7 @@ export function getItems(): Item[] {
 
 // The saved column (list) order, or null if it was never set.
 export function getListOrder(): string[] | null {
-  const row = db.prepare("select list_order from profiles limit 1").get() as
+  const row = getDb().prepare("select list_order from profiles limit 1").get() as
     | { list_order: string | null }
     | undefined;
   if (!row?.list_order) return null;
@@ -46,7 +47,7 @@ export function getListOrder(): string[] | null {
 }
 
 export function getHistory(itemId: string): ItemEvent[] {
-  return db
+  return getDb()
     .prepare("select * from item_events where item_id = ? order by at asc")
     .all(itemId) as ItemEvent[];
 }
@@ -55,6 +56,7 @@ export function getHistory(itemId: string): ItemEvent[] {
 // the time machine so the scrubber can reconstruct any past moment locally (the data
 // is tiny + single-user) with no per-tick server round-trip.
 export function getTimelineData(): { items: Item[]; events: ItemEvent[] } {
+  const db = getDb();
   const items = (db.prepare("select * from items").all() as ItemRow[]).map(rowToItem);
   const events = db
     .prepare("select * from item_events order by at asc")

@@ -3,16 +3,24 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { isListId } from "@/lib/lists";
-import db from "@/lib/db";
+import { getDb, isDemoRequest } from "@/lib/db";
+import { demoAddBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
 import { getHistory, getTimelineData } from "@/lib/queries";
 import type { Item, ItemEvent } from "@/lib/types";
 
-// Mutations are plain CRUD against the local SQLite file — the DB triggers append
-// the history events (see lib/schema.ts). Single-user/offline: no auth, no RLS.
+// Mutations are plain CRUD against the request's SQLite file (the one local file,
+// or a per-visitor demo DB — lib/db.ts decides) — the DB triggers append the
+// history events (see lib/schema.ts). Demo boards get size caps here; write RATE
+// limiting lives in middleware.ts. With DEMO_MODE off none of the caps apply.
 
 export async function addItemAction(text: string, list: string) {
-  const t = text.trim();
+  let t = text.trim();
   if (!t || !isListId(list)) return;
+  const db = getDb();
+  if (isDemoRequest()) {
+    if (demoAddBlocked(db)) return;
+    t = clampDemoText(t);
+  }
   db.prepare("insert into items (id, text, list, position) values (?, ?, ?, ?)").run(
     randomUUID(),
     t,
@@ -26,8 +34,13 @@ export async function addItemAction(text: string, list: string) {
 // recurrence, the panel) and inherits the parent's list — children never render as
 // top-level board cards, but `list` is NOT NULL so we keep it sensible.
 export async function addChildAction(parentId: string, text: string) {
-  const t = text.trim();
+  let t = text.trim();
   if (!t) return;
+  const db = getDb();
+  if (isDemoRequest()) {
+    if (demoAddBlocked(db)) return;
+    t = clampDemoText(t);
+  }
   const parent = db.prepare("select list from items where id = ?").get(parentId) as
     | { list: string }
     | undefined;
@@ -39,49 +52,53 @@ export async function addChildAction(parentId: string, text: string) {
 }
 
 export async function editItemAction(id: string, text: string) {
-  const t = text.trim();
+  let t = text.trim();
   if (!t) return;
-  db.prepare("update items set text = ? where id = ?").run(t, id);
+  if (isDemoRequest()) t = clampDemoText(t);
+  getDb().prepare("update items set text = ? where id = ?").run(t, id);
   revalidatePath("/");
 }
 
 export async function editDetailsAction(id: string, details: string) {
   // details may be empty (cleared); no trim-reject.
-  db.prepare("update items set details = ? where id = ?").run(details, id);
+  const d = isDemoRequest() ? clampDemoDetails(details) : details;
+  getDb().prepare("update items set details = ? where id = ?").run(d, id);
   revalidatePath("/");
 }
 
 export async function moveItemAction(id: string, list: string) {
   if (!isListId(list)) return;
-  db.prepare("update items set list = ? where id = ?").run(list, id);
+  getDb().prepare("update items set list = ? where id = ?").run(list, id);
   revalidatePath("/");
 }
 
 export async function toggleDoneAction(id: string, done: boolean) {
-  db.prepare("update items set done = ? where id = ?").run(done ? 1 : 0, id);
+  getDb().prepare("update items set done = ? where id = ?").run(done ? 1 : 0, id);
   revalidatePath("/");
 }
 
 export async function archiveItemAction(id: string) {
-  db.prepare("update items set archived = 1 where id = ?").run(id);
+  getDb().prepare("update items set archived = 1 where id = ?").run(id);
   revalidatePath("/");
 }
 
 export async function setRecurrenceAction(id: string, recurrence: string) {
   const value = recurrence === "daily" ? "daily" : "none";
-  db.prepare("update items set recurrence = ? where id = ?").run(value, id);
+  getDb().prepare("update items set recurrence = ? where id = ?").run(value, id);
   revalidatePath("/");
 }
 
 // Check/uncheck a daily task for a given local date (null = uncheck).
 export async function setDailyDoneAction(id: string, completedOn: string | null) {
-  db.prepare("update items set completed_on = ? where id = ?").run(completedOn, id);
+  getDb().prepare("update items set completed_on = ? where id = ?").run(completedOn, id);
   revalidatePath("/");
 }
 
 export async function reorderItemAction(id: string, list: string, position: number) {
   if (!isListId(list)) return;
-  db.prepare("update items set position = ?, list = ? where id = ?").run(position, list, id);
+  getDb()
+    .prepare("update items set position = ?, list = ? where id = ?")
+    .run(position, list, id);
   revalidatePath("/");
 }
 
@@ -92,6 +109,7 @@ export async function reorderItemsAction(
 ) {
   const valid = updates.filter((u) => isListId(u.list));
   if (valid.length === 0) return;
+  const db = getDb();
   const stmt = db.prepare("update items set position = ?, list = ? where id = ?");
   const run = db.transaction((rows: typeof valid) => {
     for (const r of rows) stmt.run(r.position, r.list, r.id);
@@ -102,10 +120,12 @@ export async function reorderItemsAction(
 
 export async function saveListOrderAction(order: string[]) {
   const valid = order.filter(isListId);
-  db.prepare(
-    `insert into profiles (id, list_order, updated_at) values ('local', ?, ?)
+  getDb()
+    .prepare(
+      `insert into profiles (id, list_order, updated_at) values ('local', ?, ?)
      on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify(valid), new Date().toISOString());
+    )
+    .run(JSON.stringify(valid), new Date().toISOString());
   revalidatePath("/");
 }
 
@@ -114,10 +134,12 @@ export async function saveListOrderAction(order: string[]) {
 // ever one; you clear and rewrite it each day rather than spawning new ones. This just
 // creates it the first time (idempotent).
 export async function createNoteAction() {
+  const db = getDb();
   const existing = db
     .prepare("select id from items where list = 'note' and archived = 0 and parent_id is null limit 1")
     .get();
   if (existing) return;
+  if (isDemoRequest() && demoAddBlocked(db)) return;
   db.prepare(
     "insert into items (id, text, list, details) values (?, 'Daily note', 'note', '')",
   ).run(randomUUID());

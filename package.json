@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:demo": "DEMO_MODE=1 next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node lib/timetravel.test.ts && node lib/demo/seed.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
