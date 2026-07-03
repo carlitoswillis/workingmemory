@@ -233,7 +233,19 @@ a real structure without losing its looseness.
       filter over items.
 - [ ] **Archive view** — browse / restore archived items (archiving keeps full history;
       no UI to see them yet).
-- [ ] Quick-capture: a keyboard-first "dump to Brain Dump" always in reach.
+- [x] **Quick-capture** — BUILT 2026-07-03, awaiting owner test. A keyboard-first
+      "dump to Brain Dump" always in reach: a bare `c` or `⌘/Ctrl-K` opens a small
+      overlay (`components/QuickCapture.tsx`) anywhere on the board; Enter files the
+      text into Brain Dump and clears the field for rapid multi-dump (running "✓ N
+      added"), Esc closes. A low-key `＋ Capture` pill (bottom-right) opens the same
+      thing for touch/mouse. Blocked while time-traveling (past is read-only) and
+      while a text field is focused. No schema change / no new deps — reuses
+      `addItemAction(text, "braindump")`, so captures are trigger-logged +
+      time-traveled; demo caps still apply. Open/close state lives in `Board.tsx`
+      (owns the global keydown listener); the overlay `stopPropagation`s so it never
+      collides with the undo/select hotkeys. Verified: tsc, timetravel test, prod
+      build, dev-server SSR render. Keyboard/overlay interaction is browser-only —
+      owner to eyeball.
 - [ ] **Capture-from-anywhere via email → append to the Note** (owner idea, 2026-06-27;
       NOT to be built until owner green-lights a plan). **UNBLOCKED by the 2026-07-03
       deploy** — the design flips from IMAP-pull to webhook-push:

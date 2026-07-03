@@ -34,6 +34,7 @@ import CardPanel from "./CardPanel";
 import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
 import TimeMachineBar from "./TimeMachineBar";
+import QuickCapture from "./QuickCapture";
 
 type ListDef = (typeof LISTS)[number];
 type Grouped = Record<string, Item[]>;
@@ -91,6 +92,9 @@ export default function Board({
 }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const openCard = openCardId ? items.find((i) => i.id === openCardId) ?? null : null;
+
+  // Quick-capture overlay: a keyboard-first "dump to Brain Dump" always in reach.
+  const [captureOpen, setCaptureOpen] = useState(false);
   const openParent =
     openCard?.parent_id ? items.find((i) => i.id === openCard.parent_id) ?? null : null;
 
@@ -262,6 +266,18 @@ export default function Board({
     const tag = (e.target as HTMLElement | null)?.tagName;
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     if (typing) return;
+    // Quick-capture (live board only): ⌘/Ctrl-K or a bare "c". Not while time-traveling.
+    const canCapture = snapshot === null && !captureOpen;
+    if (canCapture && (e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+      e.preventDefault();
+      setCaptureOpen(true);
+      return;
+    }
+    if (canCapture && e.key === "c" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      setCaptureOpen(true);
+      return;
+    }
     if (e.key === "Escape") clearSelection();
     if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
       e.preventDefault();
@@ -553,6 +569,25 @@ export default function Board({
           </button>
         </div>
       )}
+
+      {!snapshot && !captureOpen && selection.size === 0 && (
+        <button
+          onClick={() => setCaptureOpen(true)}
+          title="Quick capture to Brain Dump · c"
+          aria-label="Quick capture to Brain Dump"
+          className="fixed bottom-5 right-5 z-40 flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] pl-3.5 pr-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
+        >
+          <span className="text-[var(--now)]" aria-hidden>
+            ＋
+          </span>
+          Capture
+          <kbd className="hidden font-grotesk text-[11px] text-[var(--text-lo)] sm:inline">
+            c
+          </kbd>
+        </button>
+      )}
+
+      <QuickCapture open={captureOpen} onClose={() => setCaptureOpen(false)} />
 
       {openCard && (
         <CardPanel
