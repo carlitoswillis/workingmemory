@@ -40,6 +40,24 @@ a real structure without losing its looseness.
   + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
+- **Demo mode (portfolio plan Phase 1)** — BUILT 2026-07-02, self-verified end-to-end.
+  `DEMO_MODE=1` gives every visitor their own throwaway board: middleware.ts mints an
+  httpOnly `wm_visitor` uuid cookie (injected into the first request too, so the first
+  paint already has its board) and rate-limits POSTs (token bucket, 30/min burst 60);
+  `lib/db.ts#getDb()` resolves the request's DB — flag off → the same single local file
+  as always, flag on → `DATA_DIR/demo/<uuid>.db`, seeded on first open with ~3 weeks of
+  fabricated, internally-consistent event history (`lib/demo/seed.ts`, event-sourced
+  replay inserted before triggers attach, the import-backup pattern). Guardrails: item
+  cap 250 / text 500 / details 5k (`lib/demo/limits.ts`), 24h-idle TTL sweep + 400-file
+  cap (opportunistic, on new-board creation — NO background process), LRU cap of 50 open
+  connections, uuid-sanitized cookie (no path traversal), cookieless clients share one
+  fallback board. Demo banner on the board. `npm run dev:demo`; `npm test` runs both
+  test files (`lib/demo/seed.test.ts` covers determinism, chronology, event-chain
+  consistency, reconstruction at now/past/pre-history, archived-item visibility).
+  Verified: tsc, both test suites, prod build, and live curl checks — flag-off identical
+  to before (no cookie/banner), per-visitor isolation via a real server-action write,
+  429 after burst, trigger-logged history in demo DBs. Owner: eyeball the seeded board +
+  scrub the time machine in a browser (`npm run dev:demo`).
 - **Fluid time machine + robust past exploration** — BUILT 2026-06-28, awaiting owner test.
   Two parts:
   1. **Scrubber rewind** (`TimeMachineBar.tsx` rewritten): a timeline whose ticks are the real

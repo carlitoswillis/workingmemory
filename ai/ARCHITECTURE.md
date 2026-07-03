@@ -52,8 +52,21 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
 - `TimeMachineBar.tsx` — the 🕰 control; rewind to reconstruct the board as of a past time.
 
 ### 3. Data access (`lib/`) — no auth layer
-- `lib/db.ts` — opens the single SQLite connection (`/data/wm.db`), WAL + foreign keys on,
-  applies `lib/schema.ts` idempotently. Reused across dev hot-reloads via a global.
+- `lib/db.ts` — `getDb()` resolves the SQLite connection for the current request. With
+  `DEMO_MODE` off (local use): the single file at `DATA_DIR/wm.db` (default `./data`),
+  WAL + foreign keys on, schema applied idempotently, connection reused across dev
+  hot-reloads via a global — same behavior as always. With `DEMO_MODE=1` (hosted demo):
+  each visitor gets their own `DATA_DIR/demo/<uuid>.db` keyed by an httpOnly cookie
+  (minted in `middleware.ts`), seeded on first open from `lib/demo/seed.ts` (rows
+  inserted BEFORE triggers attach), TTL-swept after 24h idle (opportunistically, on
+  new-board creation — no background process), LRU-capped open connections.
+- `middleware.ts` — inert when `DEMO_MODE` is off. On: mints the `wm_visitor` cookie
+  (also injected into the current request so the first render has its board) and
+  token-bucket rate-limits POSTs per visitor. No SQLite here (edge runtime).
+- `lib/demo/seed.ts` — pure, deterministic seed generator: an authored SCRIPT of actions
+  is replayed to produce item rows + ~3 weeks of event history that are consistent by
+  construction (events emitted exactly as the triggers would write them). Tested by
+  `lib/demo/seed.test.ts`. `lib/demo/limits.ts` — demo write caps used by actions.
 - `lib/schema.ts` — `CREATE_TABLES` + `CREATE_TRIGGERS` (separate exports so the importer
   can load rows before triggers exist). The history triggers live here.
 - `lib/queries.ts` — synchronous reads: `getItems` (by `position`; maps 0/1 → booleans via
