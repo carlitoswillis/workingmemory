@@ -23,7 +23,12 @@ ARG LITESTREAM_VERSION=v0.3.13
 # Apple-silicon local build) — declaring a default would override it.
 ARG TARGETARCH
 ADD https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-${TARGETARCH}.deb /tmp/litestream.deb
-RUN dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb
+# ca-certificates: node:22-slim ships no system CA store (Node bundles its own),
+# but litestream is a Go binary and needs it to verify the bucket's TLS cert.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
