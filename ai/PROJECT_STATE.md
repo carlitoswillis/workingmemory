@@ -238,8 +238,12 @@ a real structure without losing its looseness.
       pre-existing Next 14 / postcss, fix = Next 16 major, out of scope). Verified:
       tsc, all 4 test suites, prod build, a react-dom/server render check (headings/
       task-lists/safe-links/`javascript:` stripped), dev SSR render. Rendering in the
-      live panel is browser-only — owner to eyeball. Follow-up left plain: the daily
-      **Note** (NoteColumn) still shows a raw textarea, not rendered markdown.
+      live panel is browser-only — owner to eyeball. The daily **Note** (NoteColumn)
+      renders markdown too (2026-07-03) — same view/edit pattern, but next/dynamic
+      with ssr:true (it's visible on first paint, so SSR the markdown to avoid a
+      flash while still code-splitting react-markdown out of the initial JS; verified
+      via `next start`, First Load JS held ~118kB). The note's daily/weekly checklists
+      now render as real GFM task lists.
 - [x] **README pass + CI badge** — DONE 2026-07-03: full rewrite for the
       SQLite/hosted era (live-demo link, origin story, time-machine pitch,
       $0-deploy section, CI badge). Old Supabase-era README is in git history.
