@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
+import { completedDays } from "./streaks";
 
 // Reads from the SQLite store for the current request (the one local file, or a
 // per-visitor demo DB — lib/db.ts decides). SQLite stores done/archived as 0/1,
@@ -26,10 +27,33 @@ function rowToItem(r: ItemRow): Item {
 }
 
 export function getItems(): Item[] {
-  const rows = getDb()
+  const db = getDb();
+  const rows = db
     .prepare("select * from items where archived = 0 order by position asc, created_at asc")
     .all() as ItemRow[];
-  return rows.map(rowToItem);
+  const items = rows.map(rowToItem);
+
+  // Attach completed-day history to daily tasks (streaks). One query for all
+  // items; the replay itself is pure (lib/streaks.ts). Chronological order
+  // matters — an uncheck must land after the check it reverts.
+  if (items.some((i) => i.recurrence === "daily")) {
+    const evRows = db
+      .prepare(
+        "select item_id, field, old_value, new_value from item_events where field = 'completed_on' order by at asc, id asc",
+      )
+      .all() as { item_id: string; field: string; old_value: string | null; new_value: string | null }[];
+    const byItem = new Map<string, typeof evRows>();
+    for (const e of evRows) {
+      const arr = byItem.get(e.item_id);
+      if (arr) arr.push(e);
+      else byItem.set(e.item_id, [e]);
+    }
+    for (const it of items) {
+      if (it.recurrence !== "daily") continue;
+      it.completed_days = [...completedDays(byItem.get(it.id) ?? [], it.completed_on)].sort();
+    }
+  }
+  return items;
 }
 
 // The saved column (list) order, or null if it was never set.

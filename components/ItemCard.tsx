@@ -5,6 +5,7 @@ import type { Item } from "@/lib/types";
 import type { LISTS } from "@/lib/lists";
 import { setDailyDoneAction, toggleDoneAction } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
+import { currentStreak } from "@/lib/streaks";
 
 type ListDef = (typeof LISTS)[number];
 
@@ -45,6 +46,17 @@ export default function ItemCard({
     } else {
       startTransition(() => toggleDoneAction(item.id, next));
     }
+  }
+
+  // Streak follows the optimistic checkbox: fold doneLocal into today before
+  // counting, so checking off shows the new streak instantly.
+  let streak = 0;
+  if (isDaily) {
+    const today = localToday();
+    const days = new Set(item.completed_days ?? []);
+    if (doneLocal) days.add(today);
+    else days.delete(today);
+    streak = currentStreak(days, today);
   }
 
   const hasDetails = item.details.trim().length > 0;
@@ -114,8 +126,12 @@ export default function ItemCard({
           </span>
         )}
         {isDaily && (
-          <span className="mt-[1px] shrink-0 text-[11px] leading-none text-[var(--text-lo)]" title="Repeats daily" aria-hidden>
-            ↻
+          <span
+            className="mt-[1px] shrink-0 text-[11px] leading-none tabular-nums text-[var(--text-lo)]"
+            title={streak >= 2 ? `Repeats daily — done ${streak} days running` : "Repeats daily"}
+            aria-hidden
+          >
+            ↻{streak >= 2 && <span className="ml-0.5 text-[10px]">{streak}</span>}
           </span>
         )}
         {hasDetails && (

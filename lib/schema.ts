@@ -36,7 +36,7 @@ create table if not exists item_events (
   id         integer primary key autoincrement,
   item_id    text not null references items(id) on delete cascade,
   type       text not null,   -- created | edited | moved | completed | reopened | archived
-  field      text,            -- text | details | list | done | archived
+  field      text,            -- text | details | list | done | archived | completed_on
   old_value  text,
   new_value  text,
   at         text not null default (${ISO_NOW})
@@ -101,6 +101,26 @@ begin
     'done',
     case when old.done = 1 then 'true' else 'false' end,
     case when new.done = 1 then 'true' else 'false' end,
+    ${ISO_NOW}
+  );
+end;
+
+-- Daily-task check-offs (completed_on holds the local YYYY-MM-DD it was last
+-- checked). Logging them makes per-day completions part of history: streaks are
+-- computed from these events, and the time machine can revert them. Uncheck
+-- writes null. New trigger names are picked up by existing DBs on next open
+-- (openAt runs CREATE_TRIGGERS idempotently), so no migration step is needed —
+-- but events only exist from the day this trigger lands.
+create trigger if not exists items_log_completed_on after update of completed_on on items
+when new.completed_on is not old.completed_on
+begin
+  insert into item_events (item_id, type, field, old_value, new_value, at)
+  values (
+    new.id,
+    case when new.completed_on is not null then 'completed' else 'reopened' end,
+    'completed_on',
+    old.completed_on,
+    new.completed_on,
     ${ISO_NOW}
   );
 end;

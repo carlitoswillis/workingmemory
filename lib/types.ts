@@ -11,6 +11,10 @@ export interface Item {
   done: boolean;
   recurrence: string; // 'none' | 'daily'
   completed_on: string | null; // YYYY-MM-DD a daily task was last checked off
+  // Every day this daily task ended up checked, from completed_on history events
+  // (lib/streaks.ts). Populated by lib/queries.ts for daily items only — not a DB
+  // column. Streak display = currentStreak() over these, client-side (browser TZ).
+  completed_days?: string[];
   parent_id: string | null; // a sub-card's parent item; null = top-level board card
   position: number;
   archived: boolean;

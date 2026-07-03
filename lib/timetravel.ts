@@ -19,6 +19,15 @@ function asBool(v: string | null): boolean {
 
 const ms = (iso: string) => new Date(iso).getTime();
 
+// The local calendar date (YYYY-MM-DD) of an ISO instant — same convention as
+// lib/recurrence.ts localToday(), for judging a daily task "done" at time t.
+function localDateOf(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 /**
  * Reconstruct one item's state at time `t` by starting from its CURRENT values
  * and reverting every change that happened after `t` (each event carries the
@@ -32,6 +41,7 @@ export function reconstructItemAt(
   const tt = ms(t);
   let { text, list, done, archived } = item;
   let details = item.details ?? "";
+  let completed_on = item.completed_on ?? null;
 
   const after = events
     .filter((e) => ms(e.at) > tt)
@@ -54,6 +64,9 @@ export function reconstructItemAt(
       case "archived":
         archived = asBool(e.old_value);
         break;
+      case "completed_on":
+        completed_on = e.old_value;
+        break;
     }
   }
 
@@ -65,7 +78,12 @@ export function reconstructItemAt(
     text,
     details,
     list,
-    done,
+    // A daily task's done-ness at t is "was it checked off for t's calendar
+    // day" — the live board's effectiveDone(), applied to the reverted state.
+    // (completed_on events only exist from 2026-07-03 on; older moments fall
+    // back to whatever completed_on survives, which mirrors pre-streaks
+    // behavior.) Non-daily items keep the reverted `done` flag.
+    done: item.recurrence === "daily" ? completed_on === localDateOf(t) : done,
     parent_id: item.parent_id ?? null,
     existed: bornAt <= tt,
     archived,

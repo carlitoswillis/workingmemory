@@ -33,6 +33,7 @@ import {
   toggleDoneAction,
 } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
+import { currentStreak, prevDay } from "@/lib/streaks";
 import SortableItemCard from "./SortableItemCard";
 
 type ListDef = (typeof LISTS)[number];
@@ -46,9 +47,9 @@ function describe(e: ItemEvent): string {
     case "moved":
       return `Moved ${listLabel(e.old_value ?? "")} → ${listLabel(e.new_value ?? "")}`;
     case "completed":
-      return "Marked done";
+      return e.field === "completed_on" ? `Checked off for ${e.new_value}` : "Marked done";
     case "reopened":
-      return "Reopened";
+      return e.field === "completed_on" ? `Unchecked ${e.old_value}` : "Reopened";
     case "archived":
       return "Archived";
     default:
@@ -150,6 +151,25 @@ export default function CardPanel({
 
   const isDaily = item.recurrence === "daily";
   const effDone = effectiveDone(item);
+
+  // Streak + last-14-days strip (daily tasks). completed_days comes from the
+  // event log via lib/queries.ts; fold in the live checkbox so the display
+  // tracks an optimistic toggle without waiting for the refetch.
+  const today = localToday();
+  const dayset = new Set(item.completed_days ?? []);
+  if (isDaily) {
+    if (effDone) dayset.add(today);
+    else dayset.delete(today);
+  }
+  const streak = isDaily ? currentStreak(dayset, today) : 0;
+  const recentDays: { day: string; done: boolean }[] = [];
+  if (isDaily) {
+    let d = today;
+    for (let i = 0; i < 14; i++) {
+      recentDays.unshift({ day: d, done: dayset.has(d) });
+      d = prevDay(d);
+    }
+  }
   function toggleDone() {
     if (isDaily) {
       startTransition(() => setDailyDoneAction(item.id, effDone ? null : localToday()));
@@ -313,6 +333,39 @@ export default function CardPanel({
           <span aria-hidden>↻</span>
           {isDaily ? "Repeats daily — resets each morning" : "Repeat daily"}
         </button>
+
+        {isDaily && (
+          <div className="mt-2 px-1">
+            <p className="text-[11px] text-[var(--text-lo)]">
+              {streak >= 2 ? (
+                <>
+                  Done{" "}
+                  <span className="tabular-nums text-[var(--text-mid)]">{streak} days</span>{" "}
+                  running
+                </>
+              ) : streak === 1 ? (
+                "Done today — day 1"
+              ) : (
+                "No streak yet — check it off to start one"
+              )}
+            </p>
+            {/* Last 14 days, oldest → today. Filled = checked off that day. */}
+            <div className="mt-1.5 flex items-center gap-1">
+              {recentDays.map((d) => (
+                <span
+                  key={d.day}
+                  title={`${d.day}${d.done ? " — done" : ""}`}
+                  className="h-2 w-2 rounded-[3px]"
+                  style={{
+                    background: d.done ? "var(--done)" : "var(--surface-2)",
+                    border: "1px solid var(--veil)",
+                    opacity: d.done ? 0.9 : 0.6,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="mt-3 px-1 text-[11px] text-[var(--text-lo)]">
           Captured {fmt(item.created_at)} · updated {fmt(item.updated_at)}

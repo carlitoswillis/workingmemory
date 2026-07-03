@@ -197,9 +197,20 @@ a real structure without losing its looseness.
       board is primary): scrubber rewind + snapshot drill-down, multi-select drag,
       undo for moves, sub-card reorder, daily note — all BUILT and self-verified
       but marked "awaiting owner test" in Active Tasks since late June.
-- [ ] **Streaks for daily tasks**: "done N days running" + which days, surfaced from the
-      event log. (Daily reset shipped; streak display deferred. To record per-day
-      completions in history, add `completed_on` to the `log_item_event` trigger.)
+- [x] **Streaks for daily tasks** — BUILT 2026-07-03, awaiting owner eyeball. New
+      `items_log_completed_on` trigger (lib/schema.ts) finally logs daily check-offs
+      to history (they were invisible before — not even the time machine saw them);
+      existing DBs pick it up automatically on next open (new trigger name + the
+      idempotent CREATE_TRIGGERS in openAt), but per-day data only accrues from
+      today. `lib/streaks.ts` (pure, tested: value-based replay — check adds the
+      day, uncheck removes exactly the cleared day; item's live completed_on seeds
+      pre-trigger history) → `getItems()` attaches `completed_days` to daily items
+      → card shows `↻ N` when streak ≥ 2 (streak follows the optimistic checkbox),
+      panel shows streak line + last-14-days strip. Bonus: time machine now
+      reconstructs daily done-ness correctly (completed_on revert + "was it checked
+      for t's calendar day"). Verified: tsc, 4 test suites (streaks suite new),
+      prod build, trigger smoke-test on a pre-existing DB, live SSR check (3-day
+      streak renders). Streak "today" uses browser-local dates end to end.
 - [ ] **AI integration** (the real differentiator — point an LLM at the event stream):
       weekly review that writes itself; auto-triage of brain-dumps; "ask your history".
       Plan exists (`ai/plans/2026-07-03-ai-weekly-review.md`); owner reversed
