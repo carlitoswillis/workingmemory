@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Item } from "@/lib/types";
 import type { LISTS } from "@/lib/lists";
-import { addItemAction } from "@/app/actions";
 import { effectiveDone } from "@/lib/recurrence";
 import ItemCard from "./ItemCard";
 import SortableItemCard from "./SortableItemCard";
@@ -20,6 +19,7 @@ export default function Column({
   activeId,
   onSelect,
   onOpenCard,
+  onAdd,
   dragHandleProps,
 }: {
   list: ListDef;
@@ -30,6 +30,7 @@ export default function Column({
   activeId: string | null;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  onAdd: (listId: string, text: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dragHandleProps?: any;
 }) {
@@ -37,7 +38,6 @@ export default function Column({
   // the dropped block on release).
   const mutedId = (id: string) => activeId != null && id !== activeId && selection.has(id);
   const [draft, setDraft] = useState("");
-  const [isPending, startTransition] = useTransition();
 
   // Daily tasks done *today* count as done; tomorrow they're open again.
   const open = items.filter((i) => !effectiveDone(i));
@@ -49,7 +49,7 @@ export default function Column({
     const text = draft.trim();
     if (!text) return;
     setDraft("");
-    startTransition(() => addItemAction(text, list.id));
+    onAdd(list.id, text); // optimistic insert lives in Board (owns the card lists)
   }
 
   const isNow = list.id === "today";
@@ -90,7 +90,6 @@ export default function Column({
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Capture a thought…"
           className="w-full rounded-xl border border-[var(--veil-soft)] bg-[rgba(8,10,18,0.5)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
-          disabled={isPending}
         />
       </form>
 

@@ -26,7 +26,6 @@ import {
   editDetailsAction,
   editItemAction,
   historyAction,
-  moveItemAction,
   reorderItemAction,
   setDailyDoneAction,
   setRecurrenceAction,
@@ -82,6 +81,7 @@ export default function CardPanel({
   childItems,
   childrenByParent,
   onOpenCard,
+  onMove,
   onClose,
 }: {
   item: Item;
@@ -90,10 +90,14 @@ export default function CardPanel({
   childItems: Item[];
   childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
+  onMove: (id: string, list: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
+  // Optimistic list value so the dropdown reflects the pick instantly; Board moves the
+  // card on the board optimistically too (onMove). Resyncs from the row on revalidate.
+  const [listValue, setListValue] = useState<string>(item.list);
   // Details render as markdown at rest; click to drop into the raw textarea (editing
   // stays plain text, still change-tracked). Empty details always show the editor.
   const [editingDetails, setEditingDetails] = useState(false);
@@ -145,6 +149,7 @@ export default function CardPanel({
 
   useEffect(() => setTitle(item.text), [item.text]);
   useEffect(() => setDetails(item.details), [item.details]);
+  useEffect(() => setListValue(item.list), [item.list]);
   useEffect(() => setEditingDetails(false), [item.id]); // back to preview on card switch
   useEffect(() => {
     if (editingDetails) detailsRef.current?.focus();
@@ -354,8 +359,11 @@ export default function CardPanel({
         <div className="mt-4 flex items-center gap-2">
           <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">List</label>
           <select
-            value={item.list}
-            onChange={(e) => startTransition(() => moveItemAction(item.id, e.target.value))}
+            value={listValue}
+            onChange={(e) => {
+              setListValue(e.target.value);
+              onMove(item.id, e.target.value);
+            }}
             className="rounded-md border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-1 text-xs text-[var(--text-mid)] focus:border-[var(--now)] focus:outline-none"
           >
             {allLists.map((l) => (

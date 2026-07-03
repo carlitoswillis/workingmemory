@@ -220,8 +220,22 @@ a real structure without losing its looseness.
       remains a 40-line add later). Deferred: owner chose to tackle a
       different backlog item first. `item_events` is the substrate and the
       moat.
-- [ ] **Fuller optimistic UI**: add + cross-list move still round-trip the server; lift
-      to `useOptimistic` for instant feedback everywhere (done/text/details already are).
+- [x] **Fuller optimistic UI** — BUILT 2026-07-03, awaiting owner test. Closed the
+      two paths that still round-tripped before showing feedback: **add** (a new card
+      now appears instantly) and the **CardPanel "move to list" dropdown** (card
+      relocates on the board instantly + the select reflects the pick immediately).
+      Cross-list *drag* was already optimistic. Implemented by extending the board's
+      existing manual-optimistic layer rather than `useOptimistic` (the backlog's
+      wording): Board owns `itemsByList` and already mutates it locally for drag/undo/
+      multi-select, so `useOptimistic` would fight the `itemsRef` pattern and be a
+      riskier refactor for the same result. New Board handlers `addCard` (inserts a
+      `temp-*` card, then persists; the items-driven resync swaps in the real row on
+      revalidate) and `moveCardToList` (relocates locally, then persists), threaded to
+      Column (via SortableColumn) and CardPanel. Column no longer disables its input
+      while pending, so you can fire off cards rapidly. Verified: tsc, all 4 suites,
+      prod build (First Load JS held ~118kB), `next start` render + no hydration
+      errors. The instant-feel itself is browser-only — owner to eyeball (add cards
+      fast; move a card via the panel dropdown and watch the board behind it).
 - [x] **Richer details (markdown)** — BUILT 2026-07-03, awaiting owner test. Card
       details now render **markdown** at rest (headings, bold/italic, lists, links,
       inline/blocks of code, blockquotes, tables, GFM task-list checkboxes) and drop

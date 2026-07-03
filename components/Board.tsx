@@ -22,8 +22,11 @@ import {
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
 import type { LISTS, ListId } from "@/lib/lists";
+import { isListId } from "@/lib/lists";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
+  addItemAction,
+  moveItemAction,
   reorderItemAction,
   reorderItemsAction,
   saveListOrderAction,
@@ -220,6 +223,60 @@ export default function Board({
     if (!prev || prev.length === 0) return;
     applyMoves(prev);
     startTransition(() => reorderItemsAction(prev));
+  }
+
+  // Optimistic add: drop a temp card into its list immediately, then persist. When the
+  // server revalidates, the `items`-driven resync (above) replaces the temp with the real
+  // row (same end-of-list position), so the swap is seamless. Same manual-optimistic
+  // pattern the drag handlers use — not useOptimistic, which would fight itemsRef.
+  function addCard(listId: string, text: string) {
+    const t = text.trim();
+    if (!t || !isListId(listId)) return;
+    const nowIso = new Date().toISOString();
+    const temp: Item = {
+      id: `temp-${crypto.randomUUID()}`,
+      text: t,
+      details: "",
+      list: listId,
+      done: false,
+      recurrence: "none",
+      completed_on: null,
+      parent_id: null,
+      position: Date.now(),
+      archived: false,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    const c = itemsRef.current;
+    const next: Grouped = { ...c, [listId]: [...(c[listId] ?? []), temp] };
+    itemsRef.current = next;
+    setItemsByList(next);
+    startTransition(() => addItemAction(t, listId));
+  }
+
+  // Optimistic cross-list move (the CardPanel dropdown; drag already does its own). Move
+  // the card between lists locally, then persist. Sub-cards aren't in itemsByList — they
+  // just fall through to the server action.
+  function moveCardToList(id: string, toList: string) {
+    if (!isListId(toList)) return;
+    const c = itemsRef.current;
+    let moved: Item | undefined;
+    const next: Grouped = {};
+    for (const k of Object.keys(c)) {
+      next[k] = c[k].filter((it) => {
+        if (it.id === id) {
+          moved = { ...it, list: toList };
+          return false;
+        }
+        return true;
+      });
+    }
+    if (moved) {
+      next[toList] = [...(next[toList] ?? []), moved];
+      itemsRef.current = next;
+      setItemsByList(next);
+    }
+    startTransition(() => moveItemAction(id, toList));
   }
 
   const sensors = useSensors(
@@ -511,6 +568,7 @@ export default function Board({
                   activeId={activeId}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}
+                  onAdd={addCard}
                 />
               ))}
             </div>
@@ -597,6 +655,7 @@ export default function Board({
           childItems={childrenByParent.get(openCard.id) ?? []}
           childrenByParent={childrenByParent}
           onOpenCard={(item) => setOpenCardId(item.id)}
+          onMove={moveCardToList}
           onClose={() => setOpenCardId(null)}
         />
       )}

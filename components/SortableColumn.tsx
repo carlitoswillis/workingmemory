@@ -18,6 +18,7 @@ export default function SortableColumn(props: {
   activeId: string | null;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  onAdd: (listId: string, text: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: props.list.id, data: { type: "column" } });
