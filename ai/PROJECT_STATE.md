@@ -227,15 +227,6 @@ a real structure without losing its looseness.
 - [x] **README pass + CI badge** — DONE 2026-07-03: full rewrite for the
       SQLite/hosted era (live-demo link, origin story, time-machine pitch,
       $0-deploy section, CI badge). Old Supabase-era README is in git history.
-- [ ] **Owner-side housekeeping from the 2026-07-03 deploy** (one click left):
-      delete the unused `NEXT_PUBLIC_SUPABASE_*` and `BACKBLAZE_KEY_NAME` env
-      vars from the Render dashboard (nothing reads them). Done on 2026-07-03:
-      `supabase/` migrations dir deleted (git history keeps it; ARCHITECTURE.md
-      + AGENTS.md pointers updated), `.env.local` pruned to live secrets only.
-- [ ] **Mobile apps** (React Native / Expo) — would talk to the hosted instance;
-      needs a real HTTP API first (today writes go through Next server actions,
-      which aren't callable from a native app). (Original supabase-js/RLS plan
-      died with the 2026-06-27 pivot.)
 - [ ] **Weekly-reset + weekday-specific recurring tasks** (e.g. the note's "Wednesdays:
       no car, do laundry"). Lower priority than the daily reset that already shipped.
 - [ ] **Life-area tags** (Maintenance / Health / Career / Recreation) as a cross-cutting
@@ -260,10 +251,6 @@ a real structure without losing its looseness.
         (this file, pre-2026-07-03) if the hosted path ever goes away.
       - **Pairs with:** Quick-capture (above).
 - [ ] Search across items + their history.
-- [ ] Optional **Notion sync/export** for power users — your DB stays the source of
-      truth; Notion is just a mirror. (A feature, never the backend.)
-- [ ] Decide standalone vs. folding into AIA2ndBrain (kept standalone — the change-
-      tracked board is a distinct product from the PARA note-filer).
 
 ### Someday / maybe (bottom-of-pile, low priority)
 - [ ] **Re-introduce multi-user + auth** (reverses the 2026-06-27 local pivot; "someday
