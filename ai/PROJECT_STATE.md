@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-06-27_
+_Last updated: 2026-07-02_
 
 ## Product Vision
 A "working memory" web app (→ mobile later) — systematize the running note of what's
@@ -31,8 +31,13 @@ a real structure without losing its looseness.
   mobile/RLS are deferred, see Product Vision note).
 - The hosted Supabase data was fully exported + verified first (`backups/<stamp>/`,
   items=24 / item_events=52 / profiles=1) and re-imported into SQLite. Nothing lost.
-- Under **git** (`main`); **committing as we go** (AGENTS.md). The local pivot is built +
-  self-verified but **not yet committed** — awaiting owner test.
+- Under **git** (`main`); **committing as we go** (AGENTS.md). The local pivot and all
+  subsequent features are committed.
+- **PORTFOLIO DEPLOYMENT in progress (2026-07-02)**: executing
+  `ai/plans/2026-07-02-portfolio-deployment.md` — live hosted demo (per-visitor
+  ephemeral boards behind a `DEMO_MODE` flag) + single-owner auth (hosted instance
+  becomes the owner's primary board) + Fly.io/Docker deploy with Litestream durability
+  + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
 - **Fluid time machine + robust past exploration** — BUILT 2026-06-28, awaiting owner test.
