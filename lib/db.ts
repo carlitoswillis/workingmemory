@@ -4,6 +4,7 @@ import path from "node:path";
 import { cookies } from "next/headers";
 import { CREATE_TABLES, CREATE_TRIGGERS } from "./schema";
 import { buildSeed } from "./demo/seed";
+import { OWNER_COOKIE, verifyOwnerSession } from "./auth";
 
 // The local store: one SQLite file under DATA_DIR (gitignored). Single-user,
 // offline, no auth — your data lives on your machine. History is written by
@@ -45,12 +46,22 @@ function openAt(file: string): Database.Database {
 
 const globalForDb = globalThis as unknown as {
   __wmDb?: Database.Database;
+  __wmOwnerDb?: Database.Database;
   __wmDemoCache?: Map<string, { db: Database.Database; lastUsed: number }>;
 };
 
 function localDb(): Database.Database {
   if (!globalForDb.__wmDb) globalForDb.__wmDb = openAt(path.join(DATA_DIR, "wm.db"));
   return globalForDb.__wmDb;
+}
+
+// The owner's real board on the hosted instance (DEMO_MODE=1 + a valid owner
+// session). Separate file from the local one so DATA_DIR can be a mounted
+// volume with demo/ and owner/ side by side; Litestream replicates this file.
+function ownerDb(): Database.Database {
+  if (!globalForDb.__wmOwnerDb)
+    globalForDb.__wmOwnerDb = openAt(path.join(DATA_DIR, "owner", "wm.db"));
+  return globalForDb.__wmOwnerDb;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,20 +197,37 @@ function demoDb(id: string): Database.Database {
 
 // ---------------------------------------------------------------------------
 
+// Does the current request carry a valid owner session? Only meaningful on the
+// hosted instance (DEMO_MODE=1 + OWNER_SECRET set); locally there's no auth
+// concept at all.
+export function isOwnerRequest(): boolean {
+  if (!DEMO_MODE) return false;
+  const secret = process.env.OWNER_SECRET;
+  if (!secret) return false;
+  const token = cookies().get(OWNER_COOKIE)?.value ?? "";
+  return verifyOwnerSession(token, secret);
+}
+
 // Is the current request a demo visitor (vs the owner / local single-user)?
-// Phase 1: with DEMO_MODE on, everyone is a demo visitor. The single-owner
-// session (Phase 1b) will carve the owner out of this.
+// With DEMO_MODE on, everyone is a demo visitor EXCEPT a valid owner session.
 export function isDemoRequest(): boolean {
-  return DEMO_MODE;
+  return DEMO_MODE && !isOwnerRequest();
 }
 
 // The database for the current request. With DEMO_MODE off this is always the
 // single local file — identical to the old module-level singleton.
 export function getDb(): Database.Database {
-  if (!isDemoRequest()) return localDb();
+  if (!DEMO_MODE) return localDb();
+  if (isOwnerRequest()) return ownerDb();
   const raw = cookies().get(DEMO_COOKIE)?.value?.toLowerCase() ?? "";
   // Sanitized: only a UUID ever becomes a filename. Cookieless clients (bots,
   // curl) share one throwaway board rather than erroring.
   const id = UUID_RE.test(raw) ? raw : "shared-fallback";
   return demoDb(id);
+}
+
+// The owner-side DB regardless of request cookies — for /api/export, which does
+// its own auth. Hosted → the owner file; local (flag off) → the one local file.
+export function getOwnerDb(): Database.Database {
+  return DEMO_MODE ? ownerDb() : localDb();
 }

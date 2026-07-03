@@ -62,7 +62,18 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
   new-board creation — no background process), LRU-capped open connections.
 - `middleware.ts` — inert when `DEMO_MODE` is off. On: mints the `wm_visitor` cookie
   (also injected into the current request so the first render has its board) and
-  token-bucket rate-limits POSTs per visitor. No SQLite here (edge runtime).
+  token-bucket rate-limits POSTs per visitor. No SQLite here (edge runtime). Also
+  owner-aware (Phase 1b): a valid `wm_owner` session (verified at the edge via
+  `lib/auth-edge.ts`) bypasses the visitor cookie + demo write limits, and POST `/login`
+  gets its own stricter per-IP bucket (burst 5).
+- **Single-owner auth (`lib/auth.ts`, hosted only)** — one `OWNER_SECRET` env var; no
+  user tables. Sessions are stateless HMAC tokens (`v1.<expiryMs>.<hmac>`, 90 days,
+  constant-time compares everywhere; rotating the secret invalidates all sessions).
+  `app/login/` sets/clears the httpOnly `wm_owner` cookie; `isOwnerRequest()` in
+  `lib/db.ts` routes a valid session to the owner DB at `DATA_DIR/owner/wm.db` (which
+  Litestream will replicate in Phase 2). `GET /api/export` (cookie or
+  `Authorization: Bearer <OWNER_SECRET>`) streams a consistent `db.backup()` snapshot —
+  never a raw copy of a live WAL-mode file. With `DEMO_MODE` off none of this runs.
 - `lib/demo/seed.ts` — pure, deterministic seed generator: an authored SCRIPT of actions
   is replayed to produce item rows + ~3 weeks of event history that are consistent by
   construction (events emitted exactly as the triggers would write them). Tested by

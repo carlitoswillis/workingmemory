@@ -40,6 +40,25 @@ a real structure without losing its looseness.
   + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
+- **Single-owner auth + export (portfolio plan Phase 1b)** — BUILT 2026-07-03,
+  self-verified end-to-end. One `OWNER_SECRET` env var guards the owner's real board on
+  the hosted instance (no user tables, no per-user schema). `lib/auth.ts` mints stateless
+  HMAC session tokens (`v1.<exp>.<hmac>`, 90d, constant-time verify; rotating the secret
+  kills all sessions); `lib/auth-edge.ts` is the WebCrypto twin for middleware; both
+  covered by `lib/auth.test.ts` (in `npm test`). `/login` (unlinked from the demo UI —
+  owner knows the URL) sets the httpOnly `wm_owner` cookie; sign-out on the same page.
+  Routing: valid session → `DATA_DIR/owner/wm.db` (`isOwnerRequest()` in `lib/db.ts`,
+  demo caps/banner don't apply); else demo path; flag off → local file, untouched.
+  Middleware rate-limits POST /login per-IP (burst 5, ~5/min) and exempts the owner from
+  demo write limits (verified at the edge so a forged cookie can't skip them). `GET
+  /api/export` (session cookie or `Authorization: Bearer <OWNER_SECRET>`) returns a
+  consistent `db.backup()` snapshot, timestamped filename — this is what the Phase 2 Mac
+  pull-backup script will call; 404 when no secret configured. Verified: tsc, all 3 test
+  suites, prod build, live curl checks (anon → seeded demo + visitor cookie; forged owner
+  cookie → still demo; valid cookie → bannerless owner board, real server-action write
+  landed in `owner/wm.db` with trigger-logged history, absent from all demo DBs; 429 on
+  6th rapid login POST; export 401/401/200 with valid SQLite bytes; flag-off: no cookie,
+  no banner, export 404). Owner: pick a strong `OWNER_SECRET` at deploy time (Phase 2).
 - **Demo mode (portfolio plan Phase 1)** — BUILT 2026-07-02, self-verified end-to-end.
   `DEMO_MODE=1` gives every visitor their own throwaway board: middleware.ts mints an
   httpOnly `wm_visitor` uuid cookie (injected into the first request too, so the first
