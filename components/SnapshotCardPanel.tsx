@@ -1,7 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { listLabel } from "@/lib/lists";
 import type { BoardItemAt } from "@/lib/timetravel";
+
+// Shared, code-split markdown renderer — only pulled in when a past card panel opens.
+const Markdown = dynamic(() => import("./Markdown"), {
+  ssr: false,
+  loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
+});
 
 // A read-only slide-over for a card AS IT WAS at the rewind moment. Mirrors CardPanel's
 // shape (title · details · sub-cards) but nothing is editable — the past can be explored,
@@ -86,9 +93,9 @@ export default function SnapshotCardPanel({
           Details
         </label>
         {hasDetails ? (
-          <p className="whitespace-pre-wrap rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 font-display text-sm italic leading-relaxed text-[var(--text-hi)]">
-            {item.details}
-          </p>
+          <div className="rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5">
+            <Markdown source={item.details} />
+          </div>
         ) : (
           <p className="px-1 font-display text-sm italic text-[var(--text-lo)]">— no details then —</p>
         )}

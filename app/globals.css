@@ -127,6 +127,135 @@ body {
   background: transparent;
 }
 
+/* ── Rendered markdown (card details, past details, later: AI review) ──────
+   No typography plugin — a compact, low-key set of rules in the Nocturne palette.
+   The container sets the base; children override spacing/weight as needed. */
+.md-body {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-hi);
+  word-break: break-word;
+}
+.md-body > :first-child {
+  margin-top: 0;
+}
+.md-body > :last-child {
+  margin-bottom: 0;
+}
+.md-body p {
+  margin: 0.5em 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0.9em 0 0.35em;
+  color: var(--text-hi);
+}
+.md-body h1 {
+  font-size: 1.35em;
+}
+.md-body h2 {
+  font-size: 1.2em;
+}
+.md-body h3 {
+  font-size: 1.08em;
+}
+.md-body h4 {
+  font-size: 1em;
+}
+.md-body a {
+  color: var(--now);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-body a:hover {
+  opacity: 0.85;
+}
+.md-body strong {
+  color: var(--text-hi);
+  font-weight: 600;
+}
+.md-body em {
+  font-style: italic;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.3em;
+}
+.md-body ul {
+  list-style: disc;
+}
+.md-body ol {
+  list-style: decimal;
+}
+.md-body li {
+  margin: 0.2em 0;
+}
+/* GFM task lists: display-only checkboxes (editing is in the raw textarea). */
+.md-body li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.1em;
+}
+.md-body input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--done);
+  vertical-align: middle;
+}
+.md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--surface-2);
+  border: 1px solid var(--veil-soft);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+}
+.md-body pre {
+  margin: 0.6em 0;
+  padding: 0.7em 0.85em;
+  background: var(--bg-0);
+  border: 1px solid var(--veil-soft);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.md-body pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.md-body blockquote {
+  margin: 0.6em 0;
+  padding: 0.1em 0.9em;
+  border-left: 2px solid var(--veil);
+  color: var(--text-mid);
+  font-style: italic;
+}
+.md-body hr {
+  margin: 0.9em 0;
+  border: 0;
+  border-top: 1px solid var(--veil);
+}
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  display: block;
+  overflow-x: auto;
+}
+.md-body th,
+.md-body td {
+  border: 1px solid var(--veil);
+  padding: 0.32em 0.6em;
+  text-align: left;
+}
+.md-body th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
 ::selection {
   background: rgba(227, 168, 102, 0.22);
 }

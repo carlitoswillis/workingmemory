@@ -222,8 +222,24 @@ a real structure without losing its looseness.
       moat.
 - [ ] **Fuller optimistic UI**: add + cross-list move still round-trip the server; lift
       to `useOptimistic` for instant feedback everywhere (done/text/details already are).
-- [ ] **Richer details**: markdown rendering / checklists / links in the per-card details
-      (today it's plain text, already change-tracked + time-traveled).
+- [x] **Richer details (markdown)** — BUILT 2026-07-03, awaiting owner test. Card
+      details now render **markdown** at rest (headings, bold/italic, lists, links,
+      inline/blocks of code, blockquotes, tables, GFM task-list checkboxes) and drop
+      to a raw textarea on click/Edit — editing stays plain text, still
+      change-tracked + time-traveled (no storage change; `details` is the same
+      string). New reusable `components/Markdown.tsx` (react-markdown + remark-gfm;
+      no raw HTML, dangerous URL protocols stripped → XSS-safe; links open new-tab
+      w/ noopener) styled by a `.md-body` block in globals.css (no typography
+      plugin). Reused read-only in `SnapshotCardPanel` (past details) and is the
+      renderer the **AI weekly review** will use for its output later. **Code-split**
+      via next/dynamic so react-markdown (~43kB) loads only when a panel opens —
+      initial board First Load JS stayed ~118kB (vs 159kB if bundled). Deps added:
+      react-markdown@9, remark-gfm@4 (npm audit: 0 new vulns; the 2 flagged are
+      pre-existing Next 14 / postcss, fix = Next 16 major, out of scope). Verified:
+      tsc, all 4 test suites, prod build, a react-dom/server render check (headings/
+      task-lists/safe-links/`javascript:` stripped), dev SSR render. Rendering in the
+      live panel is browser-only — owner to eyeball. Follow-up left plain: the daily
+      **Note** (NoteColumn) still shows a raw textarea, not rendered markdown.
 - [x] **README pass + CI badge** — DONE 2026-07-03: full rewrite for the
       SQLite/hosted era (live-demo link, origin story, time-machine pitch,
       $0-deploy section, CI badge). Old Supabase-era README is in git history.

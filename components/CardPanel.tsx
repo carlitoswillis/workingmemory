@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   DndContext,
   MouseSensor,
@@ -34,7 +34,15 @@ import {
 } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
 import { currentStreak, prevDay } from "@/lib/streaks";
+import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
+
+// Code-split the markdown renderer (react-markdown + remark-gfm, ~43kB): it's only
+// needed once a card panel is open, so keep it out of the initial board bundle.
+const Markdown = dynamic(() => import("./Markdown"), {
+  ssr: false,
+  loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
+});
 
 type ListDef = (typeof LISTS)[number];
 
@@ -86,6 +94,10 @@ export default function CardPanel({
 }) {
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
+  // Details render as markdown at rest; click to drop into the raw textarea (editing
+  // stays plain text, still change-tracked). Empty details always show the editor.
+  const [editingDetails, setEditingDetails] = useState(false);
+  const detailsRef = useRef<HTMLTextAreaElement>(null);
   const [childDraft, setChildDraft] = useState("");
   const [events, setEvents] = useState<ItemEvent[] | null>(null);
   const [, startTransition] = useTransition();
@@ -133,6 +145,10 @@ export default function CardPanel({
 
   useEffect(() => setTitle(item.text), [item.text]);
   useEffect(() => setDetails(item.details), [item.details]);
+  useEffect(() => setEditingDetails(false), [item.id]); // back to preview on card switch
+  useEffect(() => {
+    if (editingDetails) detailsRef.current?.focus();
+  }, [editingDetails]);
   useEffect(() => {
     let alive = true;
     historyAction(item.id).then((e) => alive && setEvents(e));
@@ -239,18 +255,51 @@ export default function CardPanel({
           className="w-full shrink-0 resize-none rounded-lg border border-transparent bg-transparent px-1 py-1 font-display text-xl font-medium leading-snug text-[var(--text-hi)] hover:border-[var(--veil-soft)] focus:border-[var(--now)] focus:bg-[var(--bg-0)] focus:outline-none"
         />
 
-        {/* Details */}
-        <label className="mt-4 mb-1 block px-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-          Details
-        </label>
-        <textarea
-          value={details}
-          onChange={(e) => setDetails(e.target.value)}
-          onBlur={saveDetails}
-          placeholder="Add context, links, the why… (Enter for a new line)"
-          rows={6}
-          className="w-full shrink-0 resize-y rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 font-display text-sm italic leading-relaxed text-[var(--text-hi)] placeholder:not-italic placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
-        />
+        {/* Details — rendered markdown at rest, raw textarea when editing */}
+        <div className="mt-4 mb-1 flex items-baseline justify-between px-1">
+          <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+            Details
+          </label>
+          {details.trim() && (
+            <button
+              onClick={() => {
+                if (editingDetails) {
+                  saveDetails();
+                  setEditingDetails(false);
+                } else {
+                  setEditingDetails(true);
+                }
+              }}
+              className="text-[11px] text-[var(--text-lo)] transition-colors hover:text-[var(--text-mid)]"
+            >
+              {editingDetails ? "Preview" : "Edit ✎"}
+            </button>
+          )}
+        </div>
+        {editingDetails || !details.trim() ? (
+          <textarea
+            ref={detailsRef}
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            onFocus={() => setEditingDetails(true)}
+            onBlur={() => {
+              saveDetails();
+              setEditingDetails(false);
+            }}
+            placeholder="Add context, links, the why… — markdown supported (Enter for a new line)"
+            rows={6}
+            className="w-full shrink-0 resize-y rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-hi)] placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingDetails(true)}
+            title="Click to edit"
+            className="block w-full rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-left transition-colors hover:border-[var(--veil)]"
+          >
+            <Markdown source={details} />
+          </button>
+        )}
 
         {/* Sub-cards: each is a real item (own panel + history). Click one to dive in. */}
         <div className="mt-5">
