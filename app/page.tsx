@@ -2,6 +2,7 @@ import { getItems, getListOrder } from "@/lib/queries";
 import { orderLists } from "@/lib/lists";
 import { isDemoRequest } from "@/lib/db";
 import Board from "@/components/Board";
+import ArchiveView from "@/components/ArchiveView";
 
 // Local, single-user board; always read fresh from the SQLite file.
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export default async function Home() {
             </span>
           </p>
         </div>
+        <ArchiveView />
       </header>
 
       <Board lists={lists} items={items} />

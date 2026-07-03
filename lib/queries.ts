@@ -56,6 +56,16 @@ export function getItems(): Item[] {
   return items;
 }
 
+// Archived items, most-recently-archived first (updated_at is bumped on archive).
+// Drives the Archive view (browse + restore). Full history is preserved either way;
+// this is just the "where did it go" list. Includes archived sub-cards.
+export function getArchivedItems(): Item[] {
+  const rows = getDb()
+    .prepare("select * from items where archived = 1 order by updated_at desc")
+    .all() as ItemRow[];
+  return rows.map(rowToItem);
+}
+
 // The saved column (list) order, or null if it was never set.
 export function getListOrder(): string[] | null {
   const row = getDb().prepare("select list_order from profiles limit 1").get() as

@@ -131,4 +131,17 @@ begin
   insert into item_events (item_id, type, field, old_value, new_value, at)
   values (new.id, 'archived', 'archived', 'false', 'true', ${ISO_NOW});
 end;
+
+-- Restore (archived 1 -> 0). Logged so un-archiving is part of history too, like
+-- every other change. A separate trigger (not a widened items_log_archived) so
+-- existing DBs pick it up on next open — 'create trigger if not exists' won't
+-- replace an already-created trigger, but a NEW name is applied idempotently.
+-- field='archived' keeps time-travel reconstruction correct (it reverts by field
+-- + old_value, type-agnostic — see lib/timetravel.ts).
+create trigger if not exists items_log_unarchived after update of archived on items
+when new.archived is not old.archived and new.archived = 0
+begin
+  insert into item_events (item_id, type, field, old_value, new_value, at)
+  values (new.id, 'reopened', 'archived', 'true', 'false', ${ISO_NOW});
+end;
 `;

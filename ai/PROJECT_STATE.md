@@ -231,8 +231,25 @@ a real structure without losing its looseness.
       no car, do laundry"). Lower priority than the daily reset that already shipped.
 - [ ] **Life-area tags** (Maintenance / Health / Career / Recreation) as a cross-cutting
       filter over items.
-- [ ] **Archive view** — browse / restore archived items (archiving keeps full history;
-      no UI to see them yet).
+- [x] **Archive view** — BUILT 2026-07-03, awaiting owner test. Browse + restore
+      archived items (archiving was non-destructive but had no UI). Self-contained
+      `components/ArchiveView.tsx` (🗄 button in the header → right slide-over,
+      matches CardPanel): loads archived items on open via `archivedItemsAction()`
+      (→ `getArchivedItems()`, most-recently-archived first), each row shows
+      text + details preview + list badge + archived date + a **Restore** button
+      (`unarchiveItemAction`, optimistic row-removal; revalidate puts it back on the
+      board). **New:** restore is now LOGGED to history — added an
+      `items_log_unarchived` trigger (archived 1→0 → `reopened`/`archived` event),
+      since the old `items_log_archived` deliberately only logged archiving
+      (`and new.archived = 1`), which left un-archiving invisible — off-brand for a
+      "nothing is ever lost" app. New trigger name = picked up idempotently on next
+      DB open (same mechanism the streaks trigger used); `field='archived'` keeps
+      time-travel correct (reconstruction reverts by field+old_value, type-agnostic).
+      `describe()` in CardPanel now renders it as "Restored from archive". Verified:
+      tsc, 4 test suites, prod build, a trigger+time-travel smoke test (restore event
+      written; board correctly hides the item at the archived moment and shows it once
+      restored), dev SSR render. Slide-over interaction is browser-only — owner to
+      eyeball (archive a card, open 🗄, Restore it).
 - [x] **Quick-capture** — BUILT 2026-07-03, awaiting owner test. A keyboard-first
       "dump to Brain Dump" always in reach: a bare `c` or `⌘/Ctrl-K` opens a small
       overlay (`components/QuickCapture.tsx`) anywhere on the board; Enter files the

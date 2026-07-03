@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { isListId } from "@/lib/lists";
 import { getDb, isDemoRequest } from "@/lib/db";
 import { demoAddBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
-import { getHistory, getTimelineData } from "@/lib/queries";
+import { getArchivedItems, getHistory, getTimelineData } from "@/lib/queries";
 import type { Item, ItemEvent } from "@/lib/types";
 
 // Mutations are plain CRUD against the request's SQLite file (the one local file,
@@ -80,6 +80,19 @@ export async function toggleDoneAction(id: string, done: boolean) {
 export async function archiveItemAction(id: string) {
   getDb().prepare("update items set archived = 1 where id = ?").run(id);
   revalidatePath("/");
+}
+
+// Restore an archived item back onto the board (archived 1 -> 0). The DB trigger
+// logs the restore to history (see lib/schema.ts).
+export async function unarchiveItemAction(id: string) {
+  getDb().prepare("update items set archived = 0 where id = ?").run(id);
+  revalidatePath("/");
+}
+
+// Archived items for the Archive view (browse + restore). Loaded on demand when the
+// panel opens, mirroring historyAction/timelineDataAction.
+export async function archivedItemsAction(): Promise<Item[]> {
+  return getArchivedItems();
 }
 
 export async function setRecurrenceAction(id: string, recurrence: string) {

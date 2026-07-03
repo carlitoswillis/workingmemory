@@ -49,7 +49,9 @@ function describe(e: ItemEvent): string {
     case "completed":
       return e.field === "completed_on" ? `Checked off for ${e.new_value}` : "Marked done";
     case "reopened":
-      return e.field === "completed_on" ? `Unchecked ${e.old_value}` : "Reopened";
+      if (e.field === "completed_on") return `Unchecked ${e.old_value}`;
+      if (e.field === "archived") return "Restored from archive";
+      return "Reopened";
     case "archived":
       return "Archived";
     default:
