@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-03_
 
 ## Product Vision
 A "working memory" web app (→ mobile later) — systematize the running note of what's
@@ -40,15 +40,31 @@ a real structure without losing its looseness.
   + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
-- **➡️ OWNER TODO (2026-07-03): execute `ai/plans/2026-07-03-free-deploy-runbook.md`.**
-  Owner chose the fully-free deploy path (Render free tier + Backblaze B2 — no card
-  anywhere) and approved the commit (2026-07-03). The commit includes the runbook, a
-  real fix in `scripts/start.sh` (`-if-replica-exists` — without it the very first boot
-  against an empty bucket crash-loops the container), and `render.yaml` example URLs
-  switched from R2 to B2 (B2 needs no credit card and its uploads are free — R2's free
-  tier caps writes below Litestream's ~1/s sync). The runbook is ~45 min, all
-  owner-side: GitHub push → B2 bucket → Render blueprint → smoke test → cutover via
-  `push-local-db.sh` → daily pull cron.
+- **✅ DEPLOYED + CUT OVER (2026-07-03): `ai/plans/2026-07-03-free-deploy-runbook.md`
+  executed** — live at https://workingmemory-demo.onrender.com (Render free +
+  B2 bucket `wm-owner-carlitoswillis`, endpoint `s3.us-east-005.backblazeb2.com`,
+  replica prefix `owner-wm`). Real DB migrated (41 items / 131 events), restore
+  drill PASSED (restart wiped the disk, board came back from B2, fresh Litestream
+  generation confirmed). Two deploy failures hit + fixed along the way:
+  1. `LITESTREAM_REPLICA_URL` pasted without the `s3://` scheme → litestream read
+     it as a local DB path ("database not found in config"). Correct form:
+     `s3://wm-owner-carlitoswillis.s3.us-east-005.backblazeb2.com/owner-wm`.
+  2. `x509: certificate signed by unknown authority` → node:22-slim ships no
+     system CA store; the Go litestream binary needs it. Fixed in Dockerfile
+     (`ca-certificates` in the runtime stage, commit 5b12c14).
+  Cutover gotcha (matches the runbook's "restart right after import" warning):
+  restarts BEFORE the post-import restart re-replicated the stale pre-import DB
+  as new B2 generations that looked newest, so a restore could resurrect the
+  empty board. Fixed by deleting the stale/empty generations from the bucket
+  (S3 DELETE via curl --aws-sigv4) so only the real-data generation remained,
+  then restarting. If an import ever misbehaves again: check the bucket for
+  multiple `owner-wm/generations/<id>/` dirs and prune the small (~2.5KB
+  snapshot = empty board) ones; real-data snapshots are ~18KB+.
+  REMAINING (owner, runbook §6-7): freeze pre-cutover local file
+  (`cp data/wm.db backups/pre-cutover-$(date +%Y%m%d).db`; hosted board is now
+  primary — stop editing local), install the daily pull cron (`pull-backup.sh`
+  verified working 5x today), and delete the two stale `REPLICA_URL_2/_3` lines
+  from `.env.local` (one of them caused failure #1).
 - **Deploy prep + migration tooling (portfolio plan Phase 2, code side)** — BUILT
   2026-07-03. Everything up to the actual hosting signup is ready:
   - `Dockerfile` (node:22-slim multi-stage; better-sqlite3 installs its prebuilt linux
