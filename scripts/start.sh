@@ -18,7 +18,9 @@ OWNER_DB="$DATA_DIR/owner/wm.db"
 mkdir -p "$DATA_DIR/owner" "$DATA_DIR/demo"
 
 if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
-  litestream restore -if-db-not-exists -o "$OWNER_DB" "$LITESTREAM_REPLICA_URL"
+  # -if-replica-exists: an EMPTY bucket (very first boot, before any replication)
+  # is not an error — without it, restore fails and set -e crash-loops the app.
+  litestream restore -if-db-not-exists -if-replica-exists -o "$OWNER_DB" "$LITESTREAM_REPLICA_URL"
   exec litestream replicate -exec "npx next start -p $PORT" "$OWNER_DB" "$LITESTREAM_REPLICA_URL"
 fi
 

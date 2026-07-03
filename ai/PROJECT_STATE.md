@@ -40,6 +40,15 @@ a real structure without losing its looseness.
   + repo polish (README, CI, MIT license). Owner approved 2026-07-02.
 
 ## Active Tasks
+- **➡️ OWNER TODO (2026-07-03): execute `ai/plans/2026-07-03-free-deploy-runbook.md`.**
+  Owner chose the fully-free deploy path (Render free tier + Backblaze B2 — no card
+  anywhere) and approved the commit (2026-07-03). The commit includes the runbook, a
+  real fix in `scripts/start.sh` (`-if-replica-exists` — without it the very first boot
+  against an empty bucket crash-loops the container), and `render.yaml` example URLs
+  switched from R2 to B2 (B2 needs no credit card and its uploads are free — R2's free
+  tier caps writes below Litestream's ~1/s sync). The runbook is ~45 min, all
+  owner-side: GitHub push → B2 bucket → Render blueprint → smoke test → cutover via
+  `push-local-db.sh` → daily pull cron.
 - **Deploy prep + migration tooling (portfolio plan Phase 2, code side)** — BUILT
   2026-07-03. Everything up to the actual hosting signup is ready:
   - `Dockerfile` (node:22-slim multi-stage; better-sqlite3 installs its prebuilt linux

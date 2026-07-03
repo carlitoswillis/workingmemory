@@ -4,11 +4,14 @@
 # are ephemeral anyway. Tradeoff vs Fly: free services spin down after 15 idle
 # minutes and cold-start in ~1 min.
 #
-# Set in the Render dashboard (Environment → Secret):
+# Set in the Render dashboard (Environment, marked secret):
 #   OWNER_SECRET                  openssl rand -base64 32
-#   LITESTREAM_REPLICA_URL        s3://<bucket>/owner-wm?endpoint=https://<account>.r2.cloudflarestorage.com
-#   LITESTREAM_ACCESS_KEY_ID      bucket access key
-#   LITESTREAM_SECRET_ACCESS_KEY  bucket secret
+#   LITESTREAM_REPLICA_URL        s3://<bucket>.s3.<region>.backblazeb2.com/owner-wm
+#                                 (B2's S3 endpoint embedded in the host; R2 works
+#                                 the same way but requires a card on file, and its
+#                                 free tier caps writes — B2 uploads are free)
+#   LITESTREAM_ACCESS_KEY_ID      B2 application keyID (scoped to the bucket)
+#   LITESTREAM_SECRET_ACCESS_KEY  B2 application key
 services:
   - type: web
     name: workingmemory-demo
