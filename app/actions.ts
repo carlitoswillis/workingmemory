@@ -17,6 +17,12 @@ import type { Item, ItemEvent } from "@/lib/types";
 // boards get size caps here; write RATE limiting lives in middleware.ts. With
 // DEMO_MODE off none of the caps apply.
 
+// The board renders at "/" (accounts + local) AND "/demo" (anonymous hosted
+// visitors, whose "/" is the landing page) — layout scope refreshes both.
+function revalidateBoard() {
+  revalidatePath("/", "layout");
+}
+
 export async function addItemAction(text: string, list: string) {
   let t = text.trim();
   if (!t || !isListId(list)) return;
@@ -28,7 +34,7 @@ export async function addItemAction(text: string, list: string) {
   db.prepare(
     "insert into items (id, text, list, position, user_id) values (?, ?, ?, ?, ?)",
   ).run(randomUUID(), t, list, Date.now(), userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // Add a sub-card under `parentId`. The child is a real item (so it gets history,
@@ -49,7 +55,7 @@ export async function addChildAction(parentId: string, text: string) {
   db.prepare(
     "insert into items (id, text, list, parent_id, position, user_id) values (?, ?, ?, ?, ?, ?)",
   ).run(randomUUID(), t, parent.list, parentId, Date.now(), userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function editItemAction(id: string, text: string) {
@@ -58,7 +64,7 @@ export async function editItemAction(id: string, text: string) {
   if (DEMO_MODE) t = clampDemoText(t);
   const { db, userId } = getBoardContext();
   db.prepare("update items set text = ? where id = ? and user_id is ?").run(t, id, userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function editDetailsAction(id: string, details: string) {
@@ -66,14 +72,14 @@ export async function editDetailsAction(id: string, details: string) {
   const d = DEMO_MODE ? clampDemoDetails(details) : details;
   const { db, userId } = getBoardContext();
   db.prepare("update items set details = ? where id = ? and user_id is ?").run(d, id, userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function moveItemAction(id: string, list: string) {
   if (!isListId(list)) return;
   const { db, userId } = getBoardContext();
   db.prepare("update items set list = ? where id = ? and user_id is ?").run(list, id, userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function toggleDoneAction(id: string, done: boolean) {
@@ -83,13 +89,13 @@ export async function toggleDoneAction(id: string, done: boolean) {
     id,
     userId,
   );
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function archiveItemAction(id: string) {
   const { db, userId } = getBoardContext();
   db.prepare("update items set archived = 1 where id = ? and user_id is ?").run(id, userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // Restore an archived item back onto the board (archived 1 -> 0). The DB trigger
@@ -97,7 +103,7 @@ export async function archiveItemAction(id: string) {
 export async function unarchiveItemAction(id: string) {
   const { db, userId } = getBoardContext();
   db.prepare("update items set archived = 0 where id = ? and user_id is ?").run(id, userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // Archived items for the Archive view (browse + restore). Loaded on demand when the
@@ -115,7 +121,7 @@ export async function setRecurrenceAction(id: string, recurrence: string) {
     id,
     userId,
   );
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // Check/uncheck a daily task for a given local date (null = uncheck).
@@ -126,7 +132,7 @@ export async function setDailyDoneAction(id: string, completedOn: string | null)
     id,
     userId,
   );
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function reorderItemAction(id: string, list: string, position: number) {
@@ -138,7 +144,7 @@ export async function reorderItemAction(id: string, list: string, position: numb
     id,
     userId,
   );
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // Move/reorder many cards at once (multi-select drag) — one transaction so the
@@ -156,7 +162,7 @@ export async function reorderItemsAction(
     for (const r of rows) stmt.run(r.position, r.list, r.id, userId);
   });
   run(valid);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function saveListOrderAction(order: string[]) {
@@ -166,7 +172,7 @@ export async function saveListOrderAction(order: string[]) {
     `insert into profiles (id, list_order, updated_at) values (?, ?, ?)
      on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
   ).run(userId ?? "local", JSON.stringify(valid), new Date().toISOString());
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 // The daily note is a SINGLE pinned item with list='note' (body in `details`), so every
@@ -185,7 +191,7 @@ export async function createNoteAction() {
   db.prepare(
     "insert into items (id, text, list, details, user_id) values (?, 'Daily note', 'note', '', ?)",
   ).run(randomUUID(), userId);
-  revalidatePath("/");
+  revalidateBoard();
 }
 
 export async function historyAction(id: string): Promise<ItemEvent[]> {
