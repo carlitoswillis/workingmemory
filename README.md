@@ -70,8 +70,17 @@ Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.
 npm install
 npm run dev        # → http://localhost:3000, data lives in ./data/wm.db
 npm run dev:demo   # the hosted-demo experience (per-visitor ephemeral boards)
-npm test           # time-travel, demo-seed, and auth test suites
+npm test           # time-travel, demo-seed, auth, streaks, and accounts suites
 ```
+
+## Accounts (hosted)
+
+The hosted instance has open signup: create a username + password at `/signup`
+and you get a persistent board of your own (the demo boards stay throwaway for
+anonymous visitors). All accounts live in one replicated SQLite file, scoped
+per-user in every query; sessions are stateless HMAC cookies. No email is
+collected — which also means **no password reset**, so write it down. Local
+mode (`npm run dev`) remains account-free.
 
 ## Deploy your own (the $0 stack)
 
@@ -87,7 +96,8 @@ boards are deliberately not replicated (throwaway by design).
   two failures you'll hit if you deviate (schemeless replica URLs; slim images
   shipping no CA certs)
 
-Owner data stays owner-owned: `GET /api/export` streams a consistent snapshot,
+Your data stays yours: `GET /api/export` streams a consistent snapshot of the
+main DB (operator bearer token only, since it now holds every account),
 `PUT /api/import` migrates one in (integrity-checked before swap), and
 `scripts/push-local-db.sh` / `scripts/pull-backup.sh` move the file either
 direction. A daily launchd job pulls a verified backup to my Mac — the cloud is

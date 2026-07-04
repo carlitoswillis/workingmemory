@@ -3,11 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { getOwnerDb, isOwnerRequest } from "@/lib/db";
+import { getMainDb } from "@/lib/db";
 
-// GET /api/export — download a consistent snapshot of the owner DB (Phase 1b).
-// Auth: a valid owner session cookie (browser) OR `Authorization: Bearer
-// <OWNER_SECRET>` (the Mac pull-backup script). Never the demo path.
+// GET /api/export — download a consistent snapshot of the main DB.
+// Auth: `Authorization: Bearer <OWNER_SECRET>` ONLY (the Mac pull-backup
+// script). Since multiple-accounts v1 the main DB holds EVERY user's board, so
+// the old owner-session-cookie path is gone — no browser session may dump the
+// whole file; OWNER_SECRET is purely the operator's ops credential now.
 //
 // Uses better-sqlite3's db.backup() — the online-backup API — because copying a
 // live WAL-mode .db file directly would tear (recent writes still live in the
@@ -30,13 +32,13 @@ export async function GET(req: NextRequest) {
   // the endpoint simply doesn't exist (local dev doesn't need it).
   if (!secret) return new NextResponse("Not found", { status: 404 });
 
-  if (!bearerOk(req, secret) && !isOwnerRequest()) {
+  if (!bearerOk(req, secret)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   const tmp = path.join(os.tmpdir(), `wm-export-${randomUUID()}.db`);
   try {
-    await getOwnerDb().backup(tmp);
+    await getMainDb().backup(tmp);
     const buf = fs.readFileSync(tmp);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     return new NextResponse(buf, {

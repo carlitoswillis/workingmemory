@@ -1,9 +1,10 @@
-// Edge-runtime twin of lib/auth.ts's verifyOwnerSession, for middleware.ts
+// Edge-runtime twin of lib/auth.ts's verifyUserSession, for middleware.ts
 // (edge middleware has no node:crypto; WebCrypto only, hence async). Token
-// format must stay in sync with lib/auth.ts: `v1.<expiresAtMs>.<hmacHex>`,
-// HMAC-SHA256 keyed by OWNER_SECRET over `wm-owner.<exp>`.
+// format must stay in sync with lib/auth.ts: `v2.<userId>.<expiresAtMs>.<hmacHex>`,
+// HMAC-SHA256 keyed by SESSION_SECRET over `wm-user.<userId>.<exp>`.
 
 const enc = new TextEncoder();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function hex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
@@ -20,15 +21,16 @@ function safeEqualHex(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function verifyOwnerSessionEdge(
+// Returns the token's user id, or null if the token is invalid/expired.
+export async function verifyUserSessionEdge(
   token: string,
   secret: string,
   nowMs: number = Date.now(),
-): Promise<boolean> {
+): Promise<string | null> {
   const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== "v1") return false;
-  const [, exp, sig] = parts;
-  if (!/^\d{1,15}$/.test(exp)) return false;
+  if (parts.length !== 4 || parts[0] !== "v2") return null;
+  const [, userId, exp, sig] = parts;
+  if (!UUID_RE.test(userId) || !/^\d{1,15}$/.test(exp)) return null;
 
   const key = await crypto.subtle.importKey(
     "raw",
@@ -37,6 +39,9 @@ export async function verifyOwnerSessionEdge(
     false,
     ["sign"],
   );
-  const expected = hex(await crypto.subtle.sign("HMAC", key, enc.encode(`wm-owner.${exp}`)));
-  return safeEqualHex(sig, expected) && Number(exp) > nowMs;
+  const expected = hex(
+    await crypto.subtle.sign("HMAC", key, enc.encode(`wm-user.${userId}.${exp}`)),
+  );
+  if (!safeEqualHex(sig, expected) || Number(exp) <= nowMs) return null;
+  return userId;
 }

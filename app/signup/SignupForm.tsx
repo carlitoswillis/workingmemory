@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { loginAction } from "./actions";
+import { signupAction } from "./actions";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -16,7 +16,7 @@ function SubmitButton() {
         color: "var(--text-hi)",
       }}
     >
-      {pending ? "Checking…" : "Sign in"}
+      {pending ? "Creating…" : "Create account"}
     </button>
   );
 }
@@ -27,8 +27,8 @@ const inputStyle = {
   color: "var(--text-hi)",
 } as const;
 
-export default function LoginForm() {
-  const [state, formAction] = useFormState(loginAction, null);
+export default function SignupForm() {
+  const [state, formAction] = useFormState(signupAction, null);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
@@ -39,15 +39,23 @@ export default function LoginForm() {
         autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}
-        placeholder="Username"
+        placeholder="Username (a–z, 0–9, - or _)"
         className="rounded-lg border px-4 py-2 text-sm outline-none"
         style={inputStyle}
       />
       <input
         type="password"
         name="password"
-        autoComplete="current-password"
-        placeholder="Password"
+        autoComplete="new-password"
+        placeholder="Password (8+ characters)"
+        className="rounded-lg border px-4 py-2 text-sm outline-none"
+        style={inputStyle}
+      />
+      <input
+        type="password"
+        name="confirm"
+        autoComplete="new-password"
+        placeholder="Password again"
         className="rounded-lg border px-4 py-2 text-sm outline-none"
         style={inputStyle}
       />

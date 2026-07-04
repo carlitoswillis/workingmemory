@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { loginAction } from "./actions";
+import { changePasswordAction } from "./actions";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -9,14 +9,14 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-lg border px-4 py-2 text-sm transition-opacity disabled:opacity-50"
+      className="self-start rounded-lg border px-4 py-2 text-sm transition-opacity disabled:opacity-50"
       style={{
         borderColor: "var(--veil)",
         background: "var(--surface)",
         color: "var(--text-hi)",
       }}
     >
-      {pending ? "Checking…" : "Sign in"}
+      {pending ? "Saving…" : "Change password"}
     </button>
   );
 }
@@ -27,27 +27,25 @@ const inputStyle = {
   color: "var(--text-hi)",
 } as const;
 
-export default function LoginForm() {
-  const [state, formAction] = useFormState(loginAction, null);
+export default function ChangePasswordForm() {
+  const [state, formAction] = useFormState(changePasswordAction, null);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
+      <p className="text-sm text-[var(--text-lo)]">Change password</p>
       <input
-        type="text"
-        name="username"
-        autoFocus
-        autoComplete="username"
-        autoCapitalize="none"
-        spellCheck={false}
-        placeholder="Username"
+        type="password"
+        name="old_password"
+        autoComplete="current-password"
+        placeholder="Current password"
         className="rounded-lg border px-4 py-2 text-sm outline-none"
         style={inputStyle}
       />
       <input
         type="password"
-        name="password"
-        autoComplete="current-password"
-        placeholder="Password"
+        name="new_password"
+        autoComplete="new-password"
+        placeholder="New password (8+ characters)"
         className="rounded-lg border px-4 py-2 text-sm outline-none"
         style={inputStyle}
       />
@@ -55,6 +53,9 @@ export default function LoginForm() {
         <p className="text-sm" style={{ color: "var(--now)" }}>
           {state.error}
         </p>
+      )}
+      {state?.ok && (
+        <p className="text-sm text-[var(--text-mid)]">Password changed.</p>
       )}
       <SubmitButton />
     </form>

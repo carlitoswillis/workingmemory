@@ -25,8 +25,14 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 ## Architecture Constraints
 - **History is DB-driven**: never log events in app code — **SQLite triggers** in
   `lib/schema.ts` write `item_events` on insert/update. App actions do plain CRUD.
-- **Single-user / local**: no auth, no RLS, no `user_id`. One SQLite file, one user. Don't
-  re-introduce auth or per-user scoping without an explicit owner decision.
+- **Accounts (hosted) / single-user (local)** — multiple-accounts v1, 2026-07-04: on the
+  hosted instance (`DEMO_MODE=1`) all signed-up users share ONE multi-tenant SQLite file
+  (`DATA_DIR/owner/wm.db` — legacy path, read it as "main.db") with **app-level scoping**:
+  `items.user_id` + `user_id IS ?` in EVERY read and `and user_id is ?` on EVERY mutation
+  (no RLS — the guard is the query shape; never write a query without it). Local mode
+  (flag off) stays auth-free, userId null. Sessions are stateless HMAC cookies
+  (`wm_session`, `SESSION_SECRET`); `OWNER_SECRET` is only the ops bearer for
+  /api/export|import. `item_events` has NO user_id — history scopes through its items join.
 - **Schema**: defined in `lib/schema.ts` (`CREATE_TABLES` + `CREATE_TRIGGERS`, kept separate
   so the importer can load data before triggers exist). `lib/db.ts` applies it idempotently
   on first connection — no migration runner. (The Postgres-era `supabase/migrations/`
@@ -38,8 +44,8 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 
 ## Coding Conventions
 - **Explicit over implicit**: avoid hidden logic and clever indirection.
-- **Verify before declaring done**: `npx tsc --noEmit`, `npm run build`, and run the unit
-  test (`node lib/timetravel.test.ts`). Note: drag interactions can't be auto-tested here
+- **Verify before declaring done**: `npx tsc --noEmit`, `npm run build`, and `npm test`
+  (5 plain-node suites incl. `lib/users.test.ts` for account isolation). Note: drag interactions can't be auto-tested here
   (no browser) — flag those for owner testing.
 - **Match the owner's taste**: low-key, matte (no glow), thin/uniform cards, smooth on
   desktop AND mobile. See the design notes in `ARCHITECTURE.md`.

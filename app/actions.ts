@@ -3,30 +3,31 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { isListId } from "@/lib/lists";
-import { getDb, isDemoRequest } from "@/lib/db";
-import { demoAddBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
+import { DEMO_MODE, getBoardContext } from "@/lib/db";
+import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
 import { getArchivedItems, getHistory, getTimelineData } from "@/lib/queries";
 import type { Item, ItemEvent } from "@/lib/types";
 
-// Mutations are plain CRUD against the request's SQLite file (the one local file,
-// or a per-visitor demo DB — lib/db.ts decides) — the DB triggers append the
-// history events (see lib/schema.ts). Demo boards get size caps here; write RATE
-// limiting lives in middleware.ts. With DEMO_MODE off none of the caps apply.
+// Mutations are plain CRUD against the request's board ({db, userId} from
+// lib/db.ts#getBoardContext()) — the DB triggers append the history events
+// (see lib/schema.ts). Scoping (multiple-accounts v1): inserts stamp user_id;
+// EVERY update carries `and user_id is ?` so a request can never mutate
+// another user's row by guessing its id (on local/demo boards userId is null
+// and IS null matches the whole file — same guard, no-op effect). Hosted
+// boards get size caps here; write RATE limiting lives in middleware.ts. With
+// DEMO_MODE off none of the caps apply.
 
 export async function addItemAction(text: string, list: string) {
   let t = text.trim();
   if (!t || !isListId(list)) return;
-  const db = getDb();
-  if (isDemoRequest()) {
-    if (demoAddBlocked(db)) return;
+  const { db, userId } = getBoardContext();
+  if (DEMO_MODE) {
+    if (addBlocked(db, userId)) return;
     t = clampDemoText(t);
   }
-  db.prepare("insert into items (id, text, list, position) values (?, ?, ?, ?)").run(
-    randomUUID(),
-    t,
-    list,
-    Date.now(),
-  );
+  db.prepare(
+    "insert into items (id, text, list, position, user_id) values (?, ?, ?, ?, ?)",
+  ).run(randomUUID(), t, list, Date.now(), userId);
   revalidatePath("/");
 }
 
@@ -36,82 +37,107 @@ export async function addItemAction(text: string, list: string) {
 export async function addChildAction(parentId: string, text: string) {
   let t = text.trim();
   if (!t) return;
-  const db = getDb();
-  if (isDemoRequest()) {
-    if (demoAddBlocked(db)) return;
+  const { db, userId } = getBoardContext();
+  if (DEMO_MODE) {
+    if (addBlocked(db, userId)) return;
     t = clampDemoText(t);
   }
-  const parent = db.prepare("select list from items where id = ?").get(parentId) as
-    | { list: string }
-    | undefined;
+  const parent = db
+    .prepare("select list from items where id = ? and user_id is ?")
+    .get(parentId, userId) as { list: string } | undefined;
   if (!parent?.list) return;
   db.prepare(
-    "insert into items (id, text, list, parent_id, position) values (?, ?, ?, ?, ?)",
-  ).run(randomUUID(), t, parent.list, parentId, Date.now());
+    "insert into items (id, text, list, parent_id, position, user_id) values (?, ?, ?, ?, ?, ?)",
+  ).run(randomUUID(), t, parent.list, parentId, Date.now(), userId);
   revalidatePath("/");
 }
 
 export async function editItemAction(id: string, text: string) {
   let t = text.trim();
   if (!t) return;
-  if (isDemoRequest()) t = clampDemoText(t);
-  getDb().prepare("update items set text = ? where id = ?").run(t, id);
+  if (DEMO_MODE) t = clampDemoText(t);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set text = ? where id = ? and user_id is ?").run(t, id, userId);
   revalidatePath("/");
 }
 
 export async function editDetailsAction(id: string, details: string) {
   // details may be empty (cleared); no trim-reject.
-  const d = isDemoRequest() ? clampDemoDetails(details) : details;
-  getDb().prepare("update items set details = ? where id = ?").run(d, id);
+  const d = DEMO_MODE ? clampDemoDetails(details) : details;
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set details = ? where id = ? and user_id is ?").run(d, id, userId);
   revalidatePath("/");
 }
 
 export async function moveItemAction(id: string, list: string) {
   if (!isListId(list)) return;
-  getDb().prepare("update items set list = ? where id = ?").run(list, id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set list = ? where id = ? and user_id is ?").run(list, id, userId);
   revalidatePath("/");
 }
 
 export async function toggleDoneAction(id: string, done: boolean) {
-  getDb().prepare("update items set done = ? where id = ?").run(done ? 1 : 0, id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set done = ? where id = ? and user_id is ?").run(
+    done ? 1 : 0,
+    id,
+    userId,
+  );
   revalidatePath("/");
 }
 
 export async function archiveItemAction(id: string) {
-  getDb().prepare("update items set archived = 1 where id = ?").run(id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set archived = 1 where id = ? and user_id is ?").run(id, userId);
   revalidatePath("/");
 }
 
 // Restore an archived item back onto the board (archived 1 -> 0). The DB trigger
 // logs the restore to history (see lib/schema.ts).
 export async function unarchiveItemAction(id: string) {
-  getDb().prepare("update items set archived = 0 where id = ?").run(id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set archived = 0 where id = ? and user_id is ?").run(id, userId);
   revalidatePath("/");
 }
 
 // Archived items for the Archive view (browse + restore). Loaded on demand when the
 // panel opens, mirroring historyAction/timelineDataAction.
 export async function archivedItemsAction(): Promise<Item[]> {
-  return getArchivedItems();
+  const { db, userId } = getBoardContext();
+  return getArchivedItems(db, userId);
 }
 
 export async function setRecurrenceAction(id: string, recurrence: string) {
   const value = recurrence === "daily" ? "daily" : "none";
-  getDb().prepare("update items set recurrence = ? where id = ?").run(value, id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set recurrence = ? where id = ? and user_id is ?").run(
+    value,
+    id,
+    userId,
+  );
   revalidatePath("/");
 }
 
 // Check/uncheck a daily task for a given local date (null = uncheck).
 export async function setDailyDoneAction(id: string, completedOn: string | null) {
-  getDb().prepare("update items set completed_on = ? where id = ?").run(completedOn, id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set completed_on = ? where id = ? and user_id is ?").run(
+    completedOn,
+    id,
+    userId,
+  );
   revalidatePath("/");
 }
 
 export async function reorderItemAction(id: string, list: string, position: number) {
   if (!isListId(list)) return;
-  getDb()
-    .prepare("update items set position = ?, list = ? where id = ?")
-    .run(position, list, id);
+  const { db, userId } = getBoardContext();
+  db.prepare("update items set position = ?, list = ? where id = ? and user_id is ?").run(
+    position,
+    list,
+    id,
+    userId,
+  );
   revalidatePath("/");
 }
 
@@ -122,10 +148,12 @@ export async function reorderItemsAction(
 ) {
   const valid = updates.filter((u) => isListId(u.list));
   if (valid.length === 0) return;
-  const db = getDb();
-  const stmt = db.prepare("update items set position = ?, list = ? where id = ?");
+  const { db, userId } = getBoardContext();
+  const stmt = db.prepare(
+    "update items set position = ?, list = ? where id = ? and user_id is ?",
+  );
   const run = db.transaction((rows: typeof valid) => {
-    for (const r of rows) stmt.run(r.position, r.list, r.id);
+    for (const r of rows) stmt.run(r.position, r.list, r.id, userId);
   });
   run(valid);
   revalidatePath("/");
@@ -133,38 +161,41 @@ export async function reorderItemsAction(
 
 export async function saveListOrderAction(order: string[]) {
   const valid = order.filter(isListId);
-  getDb()
-    .prepare(
-      `insert into profiles (id, list_order, updated_at) values ('local', ?, ?)
+  const { db, userId } = getBoardContext();
+  db.prepare(
+    `insert into profiles (id, list_order, updated_at) values (?, ?, ?)
      on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
-    )
-    .run(JSON.stringify(valid), new Date().toISOString());
+  ).run(userId ?? "local", JSON.stringify(valid), new Date().toISOString());
   revalidatePath("/");
 }
 
 // The daily note is a SINGLE pinned item with list='note' (body in `details`), so every
 // edit is change-tracked + time-traveled — the time machine is the journal. There's only
-// ever one; you clear and rewrite it each day rather than spawning new ones. This just
-// creates it the first time (idempotent).
+// ever one per board; you clear and rewrite it each day rather than spawning new ones.
+// This just creates it the first time (idempotent).
 export async function createNoteAction() {
-  const db = getDb();
+  const { db, userId } = getBoardContext();
   const existing = db
-    .prepare("select id from items where list = 'note' and archived = 0 and parent_id is null limit 1")
-    .get();
+    .prepare(
+      "select id from items where list = 'note' and archived = 0 and parent_id is null and user_id is ? limit 1",
+    )
+    .get(userId);
   if (existing) return;
-  if (isDemoRequest() && demoAddBlocked(db)) return;
+  if (DEMO_MODE && addBlocked(db, userId)) return;
   db.prepare(
-    "insert into items (id, text, list, details) values (?, 'Daily note', 'note', '')",
-  ).run(randomUUID());
+    "insert into items (id, text, list, details, user_id) values (?, 'Daily note', 'note', '', ?)",
+  ).run(randomUUID(), userId);
   revalidatePath("/");
 }
 
 export async function historyAction(id: string): Promise<ItemEvent[]> {
-  return getHistory(id);
+  const { db, userId } = getBoardContext();
+  return getHistory(db, userId, id);
 }
 
-// Ship the whole (small, single-user) event log to the client so the time-machine
+// Ship the whole (small, per-board) event log to the client so the time-machine
 // scrubber can reconstruct any past moment locally — no per-tick server round-trip.
 export async function timelineDataAction(): Promise<{ items: Item[]; events: ItemEvent[] }> {
-  return getTimelineData();
+  const { db, userId } = getBoardContext();
+  return getTimelineData(db, userId);
 }

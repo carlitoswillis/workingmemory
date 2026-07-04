@@ -1,16 +1,20 @@
 import { getItems, getListOrder } from "@/lib/queries";
 import { orderLists } from "@/lib/lists";
-import { isDemoRequest } from "@/lib/db";
+import { getBoardContext, getMainDb, isDemoRequest } from "@/lib/db";
+import { getUsername } from "@/lib/users";
 import Board from "@/components/Board";
 import ArchiveView from "@/components/ArchiveView";
 
-// Local, single-user board; always read fresh from the SQLite file.
+// The board for the current request (local file, account rows, or a demo
+// visitor's throwaway DB — lib/db.ts decides); always read fresh from SQLite.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const items = getItems();
-  const lists = orderLists(getListOrder());
+  const { db, userId } = getBoardContext();
+  const items = getItems(db, userId);
+  const lists = orderLists(getListOrder(db, userId));
   const demo = isDemoRequest();
+  const username = userId ? getUsername(getMainDb(), userId) : null;
 
   return (
     <main className="mx-auto max-w-[1640px] px-6 py-10 sm:px-10">
@@ -32,7 +36,11 @@ export default async function Home() {
             This is a <span className="text-[var(--text-mid)]">demo board</span> — yours
             alone, pre-loaded with three weeks of history so the{" "}
             <span className="text-[var(--text-mid)]">🕰 time machine</span> has a past to
-            scrub through. Edit anything; it resets after a day of inactivity.
+            scrub through. Edit anything; it resets after a day of inactivity.{" "}
+            <a href="/signup" className="underline text-[var(--text-mid)]">
+              Create an account
+            </a>{" "}
+            to keep a board of your own.
           </p>
         </div>
       )}
@@ -55,7 +63,23 @@ export default async function Home() {
             </span>
           </p>
         </div>
-        <ArchiveView />
+        <div className="flex items-center gap-3">
+          {username && (
+            <a
+              href="/login"
+              className="rounded-full border px-3 py-1 text-xs"
+              style={{
+                borderColor: "var(--veil)",
+                background: "var(--surface)",
+                color: "var(--text-lo)",
+              }}
+              title="Your account"
+            >
+              @{username}
+            </a>
+          )}
+          <ArchiveView />
+        </div>
       </header>
 
       <Board lists={lists} items={items} />

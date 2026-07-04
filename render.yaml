@@ -5,7 +5,11 @@
 # minutes and cold-start in ~1 min.
 #
 # Set in the Render dashboard (Environment, marked secret):
-#   OWNER_SECRET                  openssl rand -base64 32
+#   OWNER_SECRET                  openssl rand -base64 32  (ops bearer for
+#                                 /api/export|import; also seeds the migrated
+#                                 'owner' account's first password)
+#   SESSION_SECRET                openssl rand -base64 32  (signs wm_session
+#                                 account cookies; rotating it signs everyone out)
 #   LITESTREAM_REPLICA_URL        s3://<bucket>.s3.<region>.backblazeb2.com/owner-wm
 #                                 (B2's S3 endpoint embedded in the host; R2 works
 #                                 the same way but requires a card on file, and its
@@ -26,6 +30,8 @@ services:
       - key: PORT
         value: "3000"
       - key: OWNER_SECRET
+        sync: false
+      - key: SESSION_SECRET
         sync: false
       - key: LITESTREAM_REPLICA_URL
         sync: false

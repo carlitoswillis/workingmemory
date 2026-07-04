@@ -10,9 +10,20 @@
 // backup BEFORE the triggers exist (otherwise every inserted row would generate a
 // spurious "created" event and clobber the real history).
 
+import type Database from "better-sqlite3";
+
 export const ISO_NOW = `strftime('%Y-%m-%dT%H:%M:%fZ','now')`;
 
 export const CREATE_TABLES = `
+-- Accounts (multiple-accounts v1). Only the main hosted DB ever has rows here;
+-- demo/local DBs keep the table empty and all their items have user_id null.
+create table if not exists users (
+  id         text primary key,
+  username   text not null unique collate nocase,
+  pass_hash  text not null,
+  created_at text not null default (${ISO_NOW})
+);
+
 create table if not exists items (
   id           text primary key,
   text         text not null check (length(text) > 0),
@@ -24,6 +35,7 @@ create table if not exists items (
   recurrence   text not null default 'none',
   completed_on text,
   parent_id    text references items(id) on delete cascade,
+  user_id      text references users(id),
   created_at   text not null default (${ISO_NOW}),
   updated_at   text not null default (${ISO_NOW})
 );
@@ -145,3 +157,18 @@ begin
   values (new.id, 'reopened', 'archived', 'true', 'false', ${ISO_NOW});
 end;
 `;
+
+// Additive migration for DBs created before multiple-accounts v1: `create table
+// if not exists` can't add a column to an existing table, and ALTER TABLE isn't
+// idempotent, so check pragma table_info first. The index lives here (not in
+// CREATE_TABLES) because on an old DB it would reference a column that doesn't
+// exist yet when CREATE_TABLES runs. Run after CREATE_TABLES, before triggers.
+export function migrateDb(db: Database.Database) {
+  const cols = db.pragma("table_info(items)") as { name: string }[];
+  if (!cols.some((c) => c.name === "user_id")) {
+    // Allowed on a populated table because the default is NULL (a SQLite
+    // requirement for ADD COLUMN ... REFERENCES with foreign_keys on).
+    db.exec("alter table items add column user_id text references users(id)");
+  }
+  db.exec("create index if not exists items_user_idx on items(user_id, list, archived)");
+}

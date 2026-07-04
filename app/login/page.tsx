@@ -1,14 +1,18 @@
-import { isOwnerRequest } from "@/lib/db";
+import { getMainDb, getRequestUserId } from "@/lib/db";
+import { getUsername } from "@/lib/users";
 import LoginForm from "./LoginForm";
+import ChangePasswordForm from "./ChangePasswordForm";
 import { logoutAction } from "./actions";
 
-// Owner sign-in for the hosted instance (Phase 1b). Deliberately unlinked from
-// the board UI — demo visitors never need it; the owner knows the URL. Locally
+// Account sign-in for the hosted instance (multiple-accounts v1). Locally
 // (DEMO_MODE off) the app never gates on a session, so this page is inert.
+// There is NO email/password reset in v1 — a forgotten password means asking
+// the instance operator.
 export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
-  const signedIn = isOwnerRequest();
+  const userId = getRequestUserId();
+  const username = userId ? getUsername(getMainDb(), userId) : null;
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
@@ -19,15 +23,17 @@ export default function LoginPage() {
           aria-hidden
         />
         <h1 className="font-display text-2xl font-medium tracking-tight text-[var(--text-hi)]">
-          Owner sign-in
+          {userId ? "Your account" : "Sign in"}
         </h1>
       </div>
 
-      {signedIn ? (
-        <div className="flex flex-col gap-4">
+      {userId ? (
+        <div className="flex flex-col gap-6">
           <p className="text-sm text-[var(--text-lo)]">
-            You&apos;re signed in — <a href="/" className="underline text-[var(--text-mid)]">go to your board</a>.
+            Signed in as <span className="text-[var(--text-mid)]">{username}</span> —{" "}
+            <a href="/" className="underline text-[var(--text-mid)]">go to your board</a>.
           </p>
+          <ChangePasswordForm />
           <form action={logoutAction}>
             <button
               type="submit"
@@ -43,7 +49,16 @@ export default function LoginPage() {
           </form>
         </div>
       ) : (
-        <LoginForm />
+        <>
+          <LoginForm />
+          <p className="mt-4 text-sm text-[var(--text-lo)]">
+            No account?{" "}
+            <a href="/signup" className="underline text-[var(--text-mid)]">
+              Create one
+            </a>
+            . Forgot your password? There&apos;s no reset — ask the instance owner.
+          </p>
+        </>
       )}
     </main>
   );

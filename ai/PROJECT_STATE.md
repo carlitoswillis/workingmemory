@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-04_
 
 ## Product Vision
 A "working memory" web app (→ mobile later) — systematize the running note of what's
@@ -31,7 +31,9 @@ a real structure without losing its looseness.
   2026-06-27 local-first pivot's *storage location* but keeps its spirit: still
   single-user, still SQLite, still your own data — verified local copies daily,
   and `push-local-db.sh`/`pull-backup.sh` can move the file either way at will.
-  It is still NOT multi-user (that stays someday/maybe).
+  **Multi-account since 2026-07-04** (multiple-accounts v1, see Backlog): open
+  signup on the hosted instance, owner is user #1 in the same replicated file;
+  still SQLite, still one file, still your own data.
 - Data model unchanged: SQLite + trigger-driven history (`lib/schema.ts`),
   time-travel intact. `DEMO_MODE=1` on the hosted instance gives visitors
   throwaway per-cookie boards; the owner cookie routes to the real board.
@@ -193,6 +195,63 @@ a real structure without losing its looseness.
   archived test notes left over from the removed New-note flow.)
 
 ## Backlog
+- [x] **Multiple accounts (v1)** — BUILT 2026-07-04, awaiting owner browser pass +
+      deploy. Open signup (`/signup`), username+password accounts on the hosted
+      instance; **owner migrates in as user #1** (special-case owner code retired).
+      Owner decisions 2026-07-04: skip encryption for v1 (backlog follow-up), open
+      signup, owner becomes an account. **No Supabase** — creds were offered but with
+      encryption out of scope its main value was managed auth emails; not worth
+      reintroducing a hosted dependency (kept in reserve for a future email-based
+      password reset; NOT committed anywhere).
+      **Architecture: ONE multi-tenant SQLite DB, not per-account files** — Litestream
+      only replicates statically-configured paths, so dynamic per-account files would
+      silently not survive Render's disposable disk; all accounts live in the existing
+      replicated `DATA_DIR/owner/wm.db` ("main.db"), so Litestream/restore/export/
+      backup pipelines are untouched. Scoping is app-level: `items.user_id` +
+      `user_id IS ?` on every read, `and user_id is ?` guard on every mutation
+      (IS matches null, so local/demo boards use the same SQL with userId null).
+      `item_events` unchanged — history scopes through its items join; the trigger
+      engine is untouched. Sessions: stateless HMAC `v2.<userId>.<exp>.<hmac>` keyed
+      by new env `SESSION_SECRET`, httpOnly `wm_session` cookie, scrypt password
+      hashes (node:crypto, no new deps). lib/queries.ts is now PURE (takes {db,
+      userId} from `getBoardContext()`), which let the isolation tests run in plain
+      node. Middleware: session bypass at the edge + per-IP signup bucket (burst 3).
+      `/api/export|import` are bearer-`OWNER_SECRET`-ONLY now (the file holds every
+      account; no browser session may dump/replace it) — pull/push scripts already
+      used bearer, unchanged. Per-account cap `ACCOUNT_MAX_ITEMS` (default 2000).
+      **Owner→user#1 bootstrap**: idempotent, in lib/db.ts, runs before triggers
+      attach (no spurious history/updated_at); first main-DB open with no users +
+      legacy rows creates 'owner' (password = OWNER_SECRET) and re-owns everything.
+      Change-password lives on /login; NO password reset (no email in v1 — pages say
+      so). Verified: tsc, 5 test suites (new lib/users.test.ts: scrypt, v2 tokens,
+      two-user isolation incl. cross-user update no-op), prod build (118kB held),
+      bootstrap smoke test on a copy of the REAL 2026-07-04 backup (41/41 items
+      re-owned, 135 events intact, idempotent across restart), live checks: owner
+      login → real board, second account sees empty board, forged cookie → demo,
+      duplicate username rejected, change-password roundtrip, export/import cookie
+      → 401 + bearer → 200, login/signup 429s, anon demo unchanged, local mode
+      (flag off) unchanged with zero users created.
+      **REMAINING (owner)**: set `SESSION_SECRET` on Render (openssl rand -base64
+      32), push to deploy (bootstrap runs on first login), sign in as
+      `owner`/`<OWNER_SECRET>`, verify board + history + time machine, CHANGE THE
+      PASSWORD, then eyeball signup with a second account. Note: the launchd pull
+      backup keeps working (bearer), and a restore of a pre-accounts backup simply
+      re-bootstraps.
+- [ ] **Encryption for accounts** (deferred from multiple-accounts v1): per-account
+      encryption so data is only decryptable once logged in — would mean SQLCipher-
+      style per-account files (conflicts with the single-replicated-file durability
+      choice) or app-level field crypto; needs its own plan. Password-derived keys ⇒
+      forgotten password = unrecoverable data.
+- [ ] Search across items + their history.
+- [ ] **AI integration** (the real differentiator — point an LLM at the event stream):
+      weekly review that writes itself; auto-triage of brain-dumps; "ask your history".
+      Plan exists (`ai/plans/2026-07-03-ai-weekly-review.md`); owner reversed
+      the model-agnostic requirement 2026-07-03 ("fuck it lets just use
+      claude") — build the native Anthropic adapter only, skip the
+      openai-compatible one (the tiny provider interface can stay so agnostic
+      remains a 40-line add later). Deferred: owner chose to tackle a
+      different backlog item first. `item_events` is the substrate and the
+      moat.
 - [x] **Owner test pass on the live board** (one session, now easy since the hosted
       board is primary): scrubber rewind + snapshot drill-down, multi-select drag,
       undo for moves, sub-card reorder, daily note — all BUILT and self-verified
@@ -211,15 +270,6 @@ a real structure without losing its looseness.
       for t's calendar day"). Verified: tsc, 4 test suites (streaks suite new),
       prod build, trigger smoke-test on a pre-existing DB, live SSR check (3-day
       streak renders). Streak "today" uses browser-local dates end to end.
-- [ ] **AI integration** (the real differentiator — point an LLM at the event stream):
-      weekly review that writes itself; auto-triage of brain-dumps; "ask your history".
-      Plan exists (`ai/plans/2026-07-03-ai-weekly-review.md`); owner reversed
-      the model-agnostic requirement 2026-07-03 ("fuck it lets just use
-      claude") — build the native Anthropic adapter only, skip the
-      openai-compatible one (the tiny provider interface can stay so agnostic
-      remains a 40-line add later). Deferred: owner chose to tackle a
-      different backlog item first. `item_events` is the substrate and the
-      moat.
 - [x] **Fuller optimistic UI** — BUILT 2026-07-03, awaiting owner test. Closed the
       two paths that still round-tripped before showing feedback: **add** (a new card
       now appears instantly) and the **CardPanel "move to list" dropdown** (card
@@ -313,10 +363,12 @@ a real structure without losing its looseness.
         no-background-process constraint) is superseded but preserved in git history
         (this file, pre-2026-07-03) if the hosted path ever goes away.
       - **Pairs with:** Quick-capture (above).
-- [ ] Search across items + their history.
 
 ### Someday / maybe (bottom-of-pile, low priority)
-- [ ] **Re-introduce multi-user + auth** (reverses the 2026-06-27 local pivot; "someday
+- [ ] **Re-introduce multi-user + auth** — LARGELY SUPERSEDED by multiple-accounts v1
+      (2026-07-04): accounts + auth + per-user scoping shipped on SQLite, no Postgres
+      needed at this scale. This item survives only as the "if it ever outgrows one
+      SQLite file / needs sync + offline" escalation path. (reverses the 2026-06-27 local pivot; "someday
       maybe" vibes — only if this becomes a shared product). Sketch of what it would take:
       - **Storage**: SQLite is single-file/single-user. Going multi-user means a real
         server DB again — most likely back to **Postgres** (self-hosted or Supabase). The
@@ -334,6 +386,8 @@ a real structure without losing its looseness.
       - Reuses the original 2026-06-26 multi-user thinking (Supabase + RLS + mobile via the
         same client) — see the Product Vision note. This is the inverse of the work logged
         in Completed ("Local-first pivot"), so that commit is the cleanest undo reference.
+
+- [ ] Robust documentation of this project and its deployment etc. in depth in immmense detail how everything works and why. [this should be the last item we touch]
 
 ## Completed
 - [x] **Local-first pivot: SQLite + no auth** (2026-06-27). Moved the entire data layer

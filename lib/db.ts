@@ -1,21 +1,28 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
-import { CREATE_TABLES, CREATE_TRIGGERS } from "./schema";
+import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema";
 import { buildSeed } from "./demo/seed";
-import { OWNER_COOKIE, verifyOwnerSession } from "./auth";
+import { SESSION_COOKIE, hashPassword, verifyUserSession } from "./auth";
 
 // The local store: one SQLite file under DATA_DIR (gitignored). Single-user,
 // offline, no auth — your data lives on your machine. History is written by
 // triggers in the DB (see lib/schema.ts), exactly as the old Postgres design did.
 //
-// DEMO MODE (hosted portfolio demo, DEMO_MODE=1): instead of the one local file,
-// every visitor gets their own throwaway board at DATA_DIR/demo/<uuid>.db, keyed
-// by an httpOnly cookie minted in middleware.ts. Each demo DB is seeded on first
-// open with a realistic board + ~3 weeks of fabricated event history (see
-// lib/demo/seed.ts) so the time machine has something to show immediately.
-// Idle demo DBs are swept after 24h. With the flag off, nothing here changes.
+// HOSTED (DEMO_MODE=1): two kinds of boards.
+//   - Accounts (multiple-accounts v1): every signed-up user's rows live in ONE
+//     multi-tenant DB at DATA_DIR/owner/wm.db (the path predates accounts and is
+//     kept so Litestream replication + B2 generations don't churn — read it as
+//     "main.db"). Scoping is app-level: items.user_id + `user_id IS ?` in every
+//     query (lib/queries.ts). One file means the drill-tested Litestream
+//     restore-on-boot, /api/export|import, and pull-backup pipelines all keep
+//     working unchanged — per-account files would silently not be replicated.
+//   - Anonymous visitors get their own throwaway board at DATA_DIR/demo/<uuid>.db,
+//     keyed by an httpOnly cookie minted in middleware.ts, seeded on first open
+//     with ~3 weeks of fabricated history (lib/demo/seed.ts), swept after 24h idle.
+// With the flag off, nothing here changes.
 
 export const DEMO_MODE = process.env.DEMO_MODE === "1";
 export const DEMO_COOKIE = "wm_visitor";
@@ -30,14 +37,46 @@ const MAX_DEMO_DBS = 400; // files on disk; oldest deleted beyond this
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-function openAt(file: string): Database.Database {
+function openAt(file: string, opts?: { bootstrapOwner?: boolean }): Database.Database {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new Database(file);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(CREATE_TABLES);
+  migrateDb(db);
+  // Bootstrap runs BEFORE triggers attach so re-owning legacy rows doesn't bump
+  // every item's updated_at (the touch trigger fires on ANY update).
+  if (opts?.bootstrapOwner) bootstrapLegacyOwner(db);
   db.exec(CREATE_TRIGGERS);
   return db;
+}
+
+// One-time, idempotent cutover of the pre-accounts hosted board (main DB only):
+// if no users exist yet but legacy single-owner rows do, create user #1
+// ('owner', password = the OWNER_SECRET that used to BE the login) and hand it
+// every unowned row. The owner signs in as owner/<OWNER_SECRET> and changes the
+// password. Re-runs are no-ops (users table non-empty). Restoring an old
+// pre-accounts backup re-triggers it — which is exactly what you'd want.
+function bootstrapLegacyOwner(db: Database.Database) {
+  const secret = process.env.OWNER_SECRET;
+  if (!secret) return;
+  const users = (db.prepare("select count(*) c from users").get() as { c: number }).c;
+  if (users > 0) return;
+  const legacyItems = (
+    db.prepare("select count(*) c from items where user_id is null").get() as { c: number }
+  ).c;
+  const legacyProfile = db.prepare("select 1 from profiles where id = 'local'").get();
+  if (legacyItems === 0 && !legacyProfile) return;
+
+  const id = randomUUID();
+  db.transaction(() => {
+    db.prepare("insert into users (id, username, pass_hash) values (?, 'owner', ?)").run(
+      id,
+      hashPassword(secret),
+    );
+    db.prepare("update items set user_id = ? where user_id is null").run(id);
+    db.prepare("update profiles set id = ? where id = 'local'").run(id);
+  })();
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +85,7 @@ function openAt(file: string): Database.Database {
 
 const globalForDb = globalThis as unknown as {
   __wmDb?: Database.Database;
-  __wmOwnerDb?: Database.Database;
+  __wmMainDb?: Database.Database;
   __wmDemoCache?: Map<string, { db: Database.Database; lastUsed: number }>;
 };
 
@@ -55,13 +94,16 @@ function localDb(): Database.Database {
   return globalForDb.__wmDb;
 }
 
-// The owner's real board on the hosted instance (DEMO_MODE=1 + a valid owner
-// session). Separate file from the local one so DATA_DIR can be a mounted
-// volume with demo/ and owner/ side by side; Litestream replicates this file.
-function ownerDb(): Database.Database {
-  if (!globalForDb.__wmOwnerDb)
-    globalForDb.__wmOwnerDb = openAt(path.join(DATA_DIR, "owner", "wm.db"));
-  return globalForDb.__wmOwnerDb;
+// The multi-tenant accounts DB on the hosted instance (all signed-up users,
+// including the migrated ex-owner). Separate file from the local one so
+// DATA_DIR can be a mounted volume with demo/ and owner/ side by side;
+// Litestream replicates this file.
+function mainDb(): Database.Database {
+  if (!globalForDb.__wmMainDb)
+    globalForDb.__wmMainDb = openAt(path.join(DATA_DIR, "owner", "wm.db"), {
+      bootstrapOwner: true,
+    });
+  return globalForDb.__wmMainDb;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +122,7 @@ function openDemoDb(file: string): Database.Database {
   // existed during the seed, every inserted row would emit a spurious "created"
   // event and clobber the fabricated history.
   db.exec(CREATE_TABLES);
+  migrateDb(db);
   const empty =
     (db.prepare("select count(*) c from items").get() as { c: number }).c === 0;
   if (empty) {
@@ -197,49 +240,61 @@ function demoDb(id: string): Database.Database {
 
 // ---------------------------------------------------------------------------
 
-// Does the current request carry a valid owner session? Only meaningful on the
-// hosted instance (DEMO_MODE=1 + OWNER_SECRET set); locally there's no auth
-// concept at all.
-export function isOwnerRequest(): boolean {
-  if (!DEMO_MODE) return false;
-  const secret = process.env.OWNER_SECRET;
-  if (!secret) return false;
-  const token = cookies().get(OWNER_COOKIE)?.value ?? "";
-  return verifyOwnerSession(token, secret);
+// The signed-in user for the current request, or null. Only meaningful on the
+// hosted instance (DEMO_MODE=1 + SESSION_SECRET set); locally there's no auth
+// concept at all. Tokens are stateless, so also confirm the user still exists
+// (a deleted account's token would otherwise verify forever).
+export function getRequestUserId(): string | null {
+  if (!DEMO_MODE) return null;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return null;
+  const token = cookies().get(SESSION_COOKIE)?.value ?? "";
+  if (!token) return null;
+  const userId = verifyUserSession(token, secret);
+  if (!userId) return null;
+  return mainDb().prepare("select 1 from users where id = ?").get(userId) ? userId : null;
 }
 
-// Is the current request a demo visitor (vs the owner / local single-user)?
-// With DEMO_MODE on, everyone is a demo visitor EXCEPT a valid owner session.
+// Is the current request a demo visitor (vs a signed-in account / local
+// single-user)? With DEMO_MODE on, everyone is a demo visitor EXCEPT a valid
+// session.
 export function isDemoRequest(): boolean {
-  return DEMO_MODE && !isOwnerRequest();
+  return DEMO_MODE && !getRequestUserId();
 }
 
-// The database for the current request. With DEMO_MODE off this is always the
-// single local file — identical to the old module-level singleton.
-export function getDb(): Database.Database {
-  if (!DEMO_MODE) return localDb();
-  if (isOwnerRequest()) return ownerDb();
+// The board for the current request: which DB file, and which user's rows
+// within it. userId null means "the whole file is the board" (local mode and
+// per-visitor demo files); every query filters `user_id IS ?` so both cases
+// use the same SQL shape (IS matches null).
+export type BoardContext = { db: Database.Database; userId: string | null };
+
+export function getBoardContext(): BoardContext {
+  if (!DEMO_MODE) return { db: localDb(), userId: null };
+  const userId = getRequestUserId();
+  if (userId) return { db: mainDb(), userId };
   const raw = cookies().get(DEMO_COOKIE)?.value?.toLowerCase() ?? "";
   // Sanitized: only a UUID ever becomes a filename. Cookieless clients (bots,
   // curl) share one throwaway board rather than erroring.
   const id = UUID_RE.test(raw) ? raw : "shared-fallback";
-  return demoDb(id);
+  return { db: demoDb(id), userId: null };
 }
 
-// The owner-side DB regardless of request cookies — for /api/export, which does
-// its own auth. Hosted → the owner file; local (flag off) → the one local file.
-export function getOwnerDb(): Database.Database {
-  return DEMO_MODE ? ownerDb() : localDb();
+// The main (accounts) DB regardless of request cookies — for login/signup and
+// /api/export, which do their own auth. Hosted → the multi-tenant file; local
+// (flag off) → the one local file.
+export function getMainDb(): Database.Database {
+  return DEMO_MODE ? mainDb() : localDb();
 }
 
-// Replace the owner DB file with an uploaded snapshot (the one-time cutover
+// Replace the main DB file with an uploaded snapshot (the one-time cutover
 // migration of the local wm.db to the hosted instance, and the disaster-
 // recovery path from any pulled backup). Verifies the incoming bytes as a
 // sane Working Memory DB BEFORE touching the live file, then closes the open
 // handle and swaps atomically. Throws (changing nothing) on a bad snapshot.
-// NOTE for Phase 2: if Litestream is replicating this file, restart the
-// machine after an import so it snapshots a fresh generation.
-export function replaceOwnerDb(snapshot: Buffer): { items: number; events: number } {
+// A pre-accounts snapshot is fine: the next open migrates + re-bootstraps it.
+// NOTE: if Litestream is replicating this file, restart the machine after an
+// import so it snapshots a fresh generation.
+export function replaceMainDb(snapshot: Buffer): { items: number; events: number } {
   const file = DEMO_MODE ? path.join(DATA_DIR, "owner", "wm.db") : path.join(DATA_DIR, "wm.db");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const incoming = `${file}.incoming`;
@@ -263,9 +318,9 @@ export function replaceOwnerDb(snapshot: Buffer): { items: number; events: numbe
 
   if (DEMO_MODE) {
     try {
-      globalForDb.__wmOwnerDb?.close();
+      globalForDb.__wmMainDb?.close();
     } catch {}
-    globalForDb.__wmOwnerDb = undefined;
+    globalForDb.__wmMainDb = undefined;
   } else {
     try {
       globalForDb.__wmDb?.close();
@@ -273,6 +328,6 @@ export function replaceOwnerDb(snapshot: Buffer): { items: number; events: numbe
     globalForDb.__wmDb = undefined;
   }
   for (const f of [`${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true });
-  fs.renameSync(incoming, file); // next getDb()/getOwnerDb() reopens lazily
+  fs.renameSync(incoming, file); // next getBoardContext()/getMainDb() reopens lazily
   return counts;
 }

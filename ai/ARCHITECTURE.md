@@ -63,17 +63,33 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
 - `middleware.ts` — inert when `DEMO_MODE` is off. On: mints the `wm_visitor` cookie
   (also injected into the current request so the first render has its board) and
   token-bucket rate-limits POSTs per visitor. No SQLite here (edge runtime). Also
-  owner-aware (Phase 1b): a valid `wm_owner` session (verified at the edge via
-  `lib/auth-edge.ts`) bypasses the visitor cookie + demo write limits, and POST `/login`
-  gets its own stricter per-IP bucket (burst 5).
-- **Single-owner auth (`lib/auth.ts`, hosted only)** — one `OWNER_SECRET` env var; no
-  user tables. Sessions are stateless HMAC tokens (`v1.<expiryMs>.<hmac>`, 90 days,
-  constant-time compares everywhere; rotating the secret invalidates all sessions).
-  `app/login/` sets/clears the httpOnly `wm_owner` cookie; `isOwnerRequest()` in
-  `lib/db.ts` routes a valid session to the owner DB at `DATA_DIR/owner/wm.db` (which
-  Litestream will replicate in Phase 2). `GET /api/export` (cookie or
-  `Authorization: Bearer <OWNER_SECRET>`) streams a consistent `db.backup()` snapshot —
-  never a raw copy of a live WAL-mode file. With `DEMO_MODE` off none of this runs.
+  session-aware: a valid `wm_session` (verified at the edge via `lib/auth-edge.ts`)
+  bypasses the visitor cookie + demo write limits (per-account caps apply in actions
+  instead); POST `/login` gets a stricter per-IP bucket (burst 5) and POST `/signup`
+  the strictest (burst 3, ~1/5min).
+- **Accounts (`lib/auth.ts` + `lib/users.ts`, hosted only; multiple-accounts v1,
+  2026-07-04)** — open signup at `/signup`; a `users` table (id, username unique nocase,
+  scrypt `pass_hash`) lives in the ONE multi-tenant main DB at `DATA_DIR/owner/wm.db`
+  (legacy path kept so Litestream/B2 generations don't churn — read it as "main.db").
+  All accounts' items share that file, scoped app-level: `items.user_id` + `user_id IS ?`
+  in every read (lib/queries.ts, now pure — takes `{db, userId}`) and `and user_id is ?`
+  on every mutation (app/actions.ts). `item_events` carries NO user_id; history scopes
+  through its items join. Sessions are stateless HMAC tokens
+  (`v2.<userId>.<expiryMs>.<hmac>` keyed by `SESSION_SECRET`, 90 days, constant-time
+  compares; rotating the secret signs everyone out) in the httpOnly `wm_session` cookie;
+  `lib/auth-edge.ts` is the WebCrypto twin for middleware. `getBoardContext()` in
+  `lib/db.ts` resolves each request to `{db, userId}`: valid session → main DB + uid;
+  else per-visitor demo file + null; flag off → local file + null (`IS null` matches the
+  whole file — one SQL shape everywhere). The pre-accounts owner board was migrated by
+  an idempotent bootstrap in `lib/db.ts` (first main-DB open with no users + legacy rows
+  → creates user 'owner' with password = `OWNER_SECRET`, re-owns all rows, re-keys the
+  profiles row) — it runs before triggers attach so nothing gets spurious history. No
+  email ⇒ no password reset (change-password on /login when signed in). `OWNER_SECRET`
+  survives purely as the ops bearer: `GET /api/export` / `PUT /api/import` are
+  bearer-ONLY now (the file holds every account, so no browser session may dump or
+  replace it); both stream/verify via `db.backup()` semantics as before. Per-account
+  item cap `ACCOUNT_MAX_ITEMS` (default 2000) in lib/demo/limits.ts. With `DEMO_MODE`
+  off none of this runs.
 - **Migration / restore (`PUT /api/import`, same auth)** — replaces the owner DB with an
   uploaded snapshot after verifying magic bytes + `integrity_check` + expected tables;
   `replaceOwnerDb()` in `lib/db.ts` closes the live handle and renames atomically, so a
