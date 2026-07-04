@@ -46,6 +46,32 @@ a real structure without losing its looseness.
   Active Tasks). README pass with CI badge done 2026-07-03 — plan complete.
 
 ## Active Tasks
+- **Landing page (`/`) + demo moved to `/demo`** — BUILT 2026-07-04, committed +
+  pushed (auto-deploys), awaiting owner eyeball in a browser. Anonymous hosted
+  visitors now get a proper front door at `/` (Nocturne-styled pitch; hero is one
+  card's real event trail ending in the live card; CTAs: Try the live demo →
+  `/demo`, Create account, Sign in; GitHub link in the footer). The board page was
+  extracted to `app/BoardScreen.tsx`, rendered at `/` for signed-in accounts +
+  local mode and at `/demo` for demo visitors (`app/demo/page.tsx` redirects
+  non-demo requests to `/`; `app/page.tsx` branches on `isDemoRequest()`). All
+  server actions now `revalidatePath("/", "layout")` (helper `revalidateBoard()`
+  in app/actions.ts) so both board routes refresh. Side benefit: landing visitors
+  no longer spawn throwaway demo DBs — a demo file is created only on `/demo`.
+  Verified: tsc, 5 suites, prod build (118kB held), live prod-server curls with a
+  scratch DATA_DIR — anon `/` = landing + zero demo files, `/demo` = seeded board
+  + banner + demo file, minted-session `/` = board (no landing/banner) and
+  `/demo` → 307 `/`, forged cookie = landing, local mode (flag off) `/` = board
+  and `/demo` → 307 `/` with no landing anywhere. Owner: eyeball the landing
+  (desktop + phone widths) and click through demo/signup/login.
+- **Self-serve password recovery — PLANNED 2026-07-04, not built** (owner asked
+  for a plan to implement later; currently a forgotten password = manual DB
+  surgery by the owner, which he doesn't want to be doing). Plan:
+  `ai/plans/2026-07-04-password-self-serve.md`. Recommendation: v1 = one-time
+  **recovery codes** (scrypt-hashed, shown once at signup + regenerable when
+  signed in, `/reset` consumes one; no email, no new deps, no operator in the
+  loop, and it composes with the future per-account-encryption item — codes can
+  later wrap the data key). v2 (only if users ask) = optional email + Resend.
+  Awaiting owner green-light before any build.
 - **✅ DEPLOYED + CUT OVER (2026-07-03): `ai/plans/2026-07-03-free-deploy-runbook.md`
   executed** — live at https://workingmemory.onrender.com (owner renamed the
   service from workingmemory-demo on 2026-07-03; the old subdomain 404s) (Render free +
@@ -237,6 +263,11 @@ a real structure without losing its looseness.
       PASSWORD, then eyeball signup with a second account. Note: the launchd pull
       backup keeps working (bearer), and a restore of a pre-accounts backup simply
       re-bootstraps.
+- [ ] **Self-serve password recovery (recovery codes)** — plan written 2026-07-04
+      (`ai/plans/2026-07-04-password-self-serve.md`, see Active Tasks); removes
+      the owner from the forgot-password loop without email or new deps. Build
+      when green-lit; do it BEFORE (or with) the encryption item below, since the
+      codes become the key-recovery mechanism there.
 - [ ] **Encryption for accounts** (deferred from multiple-accounts v1): per-account
       encryption so data is only decryptable once logged in — would mean SQLCipher-
       style per-account files (conflicts with the single-replicated-file durability

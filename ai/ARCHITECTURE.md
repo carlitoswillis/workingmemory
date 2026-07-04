@@ -21,11 +21,22 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
 ## System Components
 
 ### 1. Pages & shell (`app/`)
-- `app/page.tsx` — server component; requires a user, loads the board (`getItems`) and
-  saved column order (`getListOrder`), applies `orderLists`, renders the header
-  (wordmark + email + sign-out) and `<Board>`.
-- `app/login/page.tsx` — client; email+password sign in / sign up via the browser client.
-- `app/auth/signout/route.ts` — POST → `signOut()` → redirect `/login`.
+- `app/page.tsx` — branches per request (2026-07-04): anonymous hosted visitor
+  (`isDemoRequest()`) → `Landing`; everyone else (signed-in account, local mode) →
+  `BoardScreen`.
+- `app/BoardScreen.tsx` — the board, extracted from the old page.tsx: loads
+  `getItems` + `getListOrder` for the request's `getBoardContext()`, applies
+  `orderLists`, renders the demo banner (demo requests only), header (wordmark +
+  @username chip + archive) and `<Board>`.
+- `app/Landing.tsx` — static server component, the hosted front door: pitch in the
+  Nocturne language (hero = one card's event trail ending in the live card — the
+  data model as the art), CTAs to `/demo` / `/signup` / `/login`, GitHub footer.
+  Touches no DB, so landing visitors don't spawn demo files.
+- `app/demo/page.tsx` — the anonymous visitor's throwaway board (renders
+  `BoardScreen`); non-demo requests are redirected to `/`. Server actions
+  revalidate with `revalidatePath("/", "layout")` so `/` and `/demo` both refresh.
+- `app/login/page.tsx` — username+password sign-in, change-password, sign-out.
+- `app/signup/page.tsx` — open signup (hosted).
 - `app/layout.tsx` — loads Fraunces + Space Grotesk (next/font), sets CSS-var fonts.
 - `app/globals.css` — the Nocturne theme (CSS variables, motion, card-action reveal).
 
