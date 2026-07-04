@@ -263,6 +263,14 @@ a real structure without losing its looseness.
       PASSWORD, then eyeball signup with a second account. Note: the launchd pull
       backup keeps working (bearer), and a restore of a pre-accounts backup simply
       re-bootstraps.
+- [ ] **Fluid time-travel motion** — plan written 2026-07-04
+      (`ai/plans/2026-07-04-fluid-time-travel-motion.md`): cards visibly glide
+      between columns on discrete time-machine steps (◀/▶, chips, release-snap,
+      enter/exit) via the **View Transitions API** — zero deps, zero bundle
+      growth, graceful no-op on old browsers; continuous drag stays instant by
+      design (per-tick tweens would smear at pointer rate). Phase 2 option:
+      amber pulse on the one card a ◀/▶ step changed. Verdict shared with owner:
+      good idea, not heavy, if scoped to discrete steps. Awaiting green-light.
 - [ ] **Self-serve password recovery (recovery codes)** — plan written 2026-07-04
       (`ai/plans/2026-07-04-password-self-serve.md`, see Active Tasks); removes
       the owner from the forgot-password loop without email or new deps. Build
