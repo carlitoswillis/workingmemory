@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getRequestUserId } from "@/lib/db";
 import SignupForm from "./SignupForm";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // Open signup (multiple-accounts v1). Inert locally (DEMO_MODE off) — the
 // action reports "not configured" — and already-signed-in users are sent home.
@@ -12,6 +13,9 @@ export default function SignupPage() {
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
+      <div className="fixed right-5 top-5">
+        <ThemeToggle />
+      </div>
       <div className="mb-6 flex items-center gap-2.5">
         <span
           className="h-1.5 w-1.5 rounded-full"

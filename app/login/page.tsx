@@ -3,6 +3,7 @@ import { getUsername } from "@/lib/users";
 import LoginForm from "./LoginForm";
 import ChangePasswordForm from "./ChangePasswordForm";
 import { logoutAction } from "./actions";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // Account sign-in for the hosted instance (multiple-accounts v1). Locally
 // (DEMO_MODE off) the app never gates on a session, so this page is inert.
@@ -16,6 +17,9 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
+      <div className="fixed right-5 top-5">
+        <ThemeToggle />
+      </div>
       <div className="mb-6 flex items-center gap-2.5">
         <span
           className="h-1.5 w-1.5 rounded-full"

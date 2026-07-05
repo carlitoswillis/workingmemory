@@ -44,7 +44,7 @@ export default function NoteColumn({ note }: { note: Item | null }) {
 
   return (
     <section
-      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[rgba(20,26,46,0.35)] p-3"
+      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3"
       style={{ borderLeft: "2px solid var(--past)" }}
     >
       <div className="mb-3 flex items-start justify-between gap-2 px-1.5 pt-1">

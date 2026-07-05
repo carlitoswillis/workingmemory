@@ -1,7 +1,10 @@
 // The front door of the hosted instance — what an anonymous visitor sees at "/".
 // Signed-in accounts and local mode never render this (they get the board).
-// Static server component: no client JS, no DB touched (so landing visitors
-// don't spawn throwaway demo files — a board is only created if they enter /demo).
+// Server component, no DB touched (so landing visitors don't spawn throwaway
+// demo files — a board is only created if they enter /demo). Only client JS is
+// the tiny ThemeToggle island.
+
+import ThemeToggle from "@/components/ThemeToggle";
 
 // One card's life, told in the app's own visual grammar: cool past events
 // (CardPanel-timeline style) flowing into the warm "now" card. This is the
@@ -57,17 +60,20 @@ export default function Landing() {
             Working Memory
           </span>
         </div>
-        <a
-          href="/login"
-          className="rounded-full border px-3.5 py-1.5 text-xs transition-opacity hover:opacity-80"
-          style={{
-            borderColor: "var(--veil)",
-            background: "var(--surface)",
-            color: "var(--text-mid)",
-          }}
-        >
-          Sign in
-        </a>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <a
+            href="/login"
+            className="rounded-full border px-3.5 py-1.5 text-xs transition-opacity hover:opacity-80"
+            style={{
+              borderColor: "var(--veil)",
+              background: "var(--surface)",
+              color: "var(--text-mid)",
+            }}
+          >
+            Sign in
+          </a>
+        </div>
       </nav>
 
       {/* Hero */}
@@ -82,7 +88,7 @@ export default function Landing() {
           <p className="mt-5 text-[15px] leading-relaxed text-[var(--text-lo)]">
             A board of lists — Today, Focus, Waiting, Backlog, Brain Dump — where
             every edit, move, and check-off journals itself. Scrub the{" "}
-            <span className="text-[var(--text-mid)]">🕰 time machine</span> back and
+            <span className="text-[var(--text-mid)]">time machine</span> back and
             see exactly what had your attention three weeks ago.
           </p>
 

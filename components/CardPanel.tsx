@@ -203,7 +203,7 @@ export default function CardPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
       <aside
         onClick={(e) => e.stopPropagation()}
         className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"

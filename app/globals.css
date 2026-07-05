@@ -4,7 +4,10 @@
 
 /* ── Nocturne: the mind at dusk (matte, low-key) ──────────────────────────
    Warm amber = now / attention. Cool faded blue = the past. Restrained:
-   color carries meaning, not light bloom. */
+   color carries meaning, not light bloom. Dark is the default; a light
+   "Nocturne Day" set lives under html[data-theme="light"] (device preference,
+   set pre-paint by the inline script in app/layout.tsx). ALL color must come
+   from these tokens — no literals in components. */
 :root {
   --bg-0: #0b0e1a;
   --bg-1: #0e1124;
@@ -18,7 +21,45 @@
   --now: #e3a866;
   --past: #6e8bc4;
   --done: #6fb89c;
+  /* derived washes/lines (kept explicit so the light theme can retune them) */
+  --scrim: rgba(0, 0, 0, 0.55); /* behind slide-over panels */
+  --scrim-deep: rgba(8, 10, 18, 0.6); /* behind the quick-capture overlay */
+  --field: rgba(8, 10, 18, 0.5); /* text-input backgrounds */
+  --wash: rgba(20, 26, 46, 0.35); /* column surfaces */
+  --now-wash: rgba(28, 26, 40, 0.5); /* the Today column */
+  --now-line: rgba(227, 168, 102, 0.18);
+  --now-tint: rgba(227, 168, 102, 0.22); /* ::selection, scrubber ticks */
+  --past-wash: rgba(110, 139, 196, 0.08); /* time-travel surfaces */
+  --past-line: rgba(110, 139, 196, 0.4);
   color-scheme: dark;
+}
+
+/* ── Nocturne Day: the same mind, by daylight ──────────────────────────────
+   Warm paper, same semantics (amber = now, faded blue = past, green = done),
+   still matte. */
+html[data-theme="light"] {
+  --bg-0: #eae5d8;
+  --bg-1: #f5f2e9;
+  --surface: #fbf9f2;
+  --surface-2: #efeadc;
+  --veil: #d3ccb9;
+  --veil-soft: #e2dccb;
+  --text-hi: #2b2a35;
+  --text-mid: #565567;
+  --text-lo: #75738a;
+  --now: #a06a24;
+  --past: #4d6ba8;
+  --done: #2e7d64;
+  --scrim: rgba(43, 42, 53, 0.35);
+  --scrim-deep: rgba(43, 42, 53, 0.4);
+  --field: rgba(255, 255, 255, 0.65);
+  --wash: rgba(255, 253, 246, 0.5);
+  --now-wash: rgba(253, 246, 232, 0.65);
+  --now-line: rgba(160, 106, 36, 0.28);
+  --now-tint: rgba(160, 106, 36, 0.22);
+  --past-wash: rgba(77, 107, 168, 0.08);
+  --past-line: rgba(77, 107, 168, 0.4);
+  color-scheme: light;
 }
 
 html,
@@ -42,8 +83,8 @@ body {
 
 /* The Today column: a quiet warm-tinted surface, no glow. */
 .col-now {
-  background: rgba(28, 26, 40, 0.5);
-  border-color: rgba(227, 168, 102, 0.18);
+  background: var(--now-wash);
+  border-color: var(--now-line);
 }
 
 /* Card actions: visible by default (so they work on touch); on devices that
@@ -257,7 +298,7 @@ body {
 }
 
 ::selection {
-  background: rgba(227, 168, 102, 0.22);
+  background: var(--now-tint);
 }
 
 * {

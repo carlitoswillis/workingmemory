@@ -49,6 +49,11 @@ a real structure without losing its looseness.
   restoring a pre-accounts backup simply re-bootstraps.
 - **Landing page eyeball** (built + deployed 2026-07-04): check `/` at desktop +
   phone widths; click through Try-the-demo → `/demo`, Create account, Sign in.
+- **Light mode eyeball** (built 2026-07-05): flip the sun/moon toggle (board
+  header, landing nav, login/signup top-right) and eyeball BOTH themes across
+  board, card panel, time machine scrub + snapshot panel, archive, quick
+  capture, note markdown, landing, login/signup. Palette values in
+  `globals.css` are first-pass — tune to taste.
 - **Plans awaiting green-light** (planned, deliberately not built):
   - Self-serve password recovery via one-time recovery codes —
     `ai/plans/2026-07-04-password-self-serve.md`. Build before (or with) the
@@ -57,11 +62,9 @@ a real structure without losing its looseness.
     Transitions API, zero deps) — `ai/plans/2026-07-04-fluid-time-travel-motion.md`.
 
 ## Backlog
-- [ ] **Light and Dark mode options** — IN PROGRESS 2026-07-05, plan:
-      `ai/plans/2026-07-05-light-mode.md`. Groundwork is favorable: all component
-      color comes from the 12 `--*` tokens in `app/globals.css` (~15 hardcoded
-      rgba/black stragglers to tokenize), so a light theme is a second token set +
-      a persisted toggle.
+- [x] **Light and Dark mode options** — BUILT 2026-07-05 per
+      `ai/plans/2026-07-05-light-mode.md`, awaiting owner eyeball (see Awaiting
+      owner).
 - [ ] Shared board with real-time updates.
 - [ ] Self-serve password recovery (recovery codes) — plan written, see above.
 - [ ] **Encryption for accounts** (deferred from multi-accounts v1): per-account
@@ -123,6 +126,20 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-05 — Light mode ("Nocturne Day") + emoji removal.** Every remaining
+  hardcoded color was tokenized (new `--scrim/--scrim-deep/--field/--wash/
+  --now-wash/--now-line/--now-tint/--past-wash/--past-line` tokens — components
+  may ONLY use `var(--*)`), a warm-paper light token set lives under
+  `html[data-theme="light"]`, and `components/ThemeToggle.tsx` (inline-SVG
+  sun/moon, board header + landing + login/signup) flips it. Device preference:
+  `localStorage["wm-theme"]`, applied pre-paint by an inline script in
+  `app/layout.tsx` (no flash; `suppressHydrationWarning` on `<html>`). Dark
+  stays the default. Owner also asked to drop the site's emoji: 🕰 and 🗄
+  removed (copy/labels carry the meaning), ◀/▶ scrubber steps → ‹/›
+  (apple devices can render the former emoji-style); monochrome glyphs
+  (✓ ✎ ✕ ↳ ↻ ↰) kept as typography. Verified: tsc, 5 suites, prod build
+  (118kB held), live prod-server curls (theme script + toggle SSR'd, light
+  block in compiled CSS, zero emoji in output).
 - **2026-07-04 — Landing page at `/`, demo → `/demo`.** Nocturne-styled front
   door for anonymous hosted visitors (hero = one card's real event trail); board
   extracted to `app/BoardScreen.tsx`, served at `/` for signed-in + local and at

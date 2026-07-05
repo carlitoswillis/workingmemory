@@ -57,7 +57,7 @@ export default function QuickCapture({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[18vh]"
-      style={{ background: "rgba(8,10,18,0.6)" }}
+      style={{ background: "var(--scrim-deep)" }}
       onMouseDown={onClose}
       role="dialog"
       aria-modal="true"
@@ -85,7 +85,7 @@ export default function QuickCapture({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="What's on your mind?"
-          className="w-full rounded-xl border border-[var(--veil-soft)] bg-[rgba(8,10,18,0.5)] px-3.5 py-2.5 text-[15px] text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
+          className="w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3.5 py-2.5 text-[15px] text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
         />
 
         <div className="mt-2.5 flex items-center justify-between px-0.5 text-[11px] text-[var(--text-lo)]">

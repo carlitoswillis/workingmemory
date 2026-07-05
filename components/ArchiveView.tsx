@@ -52,19 +52,18 @@ export default function ArchiveView() {
         title="Browse & restore archived items"
         className="flex items-center gap-1.5 rounded-lg border border-[var(--veil-soft)] px-3 py-1.5 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)]"
       >
-        <span aria-hidden>🗄</span> Archive
+        Archive
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
           <aside
             onClick={(e) => e.stopPropagation()}
             className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
           >
             <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span aria-hidden>🗄</span>
                 <h2 className="font-display text-lg font-medium tracking-tight text-[var(--text-hi)]">
                   Archive
                 </h2>

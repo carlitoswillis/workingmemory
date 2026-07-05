@@ -678,7 +678,7 @@ export default function Board({
 function SnapshotNoteColumn({ body }: { body: string }) {
   return (
     <section
-      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[rgba(20,26,46,0.35)] p-3"
+      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3"
       style={{ borderLeft: "2px solid var(--past)" }}
     >
       <div className="mb-3 px-1.5 pt-1">
@@ -713,7 +713,7 @@ function SnapshotColumn({
   const open = items.filter((i) => !i.done);
   const done = items.filter((i) => i.done);
   return (
-    <section className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[rgba(20,26,46,0.35)] p-3">
+    <section className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3">
       <div className="mb-3 px-1.5 pt-1">
         <div className="flex items-baseline justify-between">
           <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-mid)]">

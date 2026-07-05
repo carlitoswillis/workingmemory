@@ -88,14 +88,11 @@ export default function TimeMachineBar({
     <div
       className={`mb-5 rounded-2xl border px-3.5 py-2.5 transition-colors ${
         active
-          ? "border-[rgba(110,139,196,0.4)] bg-[rgba(110,139,196,0.08)]"
-          : "border-[var(--veil-soft)] bg-[rgba(20,26,46,0.35)]"
+          ? "border-[var(--past-line)] bg-[var(--past-wash)]"
+          : "border-[var(--veil-soft)] bg-[var(--wash)]"
       }`}
     >
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className="text-sm" aria-hidden>
-          🕰
-        </span>
         <span className="font-display text-[13px] italic text-[var(--text-mid)]">
           {active ? "Remembering" : "Time machine"}
         </span>
@@ -108,7 +105,7 @@ export default function TimeMachineBar({
             title="Previous change"
             className="grid h-6 w-6 place-items-center rounded-md border border-[var(--veil)] text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)] disabled:opacity-40"
           >
-            ◀
+            ‹
           </button>
           <button
             onClick={() => stepTo(1)}
@@ -116,7 +113,7 @@ export default function TimeMachineBar({
             title="Next change"
             className="grid h-6 w-6 place-items-center rounded-md border border-[var(--veil)] text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)] disabled:opacity-40"
           >
-            ▶
+            ›
           </button>
         </div>
 
@@ -198,7 +195,7 @@ export default function TimeMachineBar({
               const ms = e.target.value ? new Date(e.target.value).getTime() : NaN;
               if (Number.isFinite(ms)) onPick(ms);
             }}
-            className="rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-0.5 text-[11px] text-[var(--text-mid)] [color-scheme:dark] focus:border-[var(--now)] focus:outline-none"
+            className="rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-0.5 text-[11px] text-[var(--text-mid)] focus:border-[var(--now)] focus:outline-none"
           />
         )}
 

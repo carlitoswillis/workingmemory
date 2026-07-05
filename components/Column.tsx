@@ -57,7 +57,7 @@ export default function Column({
   return (
     <section
       className={`flex min-h-[220px] flex-col rounded-2xl border p-3 ${
-        isNow ? "col-now" : "border-[var(--veil-soft)] bg-[rgba(20,26,46,0.35)]"
+        isNow ? "col-now" : "border-[var(--veil-soft)] bg-[var(--wash)]"
       }`}
     >
       <div className="mb-3 px-1.5 pt-1">
@@ -89,7 +89,7 @@ export default function Column({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Capture a thought…"
-          className="w-full rounded-xl border border-[var(--veil-soft)] bg-[rgba(8,10,18,0.5)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
+          className="w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
         />
       </form>
 

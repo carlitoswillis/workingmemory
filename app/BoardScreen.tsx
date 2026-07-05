@@ -4,6 +4,7 @@ import { getBoardContext, getMainDb, isDemoRequest } from "@/lib/db";
 import { getUsername } from "@/lib/users";
 import Board from "@/components/Board";
 import ArchiveView from "@/components/ArchiveView";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // The board for the current request (local file, account rows, or a demo
 // visitor's throwaway DB — lib/db.ts decides). Rendered at "/" for signed-in
@@ -35,7 +36,7 @@ export default function BoardScreen() {
           <p>
             This is a <span className="text-[var(--text-mid)]">demo board</span> — yours
             alone, pre-loaded with three weeks of history so the{" "}
-            <span className="text-[var(--text-mid)]">🕰 time machine</span> has a past to
+            <span className="text-[var(--text-mid)]">time machine</span> has a past to
             scrub through. Edit anything; it resets after a day of inactivity.{" "}
             <a href="/signup" className="underline text-[var(--text-mid)]">
               Create an account
@@ -79,6 +80,7 @@ export default function BoardScreen() {
             </a>
           )}
           <ArchiveView />
+          <ThemeToggle />
         </div>
       </header>
 

@@ -49,6 +49,12 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
   (no browser) — flag those for owner testing.
 - **Match the owner's taste**: low-key, matte (no glow), thin/uniform cards, smooth on
   desktop AND mobile. See the design notes in `ARCHITECTURE.md`.
+- **No emoji in the UI** (owner call 2026-07-05): no pictographic emoji anywhere on the
+  site — use words or small inline SVGs. Monochrome typographic glyphs (✓ ✎ ✕ ↳ ↻ ‹ ›)
+  are fine; avoid codepoints that render emoji-style on Apple devices (e.g. ◀ ▶).
+- **All color through theme tokens**: components must use `var(--*)` from
+  `app/globals.css` — never literal colors. Both the dark (default) and
+  `html[data-theme="light"]` blocks must define every token.
 - **Keep `/ai` current**: update `PROJECT_STATE.md` as work lands.
 
 ## Navigation (priority flow)
