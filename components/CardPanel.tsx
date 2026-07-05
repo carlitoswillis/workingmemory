@@ -208,18 +208,30 @@ export default function CardPanel({
         onClick={(e) => e.stopPropagation()}
         className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
       >
-        {parent && (
+        {/* Back arrow (left) + close (right). Back steps to the parent card's panel, or
+            to the board for a top-level card — the same move as a phone swipe-back or the
+            browser back button (Board mirrors the panel depth onto history). ✕ dismisses
+            the whole panel straight to the board. */}
+        <div className="mb-4 flex items-center justify-between gap-3">
           <button
-            onClick={() => onOpenCard(parent)}
-            className="mb-3 flex max-w-full items-center gap-1 self-start truncate rounded-md px-1 py-0.5 text-xs text-[var(--text-lo)] hover:text-[var(--text-mid)]"
-            title={`Back to “${parent.text}”`}
+            onClick={() => (parent ? onOpenCard(parent) : onClose())}
+            className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-[var(--text-lo)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
+            aria-label={parent ? `Back to ${parent.text}` : "Back to board"}
+            title={parent ? `Back to “${parent.text}”` : "Back to board"}
           >
-            <span aria-hidden>↰</span>
-            <span className="truncate">{parent.text}</span>
+            <span aria-hidden className="text-base leading-none">‹</span>
+            <span className="truncate">{parent ? parent.text : "Board"}</span>
           </button>
-        )}
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md px-2 py-1 text-sm text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
+          >
+            ✕
+          </button>
+        </div>
 
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-5">
           <button
             onClick={toggleDone}
             className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
@@ -242,12 +254,6 @@ export default function CardPanel({
               )}
             </span>
             {effDone ? (isDaily ? "Done today" : "Done") : "Mark done"}
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
-          >
-            ✕
           </button>
         </div>
 

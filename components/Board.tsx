@@ -115,9 +115,57 @@ export default function Board({
     setSelection((prev) => (prev.size ? new Set() : prev));
     anchorRef.current = null;
   }
+
+  // The open-card panel's depth is mirrored onto the browser history stack, so a phone
+  // swipe-back (or the browser/hardware back button — both fire `popstate`) steps back
+  // through the panel exactly like the on-screen back arrow: sub-card → its parent →
+  // the board. "Previous screen" is defined by the parent chain (see chainOf).
+  //
+  //  - Forward (open a card / drill into a sub-card): push ONE history entry tagged with
+  //    the new depth, preserving Next's own history.state so routing keeps working.
+  //  - Backward (tap the back arrow / ✕): history.go(-n); the popstate handler below then
+  //    resolves openCardId from the entry we land on — one code path for gesture + button.
+  function chainOf(id: string): string[] {
+    const chain: string[] = [];
+    let cur: Item | undefined = items.find((i) => i.id === id);
+    while (cur) {
+      chain.unshift(cur.id);
+      cur = cur.parent_id ? items.find((i) => i.id === cur!.parent_id) : undefined;
+    }
+    return chain;
+  }
+  function navigateTo(id: string | null) {
+    const targetDepth = id ? chainOf(id).length : 0;
+    const curDepth = openCardId ? chainOf(openCardId).length : 0;
+    if (targetDepth > curDepth) {
+      window.history.pushState({ ...window.history.state, wmDepth: targetDepth }, "");
+      setOpenCardId(id);
+    } else if (targetDepth < curDepth) {
+      // Let popstate update openCardId as the entries unwind (handles gesture + button alike).
+      window.history.go(targetDepth - curDepth);
+    } else {
+      window.history.replaceState({ ...window.history.state, wmDepth: targetDepth }, "");
+      setOpenCardId(id);
+    }
+  }
+  // Reassigned every render (like keyHandlerRef) so it always closes over fresh `items`.
+  const popHandlerRef = useRef<(e: PopStateEvent) => void>(() => {});
+  popHandlerRef.current = (e: PopStateEvent) => {
+    const targetDepth = ((e.state as { wmDepth?: number } | null)?.wmDepth) ?? 0;
+    setOpenCardId((prev) => {
+      if (targetDepth === 0 || !prev) return null;
+      return chainOf(prev)[targetDepth - 1] ?? null;
+    });
+  };
+  useEffect(() => {
+    const h = (e: PopStateEvent) => popHandlerRef.current(e);
+    window.addEventListener("popstate", h);
+    return () => window.removeEventListener("popstate", h);
+  }, []);
+
   function openCardFromBoard(item: Item) {
     clearSelection();
-    setOpenCardId(item.id);
+    navigateTo(item.id);
   }
 
   // Time machine. The full (small, single-user) event log is shipped to the client once,
@@ -654,9 +702,9 @@ export default function Board({
           allLists={lists}
           childItems={childrenByParent.get(openCard.id) ?? []}
           childrenByParent={childrenByParent}
-          onOpenCard={(item) => setOpenCardId(item.id)}
+          onOpenCard={(item) => navigateTo(item.id)}
           onMove={moveCardToList}
-          onClose={() => setOpenCardId(null)}
+          onClose={() => navigateTo(null)}
         />
       )}
 
