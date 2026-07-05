@@ -60,12 +60,25 @@ a real structure without losing its looseness.
     encryption item; the codes become its key-recovery mechanism.
   - Fluid time-travel motion (cards glide on discrete time-machine steps, View
     Transitions API, zero deps) — `ai/plans/2026-07-04-fluid-time-travel-motion.md`.
+  - Shared boards + real-time (boards/membership entities, actor-attributed
+    history via trigger v2, SSE notify-then-pull; 3 phases) —
+    `ai/plans/2026-07-05-shared-boards.md`, written as a teaching doc. Four
+    owner questions at the bottom gate the build.
 
 ## Backlog
 - [x] **Light and Dark mode options** — BUILT 2026-07-05 per
       `ai/plans/2026-07-05-light-mode.md`, awaiting owner eyeball (see Awaiting
       owner).
-- [ ] Shared board with real-time updates.
+- [ ] **Shared board with real-time updates** — plan written 2026-07-05
+      (`ai/plans/2026-07-05-shared-boards.md`, verbose/teaching-style by owner
+      request): boards + board_members entities in the same replicated file,
+      `BoardContext.boardId` scoping (same `IS ?` NULL trick), actor
+      attribution via `items.touched_by` copied into `item_events.actor_id` by
+      v2 triggers (drop-then-create versioning), `/b/<id>` routes +
+      invite-by-username, realtime = in-process poke bus → SSE → debounced
+      `router.refresh()` (notify-then-pull; no WebSockets/CRDTs/brokers —
+      single-instance SQLite makes them unnecessary). Phase 0 is an invisible
+      scoping refactor. Awaiting green-light on the plan's §13 questions.
 - [ ] Self-serve password recovery (recovery codes) — plan written, see above.
 - [ ] **Encryption for accounts** (deferred from multi-accounts v1): per-account
       encryption so data is only readable when logged in. Hard tension: SQLCipher
