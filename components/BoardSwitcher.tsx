@@ -71,7 +71,7 @@ export default function BoardSwitcher({
         style={{ borderColor: "var(--veil)", background: "var(--surface)", color: "var(--text-mid)" }}
         title="Switch or manage boards"
       >
-        <span className="max-w-[12rem] truncate">{boardName}</span>
+        <span className="max-w-[9rem] truncate sm:max-w-[12rem]">{boardName}</span>
         <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 text-[var(--text-lo)]" aria-hidden>
           <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -79,7 +79,7 @@ export default function BoardSwitcher({
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 w-72 rounded-xl border p-2 shadow-2xl"
+          className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl border p-2 shadow-2xl"
           style={{ borderColor: "var(--veil)", background: "var(--bg-1)" }}
         >
           <p className="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)]">

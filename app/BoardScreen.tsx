@@ -61,8 +61,8 @@ export default function BoardScreen({ boardId }: { boardId?: string }) {
           </p>
         </div>
       )}
-      <header className="mb-9 flex items-end justify-between gap-4">
-        <div>
+      <header className="mb-9 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <span
               className="h-1.5 w-1.5 rounded-full"
@@ -80,7 +80,7 @@ export default function BoardScreen({ boardId }: { boardId?: string }) {
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {userId && bid && (
             <BoardSwitcher
               boardId={bid}
