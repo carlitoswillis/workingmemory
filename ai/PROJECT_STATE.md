@@ -57,8 +57,11 @@ a real structure without losing its looseness.
   and both can add/move/edit/archive; card history shows "· @username"; a non-member
   hitting `/b/<id>` gets a 404; "Leave board" works; the personal board can't be
   left. Two-browser pass is the real test of it. **Deploy note:** additive migration,
-  no downtime; a pre-boards backup restores clean (bootstrap re-runs). Real-time
-  (Phase 2) is NOT in yet — updates need a manual refresh across sessions.
+  no downtime; a pre-boards backup restores clean (bootstrap re-runs). Real-time is
+  now in (Phase 2): with two browsers on the same board, one person's add/move/edit/
+  archive should appear on the other within ~1s with no manual refresh; a card mid-drag
+  or a time-machine scrub shouldn't get yanked; closing a tab shouldn't leak (the
+  server unsubscribes on abort).
 - **Custom columns eyeball** (built 2026-07-07): the board's columns are now
   user-created. Eyeball on the live board: the "＋ New column" tile (end of the
   grid) → name → Add; hover a column header for rename (✎, or click the title) +
@@ -87,7 +90,8 @@ a real structure without losing its looseness.
 - [x] **Light and Dark mode options** — BUILT 2026-07-05 per
       `ai/plans/2026-07-05-light-mode.md`, awaiting owner eyeball (see Awaiting
       owner).
-- [ ] **Shared board with real-time updates** — plan written 2026-07-05
+- [x] **Shared board with real-time updates** — BUILT 2026-07-07 (Phases 0+1+2), see
+      Completed log + Awaiting owner. Plan written 2026-07-05
       (`ai/plans/2026-07-05-shared-boards.md`, verbose/teaching-style by owner
       request): boards + board_members entities in the same replicated file,
       `BoardContext.boardId` scoping (same `IS ?` NULL trick), actor
@@ -157,6 +161,24 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-07 — Shared boards, Phase 2 (real-time).** Notify-then-pull over SSE, no
+  new deps, per plan §7–§8. In-process poke bus (`lib/realtime.ts`, an EventEmitter on
+  globalThis); every mutation calls `pokeBoard(bid)` (folded into `revalidateBoard`,
+  plus board rename/invite/remove). SSE route `app/api/boards/[boardId]/stream` —
+  membership-gated (404 for anon/non-member), sends the board high-water mark
+  (`max(item_events.id)`, `getBoardHighWater`) on connect + each poke, heartbeats every
+  25s, unsubscribes on abort (the one leak risk — covered by a test). Client hook in
+  `Board.tsx`: `EventSource` → debounced (300ms) `router.refresh()` into the existing
+  resync; suppressed while dragging or time-traveling; first frame is the baseline (no
+  refresh on connect), a higher mark after reconnect catches changes missed while away;
+  fallbacks = refetch on focus/visibility + a 90s interval only while the stream is
+  broken. Single instance by architectural commitment ⇒ no broker/WebSockets/CRDTs.
+  Request-scoped ⇒ no always-on process. Verified: tsc, 8 node suites (new
+  `lib/realtime.test.ts`: delivery, board isolation, no-listener-leak across 100
+  connect/disconnect cycles), prod build (`/api/boards/[boardId]/stream` registered,
+  118kB board), and live curls against a DEMO_MODE instance (unauth→404,
+  valid-session-non-member→404, member→200 `text/event-stream` initial `data:{"h":0}`).
+  Owner two-browser "feels live" pass still pending.
 - **2026-07-07 — Shared boards, Phases 0+1 (model + sharing).** Built per
   `ai/plans/2026-07-05-shared-boards.md` (+ §12b reconciliation). Boards are now a
   first-class entity: `boards` + `board_members` tables, scope moved from `user_id`

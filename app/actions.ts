@@ -10,6 +10,7 @@ import {
   reorderLists,
 } from "@/lib/columns";
 import { DEMO_MODE, getBoardContext } from "@/lib/db";
+import { pokeBoard } from "@/lib/realtime";
 import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
 import { getArchivedItems, getHistory, getTimelineData } from "@/lib/queries";
 import type { Item, ItemEvent } from "@/lib/types";
@@ -26,10 +27,13 @@ import type { Item, ItemEvent } from "@/lib/types";
 // instance. Hosted boards get size caps here; write RATE limiting lives in
 // middleware.ts.
 
-// The board renders at "/" (personal + local + demo) and "/b/[id]" (other boards);
-// revalidating the root layout refreshes whichever route is showing.
-function revalidateBoard() {
+// After a write: revalidate the acting client's own view (root-layout scope covers
+// "/" and "/b/[id]"), AND poke the board's real-time bus so every OTHER open session
+// on that board refetches within a debounce (notify-then-pull — see lib/realtime.ts +
+// the SSE route). Self-poke isn't filtered; one extra debounced refresh is invisible.
+function revalidateBoard(boardId: string | null) {
   revalidatePath("/", "layout");
+  pokeBoard(boardId);
 }
 
 export async function addItemAction(boardId: string | null, text: string, list: string) {
@@ -44,7 +48,7 @@ export async function addItemAction(boardId: string | null, text: string, list: 
   db.prepare(
     "insert into items (id, text, list, position, user_id, board_id, touched_by) values (?, ?, ?, ?, ?, ?, ?)",
   ).run(randomUUID(), t, list, Date.now(), userId, bid, userId);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // Add a sub-card under `parentId`. The child is a real item (so it gets history,
@@ -65,7 +69,7 @@ export async function addChildAction(boardId: string | null, parentId: string, t
   db.prepare(
     "insert into items (id, text, list, parent_id, position, user_id, board_id, touched_by) values (?, ?, ?, ?, ?, ?, ?, ?)",
   ).run(randomUUID(), t, parent.list, parentId, Date.now(), userId, bid, userId);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function editItemAction(boardId: string | null, id: string, text: string) {
@@ -79,7 +83,7 @@ export async function editItemAction(boardId: string | null, id: string, text: s
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function editDetailsAction(boardId: string | null, id: string, details: string) {
@@ -92,7 +96,7 @@ export async function editDetailsAction(boardId: string | null, id: string, deta
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function moveItemAction(boardId: string | null, id: string, list: string) {
@@ -104,7 +108,7 @@ export async function moveItemAction(boardId: string | null, id: string, list: s
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function toggleDoneAction(boardId: string | null, id: string, done: boolean) {
@@ -115,7 +119,7 @@ export async function toggleDoneAction(boardId: string | null, id: string, done:
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function archiveItemAction(boardId: string | null, id: string) {
@@ -125,7 +129,7 @@ export async function archiveItemAction(boardId: string | null, id: string) {
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // Restore an archived item back onto the board (archived 1 -> 0). The DB trigger
@@ -137,7 +141,7 @@ export async function unarchiveItemAction(boardId: string | null, id: string) {
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // Archived items for the Archive view (browse + restore). Loaded on demand when the
@@ -156,7 +160,7 @@ export async function setRecurrenceAction(boardId: string | null, id: string, re
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // Check/uncheck a daily task for a given local date (null = uncheck).
@@ -172,7 +176,7 @@ export async function setDailyDoneAction(
     id,
     bid,
   );
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function reorderItemAction(
@@ -186,7 +190,7 @@ export async function reorderItemAction(
   db.prepare(
     "update items set position = ?, list = ?, touched_by = ? where id = ? and board_id is ?",
   ).run(position, list, userId, id, bid);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // Move/reorder many cards at once (multi-select drag) — one transaction so the
@@ -205,7 +209,7 @@ export async function reorderItemsAction(
     for (const r of rows) stmt.run(r.position, r.list, userId, r.id, bid);
   });
   run(valid);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 // ---- Columns (user-created "lists") --------------------------------------------
@@ -216,27 +220,27 @@ export async function reorderItemsAction(
 export async function reorderListsAction(boardId: string | null, order: string[]) {
   const { db, boardId: bid } = getBoardContext(boardId);
   reorderLists(db, bid, order);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function addListAction(boardId: string | null, label: string): Promise<string | null> {
   const { db, boardId: bid } = getBoardContext(boardId);
   const res = addList(db, bid, label);
   if ("error" in res) return res.error;
-  revalidateBoard();
+  revalidateBoard(bid);
   return null;
 }
 
 export async function renameListAction(boardId: string | null, id: string, label: string) {
   const { db, boardId: bid } = getBoardContext(boardId);
-  if (renameList(db, bid, id, label)) revalidateBoard();
+  if (renameList(db, bid, id, label)) revalidateBoard(bid);
 }
 
 export async function deleteListAction(boardId: string | null, id: string): Promise<string | null> {
   const { db, boardId: bid } = getBoardContext(boardId);
   const res = deleteList(db, bid, id);
   if ("error" in res) return res.error;
-  revalidateBoard();
+  revalidateBoard(bid);
   return null;
 }
 
@@ -256,7 +260,7 @@ export async function createNoteAction(boardId: string | null) {
   db.prepare(
     "insert into items (id, text, list, details, user_id, board_id, touched_by) values (?, 'Daily note', 'note', '', ?, ?, ?)",
   ).run(randomUUID(), userId, bid, userId);
-  revalidateBoard();
+  revalidateBoard(bid);
 }
 
 export async function historyAction(boardId: string | null, id: string): Promise<ItemEvent[]> {

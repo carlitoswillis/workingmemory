@@ -80,6 +80,23 @@ export function getArchivedItems(db: Database.Database, boardId: string | null):
   return rows.map(rowToItem);
 }
 
+// The board's change high-water mark: the largest item_events.id among its items.
+// item_events.id is an autoincrement sequence over every change on the file, so this
+// is a cheap monotonic cursor — the append-only history log doubling as a changefeed
+// (see the plan §8). The SSE stream sends it so the client can tell it missed changes
+// while disconnected. Reorder/list_order-only writes don't log an event, so treat this
+// as "refetch beyond here," not a total order (the poke bus, not this, drives freshness).
+export function getBoardHighWater(db: Database.Database, boardId: string | null): number {
+  const row = db
+    .prepare(
+      `select coalesce(max(e.id), 0) h
+       from item_events e join items i on i.id = e.item_id
+       where i.board_id is ?`,
+    )
+    .get(boardId) as { h: number };
+  return row.h;
+}
+
 export function getHistory(
   db: Database.Database,
   boardId: string | null,

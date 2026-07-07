@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -249,6 +250,16 @@ export default function Board({
 
   const [, startTransition] = useTransition();
 
+  // Real-time (phase 2): a poke on the SSE stream triggers router.refresh(), which
+  // re-renders the server board and flows into the same `items`/`lists` resync the
+  // optimistic layer already uses. Mirror the two "don't yank the board now" states
+  // into refs so the long-lived stream effect reads them without re-subscribing.
+  const router = useRouter();
+  const activeRef = useRef<string | null>(null);
+  activeRef.current = activeId;
+  const timeTravelingRef = useRef(false);
+  timeTravelingRef.current = snapshot !== null;
+
   // Undo for moves: capture each dragged card's origin (list+position) at drag start,
   // push it on a stack when the move lands, and ⌘/Ctrl-Z (or the Undo pill) restores it.
   const dragOriginRef = useRef<Move[]>([]);
@@ -422,6 +433,73 @@ export default function Board({
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+
+  // Real-time board stream. Only hosted account boards have other sessions to sync
+  // with (local/demo boardId is null → skip). On a poke whose high-water mark is
+  // newer than what we've seen, debounce a router.refresh() (a burst from one drag
+  // becomes one refetch); hold off while the user is dragging or time-traveling.
+  // EventSource reconnects itself on error — its first frame after a reconnect (a
+  // higher mark than `lastSeen`) is exactly how we catch changes missed while away.
+  useEffect(() => {
+    if (!boardId) return;
+    let lastSeen: number | null = null; // null until the baseline (first) frame
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let connected = false;
+
+    const flush = () => {
+      if (activeRef.current !== null || timeTravelingRef.current) {
+        timer = setTimeout(flush, 500); // retry once the user is idle again
+        return;
+      }
+      timer = null;
+      router.refresh();
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, 300);
+    };
+
+    const es = new EventSource(`/api/boards/${boardId}/stream`);
+    es.onopen = () => {
+      connected = true;
+    };
+    es.onmessage = (e) => {
+      let h: unknown;
+      try {
+        h = JSON.parse(e.data).h;
+      } catch {
+        return;
+      }
+      if (typeof h !== "number") return;
+      if (lastSeen === null) lastSeen = h; // baseline: don't refresh on connect
+      else if (h > lastSeen) {
+        lastSeen = h;
+        schedule();
+      }
+    };
+    es.onerror = () => {
+      connected = false; // EventSource retries on its own; nothing to do
+    };
+
+    // Fallbacks: refetch on tab focus (covers the laptop-lid case + your own other
+    // tab), and a slow interval ONLY while the stream is broken — no polling cost
+    // in the healthy path.
+    const onFocus = () => schedule();
+    const onVisible = () => document.visibilityState === "visible" && schedule();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    const fallback = setInterval(() => {
+      if (!connected) schedule();
+    }, 90_000);
+
+    return () => {
+      es.close();
+      if (timer) clearTimeout(timer);
+      clearInterval(fallback);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [boardId, router]);
 
   // Scrub to a moment: reconstruct the board locally (pure fn over the shipped log).
   function pickMoment(ms: number) {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getBoardContext, getMainDb, getRequestUserId } from "@/lib/db";
+import { pokeBoard } from "@/lib/realtime";
 import {
   createBoard,
   getMembership,
@@ -39,6 +40,7 @@ export async function renameBoardAction(boardId: string, name: string): Promise<
   const { db } = requireOwner(boardId);
   if (!renameBoard(db, boardId, name)) return "Give the board a name.";
   revalidatePath("/", "layout");
+  pokeBoard(boardId); // members see the new name on their next refetch
   return null;
 }
 
@@ -50,6 +52,7 @@ export async function inviteMemberAction(
   const res = inviteMember(db, boardId, username);
   if ("error" in res) return res.error;
   revalidatePath("/", "layout");
+  pokeBoard(boardId);
   return null;
 }
 
@@ -62,6 +65,7 @@ export async function removeMemberAction(
   const res = removeMember(db, boardId, targetUserId);
   if ("error" in res) return res.error;
   revalidatePath("/", "layout");
+  pokeBoard(boardId);
   return null;
 }
 
