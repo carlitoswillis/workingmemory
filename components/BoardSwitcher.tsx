@@ -79,7 +79,7 @@ export default function BoardSwitcher({
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl border p-2 shadow-2xl"
+          className="absolute left-0 z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl border p-2 shadow-2xl sm:left-auto sm:right-0"
           style={{ borderColor: "var(--veil)", background: "var(--bg-1)" }}
         >
           <p className="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
