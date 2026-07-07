@@ -49,6 +49,14 @@ a real structure without losing its looseness.
   restoring a pre-accounts backup simply re-bootstraps.
 - **Landing page eyeball** (built + deployed 2026-07-04): check `/` at desktop +
   phone widths; click through Try-the-demo → `/demo`, Create account, Sign in.
+- **Custom columns eyeball** (built 2026-07-07): the board's columns are now
+  user-created. Eyeball on the live board: the "＋ New column" tile (end of the
+  grid) → name → Add; hover a column header for rename (✎, or click the title) +
+  delete (✕); drag-reorder still works; try deleting a column that holds cards
+  (should refuse: "Move or archive this column's cards first") and the last column
+  (refuses). Confirm history ("Moved X → Y"), Archive labels, and time-travel still
+  read right — incl. scrubbing to a moment in a since-deleted column. Quick-capture
+  (c) now files into the Brain Dump column if present, else the last column.
 - **Light mode eyeball** (built 2026-07-05): flip the sun/moon toggle (board
   header, landing nav, login/signup top-right) and eyeball BOTH themes across
   board, card panel, time machine scrub + snapshot panel, archive, quick
@@ -139,6 +147,24 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-07 — Custom columns (make/name your own).** The board's columns were a
+  hardcoded const; they're now user-created data. New `lists` table keyed by
+  `(id, user_id)` (defaults share ids across users, so id alone can't be the PK),
+  CRUD + seeding in `lib/columns.ts`, seeded lazily per board in `BoardScreen`
+  (`ensureLists`, idempotent, honoring a pre-columns board's `profiles.list_order`).
+  `DEFAULT_LISTS` (ids `today`…`braindump`) still seed every new board so existing
+  `items.list` values resolve; the old `list_order` plumbing (`getListOrder`,
+  `saveListOrderAction`, `orderLists`/`isListId`/`listLabel`) is retired — order now
+  lives in `lists.position`, labels come from a passed `listLabels` map, and item
+  mutations validate their target with `listExists`. Columns are soft-deleted
+  (`archived=1`), refused while holding a visible card or if last, so history /
+  archive / time-travel labels survive and no card is orphaned (a since-deleted
+  column still renders in a snapshot that had cards in it). New `components/
+  AddColumn.tsx` + rename/delete affordances in `Column.tsx`; quick-capture targets
+  Brain Dump if present else the last column. No triggers (columns are structure,
+  not change-tracked). Verified: tsc, 6 node suites (new `lib/columns.test.ts` +
+  per-user column isolation in `users.test.ts`), prod build (119kB held), live
+  render seeding the 5 defaults into the real local DB.
 - **2026-07-05 — Light mode ("Nocturne Day") + emoji removal.** Every remaining
   hardcoded color was tokenized (new `--scrim/--scrim-deep/--field/--wash/
   --now-wash/--now-line/--now-tint/--past-wash/--past-line` tokens — components

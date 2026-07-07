@@ -8,7 +8,8 @@
 import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
 import { createUser, authenticate, changePassword, findUserByUsername, getUsername } from "./users.ts";
-import { getItems, getArchivedItems, getHistory, getListOrder, getTimelineData } from "./queries.ts";
+import { getItems, getArchivedItems, getHistory, getTimelineData } from "./queries.ts";
+import { ensureLists, getLists, renameList } from "./columns.ts";
 
 let failures = 0;
 function ok(label: string, got: unknown, want: unknown) {
@@ -86,16 +87,21 @@ db.prepare("update items set archived = 1 where id = ? and user_id is ?").run("a
 ok("alice's archive shows a2", getArchivedItems(db, alice.id).map((i) => i.id), ["a2"]);
 ok("bob's archive is empty", getArchivedItems(db, bobId), []);
 
-// List order: per-user profiles rows, 'local' for the null scope.
-const upsert = db.prepare(
+// Columns (user-created lists) are per-user: seeding + reads scope by user_id, and
+// a pre-columns board's saved profiles.list_order seeds the default column order.
+db.prepare(
   `insert into profiles (id, list_order, updated_at) values (?, ?, ?)
    on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
-);
-upsert.run(alice.id, JSON.stringify(["focus", "today"]), new Date().toISOString());
-upsert.run("local", JSON.stringify(["today"]), new Date().toISOString());
-ok("alice's list order", getListOrder(db, alice.id), ["focus", "today"]);
-ok("bob has no list order yet", getListOrder(db, bobId), null);
-ok("null scope reads the 'local' row", getListOrder(db, null), ["today"]);
+).run(alice.id, JSON.stringify(["focus", "today"]), new Date().toISOString());
+ensureLists(db, alice.id);
+ensureLists(db, null); // local scope, seeded independently
+ok("alice seeded the 5 default columns", getLists(db, alice.id).length, 5);
+ok("alice's saved list_order leads the seed", getLists(db, alice.id)[0].id, "focus");
+ok("bob has no columns until his board is seeded", getLists(db, bobId), []);
+ok("local scope seeded independently", getLists(db, null).length, 5);
+renameList(db, alice.id, "today", "Alice Today");
+ok("rename is scoped to alice", getLists(db, null).find((l) => l.id === "today")!.label, "Today");
+ok("alice sees her rename", getLists(db, alice.id).find((l) => l.id === "today")!.label, "Alice Today");
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);

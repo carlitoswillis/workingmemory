@@ -18,8 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
-import type { LISTS } from "@/lib/lists";
-import { listLabel } from "@/lib/lists";
+import type { ListDef } from "@/lib/lists";
 import {
   addChildAction,
   archiveItemAction,
@@ -43,16 +42,14 @@ const Markdown = dynamic(() => import("./Markdown"), {
   loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
 });
 
-type ListDef = (typeof LISTS)[number];
-
-function describe(e: ItemEvent): string {
+function describe(e: ItemEvent, labelOf: (id: string) => string): string {
   switch (e.type) {
     case "created":
       return `Captured: “${e.new_value}”`;
     case "edited":
       return e.field === "details" ? "Edited details" : "Reworded";
     case "moved":
-      return `Moved ${listLabel(e.old_value ?? "")} → ${listLabel(e.new_value ?? "")}`;
+      return `Moved ${labelOf(e.old_value ?? "")} → ${labelOf(e.new_value ?? "")}`;
     case "completed":
       return e.field === "completed_on" ? `Checked off for ${e.new_value}` : "Marked done";
     case "reopened":
@@ -78,6 +75,7 @@ export default function CardPanel({
   item,
   parent,
   allLists,
+  listLabels,
   childItems,
   childrenByParent,
   onOpenCard,
@@ -87,12 +85,14 @@ export default function CardPanel({
   item: Item;
   parent: Item | null;
   allLists: readonly ListDef[];
+  listLabels: Record<string, string>;
   childItems: Item[];
   childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
   onMove: (id: string, list: string) => void;
   onClose: () => void;
 }) {
+  const labelOf = (id: string) => listLabels[id] ?? id;
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
   // Optimistic list value so the dropdown reflects the pick instantly; Board moves the
@@ -452,7 +452,7 @@ export default function CardPanel({
                       background: i === events.length - 1 ? "var(--now)" : "var(--surface)",
                     }}
                   />
-                  <p className="text-sm text-[var(--text-hi)]">{describe(e)}</p>
+                  <p className="text-sm text-[var(--text-hi)]">{describe(e, labelOf)}</p>
                   {e.type === "edited" && (
                     <p className="mt-1 font-display text-xs italic leading-snug text-[var(--text-lo)]">
                       <span className="line-through">{e.old_value}</span>{" "}

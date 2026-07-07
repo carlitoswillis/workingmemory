@@ -1,5 +1,5 @@
-import { getItems, getListOrder } from "@/lib/queries";
-import { orderLists } from "@/lib/lists";
+import { getItems } from "@/lib/queries";
+import { ensureLists, getLists, getListLabels } from "@/lib/columns";
 import { getBoardContext, getMainDb, isDemoRequest } from "@/lib/db";
 import { getUsername } from "@/lib/users";
 import Board from "@/components/Board";
@@ -12,8 +12,12 @@ import ThemeToggle from "@/components/ThemeToggle";
 // "/" is the landing page).
 export default function BoardScreen() {
   const { db, userId } = getBoardContext();
+  // Seed the five default columns on a board's first render (idempotent), then read
+  // the live columns + a label map (incl. deleted columns) for history/archive views.
+  ensureLists(db, userId);
   const items = getItems(db, userId);
-  const lists = orderLists(getListOrder(db, userId));
+  const lists = getLists(db, userId);
+  const listLabels = getListLabels(db, userId);
   const demo = isDemoRequest();
   const username = userId ? getUsername(getMainDb(), userId) : null;
 
@@ -79,12 +83,12 @@ export default function BoardScreen() {
               @{username}
             </a>
           )}
-          <ArchiveView />
+          <ArchiveView listLabels={listLabels} />
           <ThemeToggle />
         </div>
       </header>
 
-      <Board lists={lists} items={items} />
+      <Board lists={lists} listLabels={listLabels} items={items} />
     </main>
   );
 }

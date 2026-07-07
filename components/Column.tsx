@@ -3,12 +3,10 @@
 import { useState } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Item } from "@/lib/types";
-import type { LISTS } from "@/lib/lists";
+import { MAX_LIST_LABEL, type ListDef } from "@/lib/lists";
 import { effectiveDone } from "@/lib/recurrence";
 import ItemCard from "./ItemCard";
 import SortableItemCard from "./SortableItemCard";
-
-type ListDef = (typeof LISTS)[number];
 
 export default function Column({
   list,
@@ -17,9 +15,12 @@ export default function Column({
   childrenByParent,
   selection,
   activeId,
+  canDelete,
   onSelect,
   onOpenCard,
   onAdd,
+  onRename,
+  onDelete,
   dragHandleProps,
 }: {
   list: ListDef;
@@ -28,12 +29,24 @@ export default function Column({
   childrenByParent: Map<string, Item[]>;
   selection: Set<string>;
   activeId: string | null;
+  canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
   onAdd: (listId: string, text: string) => void;
+  onRename: (id: string, label: string) => void;
+  onDelete: (id: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dragHandleProps?: any;
 }) {
+  // Inline rename: click the title (or the ✎) to edit it in place.
+  const [renaming, setRenaming] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(list.label);
+  function commitRename() {
+    const name = draftLabel.trim();
+    setRenaming(false);
+    if (name && name !== list.label) onRename(list.id, name);
+    else setDraftLabel(list.label);
+  }
   // While dragging a multi-selection, dim the other selected cards (they'll snap to
   // the dropped block on release).
   const mutedId = (id: string) => activeId != null && id !== activeId && selection.has(id);
@@ -60,9 +73,9 @@ export default function Column({
         isNow ? "col-now" : "border-[var(--veil-soft)] bg-[var(--wash)]"
       }`}
     >
-      <div className="mb-3 px-1.5 pt-1">
-        <div className="flex items-baseline justify-between">
-          <div className="flex items-center gap-1.5">
+      <div className="group/col mb-3 px-1.5 pt-1">
+        <div className="flex items-baseline justify-between gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
             {dragHandleProps && (
               <button
                 {...dragHandleProps}
@@ -73,15 +86,70 @@ export default function Column({
                 ⠿
               </button>
             )}
-            <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-hi)]">
-              {list.label}
-            </h2>
+            {renaming ? (
+              <input
+                autoFocus
+                value={draftLabel}
+                maxLength={MAX_LIST_LABEL}
+                onChange={(e) => setDraftLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") {
+                    setDraftLabel(list.label);
+                    setRenaming(false);
+                  }
+                }}
+                onBlur={commitRename}
+                className="min-w-0 flex-1 rounded border border-[var(--veil)] bg-[var(--bg-0)] px-1 py-0.5 font-display text-[15px] font-medium tracking-tight text-[var(--text-hi)] focus:border-[var(--now)] focus:outline-none"
+              />
+            ) : (
+              <button
+                onClick={() => {
+                  setDraftLabel(list.label);
+                  setRenaming(true);
+                }}
+                title="Rename column"
+                className="min-w-0 truncate text-left font-display text-[15px] font-medium tracking-tight text-[var(--text-hi)]"
+              >
+                {list.label}
+              </button>
+            )}
           </div>
-          <span className="font-grotesk text-[11px] tabular-nums text-[var(--text-lo)]">
-            {open.length || ""}
-          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            {!renaming && (
+              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/col:opacity-100 focus-within:opacity-100">
+                <button
+                  onClick={() => {
+                    setDraftLabel(list.label);
+                    setRenaming(true);
+                  }}
+                  aria-label="Rename column"
+                  title="Rename column"
+                  className="rounded px-1 py-0.5 text-[11px] text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
+                >
+                  ✎
+                </button>
+                {canDelete && (
+                  <button
+                    onClick={() => onDelete(list.id)}
+                    aria-label="Delete column"
+                    title="Delete column"
+                    className="rounded px-1 py-0.5 text-[11px] text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+            <span className="font-grotesk text-[11px] tabular-nums text-[var(--text-lo)]">
+              {open.length || ""}
+            </span>
+          </div>
         </div>
-        <p className="mt-0.5 text-[11px] leading-tight text-[var(--text-lo)]">{list.hint}</p>
+        {list.hint && (
+          <p className="mt-0.5 text-[11px] leading-tight text-[var(--text-lo)]">{list.hint}</p>
+        )}
       </div>
 
       <form onSubmit={submit} className="mb-3">

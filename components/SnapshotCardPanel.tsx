@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { listLabel } from "@/lib/lists";
 import type { BoardItemAt } from "@/lib/timetravel";
 
 // Shared, code-split markdown renderer — only pulled in when a past card panel opens.
@@ -16,6 +15,7 @@ const Markdown = dynamic(() => import("./Markdown"), {
 export default function SnapshotCardPanel({
   item,
   parent,
+  listLabels,
   childItems,
   asOf,
   onOpenCard,
@@ -23,6 +23,7 @@ export default function SnapshotCardPanel({
 }: {
   item: BoardItemAt;
   parent: BoardItemAt | null;
+  listLabels: Record<string, string>;
   childItems: BoardItemAt[];
   asOf: string | null;
   onOpenCard: (id: string) => void;
@@ -85,7 +86,7 @@ export default function SnapshotCardPanel({
           {item.text}
         </h2>
         <p className="mt-1 px-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-          {listLabel(item.list)}
+          {listLabels[item.list] ?? item.list}
         </p>
 
         {/* Details (display only) */}

@@ -79,21 +79,6 @@ export function getArchivedItems(db: Database.Database, userId: string | null): 
   return rows.map(rowToItem);
 }
 
-// The saved column (list) order, or null if it was never set. Stored per board:
-// profiles row id = the user's uuid, or 'local' for local/demo boards.
-export function getListOrder(db: Database.Database, userId: string | null): string[] | null {
-  const row = db
-    .prepare("select list_order from profiles where id = ?")
-    .get(userId ?? "local") as { list_order: string | null } | undefined;
-  if (!row?.list_order) return null;
-  try {
-    const order = JSON.parse(row.list_order);
-    return Array.isArray(order) ? (order as string[]) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function getHistory(
   db: Database.Database,
   userId: string | null,

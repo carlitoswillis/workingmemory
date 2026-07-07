@@ -2,7 +2,13 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { isListId } from "@/lib/lists";
+import {
+  addList,
+  deleteList,
+  listExists,
+  renameList,
+  reorderLists,
+} from "@/lib/columns";
 import { DEMO_MODE, getBoardContext } from "@/lib/db";
 import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
 import { getArchivedItems, getHistory, getTimelineData } from "@/lib/queries";
@@ -25,8 +31,9 @@ function revalidateBoard() {
 
 export async function addItemAction(text: string, list: string) {
   let t = text.trim();
-  if (!t || !isListId(list)) return;
+  if (!t) return;
   const { db, userId } = getBoardContext();
+  if (!listExists(db, userId, list)) return;
   if (DEMO_MODE) {
     if (addBlocked(db, userId)) return;
     t = clampDemoText(t);
@@ -76,8 +83,8 @@ export async function editDetailsAction(id: string, details: string) {
 }
 
 export async function moveItemAction(id: string, list: string) {
-  if (!isListId(list)) return;
   const { db, userId } = getBoardContext();
+  if (!listExists(db, userId, list)) return;
   db.prepare("update items set list = ? where id = ? and user_id is ?").run(list, id, userId);
   revalidateBoard();
 }
@@ -136,8 +143,8 @@ export async function setDailyDoneAction(id: string, completedOn: string | null)
 }
 
 export async function reorderItemAction(id: string, list: string, position: number) {
-  if (!isListId(list)) return;
   const { db, userId } = getBoardContext();
+  if (!listExists(db, userId, list)) return;
   db.prepare("update items set position = ?, list = ? where id = ? and user_id is ?").run(
     position,
     list,
@@ -152,9 +159,9 @@ export async function reorderItemAction(id: string, list: string, position: numb
 export async function reorderItemsAction(
   updates: { id: string; list: string; position: number }[],
 ) {
-  const valid = updates.filter((u) => isListId(u.list));
-  if (valid.length === 0) return;
   const { db, userId } = getBoardContext();
+  const valid = updates.filter((u) => listExists(db, userId, u.list));
+  if (valid.length === 0) return;
   const stmt = db.prepare(
     "update items set position = ?, list = ? where id = ? and user_id is ?",
   );
@@ -165,14 +172,36 @@ export async function reorderItemsAction(
   revalidateBoard();
 }
 
-export async function saveListOrderAction(order: string[]) {
-  const valid = order.filter(isListId);
+// ---- Columns (user-created "lists") --------------------------------------------
+// The board's columns are data (a `lists` table — see lib/columns.ts). CRUD lives
+// here so it's scoped + revalidated like every other mutation. Delete returns a
+// reason string on refusal (last column / still holds cards) for the UI to surface.
+
+export async function reorderListsAction(order: string[]) {
   const { db, userId } = getBoardContext();
-  db.prepare(
-    `insert into profiles (id, list_order, updated_at) values (?, ?, ?)
-     on conflict(id) do update set list_order = excluded.list_order, updated_at = excluded.updated_at`,
-  ).run(userId ?? "local", JSON.stringify(valid), new Date().toISOString());
+  reorderLists(db, userId, order);
   revalidateBoard();
+}
+
+export async function addListAction(label: string): Promise<string | null> {
+  const { db, userId } = getBoardContext();
+  const res = addList(db, userId, label);
+  if ("error" in res) return res.error;
+  revalidateBoard();
+  return null;
+}
+
+export async function renameListAction(id: string, label: string) {
+  const { db, userId } = getBoardContext();
+  if (renameList(db, userId, id, label)) revalidateBoard();
+}
+
+export async function deleteListAction(id: string): Promise<string | null> {
+  const { db, userId } = getBoardContext();
+  const res = deleteList(db, userId, id);
+  if ("error" in res) return res.error;
+  revalidateBoard();
+  return null;
 }
 
 // The daily note is a SINGLE pinned item with list='note' (body in `details`), so every

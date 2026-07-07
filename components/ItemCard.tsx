@@ -2,12 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
-import type { LISTS } from "@/lib/lists";
+import type { ListDef } from "@/lib/lists";
 import { setDailyDoneAction, toggleDoneAction } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
 import { currentStreak } from "@/lib/streaks";
-
-type ListDef = (typeof LISTS)[number];
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
 function recencyAmount(updatedAt: string): number {

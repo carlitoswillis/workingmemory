@@ -4,16 +4,19 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { addItemAction } from "@/app/actions";
 
 // Keyboard-first "brain dump": a global hotkey (c or ⌘/Ctrl-K) opens this small
-// overlay anywhere on the board; type a thought, Enter files it into Brain Dump and
-// clears the field so you can fire off several in a row, Esc closes. No schema change —
-// it just calls addItemAction(text, "braindump"), so captures are change-tracked +
+// overlay anywhere on the board; type a thought, Enter files it into the capture
+// column and clears the field so you can fire off several in a row, Esc closes. The
+// target list is chosen by Board (the "braindump" column if it still exists, else the
+// last column) since columns are user-editable now — captures are change-tracked +
 // time-traveled like anything else. Open/close state is owned by Board (which also owns
 // the global keydown listener); this component owns the draft + the rapid-add UX.
 export default function QuickCapture({
   open,
+  listId,
   onClose,
 }: {
   open: boolean;
+  listId: string;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
@@ -35,10 +38,10 @@ export default function QuickCapture({
 
   function submit() {
     const t = text.trim();
-    if (!t) return;
+    if (!t || !listId) return;
     setText("");
     setAdded((n) => n + 1);
-    startTransition(() => addItemAction(t, "braindump"));
+    startTransition(() => addItemAction(t, listId));
     inputRef.current?.focus();
   }
 

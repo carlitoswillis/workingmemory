@@ -3,10 +3,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Item } from "@/lib/types";
-import type { LISTS } from "@/lib/lists";
+import type { ListDef } from "@/lib/lists";
 import ItemCard from "./ItemCard";
-
-type ListDef = (typeof LISTS)[number];
 
 // Drag anywhere on the card to reorder; clicks still edit (sensor has a small
 // activation distance, and inputs stop propagation).

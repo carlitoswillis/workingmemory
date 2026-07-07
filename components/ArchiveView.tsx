@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { archivedItemsAction, unarchiveItemAction } from "@/app/actions";
-import { listLabel } from "@/lib/lists";
 import type { Item } from "@/lib/types";
 
 // Browse + restore archived items. Archiving is non-destructive (full history is
@@ -19,7 +18,11 @@ const fmt = (iso: string) =>
     minute: "2-digit",
   });
 
-export default function ArchiveView() {
+export default function ArchiveView({
+  listLabels,
+}: {
+  listLabels: Record<string, string>;
+}) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Item[] | null>(null);
   const [, startTransition] = useTransition();
@@ -115,7 +118,7 @@ export default function ArchiveView() {
                           )}
                           <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-lo)]">
                             <span className="rounded-full border border-[var(--veil)] px-1.5 py-[1px]">
-                              {listLabel(it.list)}
+                              {listLabels[it.list] ?? it.list}
                             </span>
                             <span>archived {fmt(it.updated_at)}</span>
                           </p>

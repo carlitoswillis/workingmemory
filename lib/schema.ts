@@ -57,11 +57,38 @@ create table if not exists item_events (
 create index if not exists item_events_item_idx on item_events(item_id, at);
 
 -- Single-row settings (replaces the per-user profiles table). list_order is JSON text.
+-- Kept for backup/import compatibility; column ORDER now lives in lists.position
+-- (see the lists table below). On first open of a pre-columns board, ensureLists()
+-- reads list_order once to preserve the owner's saved column order.
 create table if not exists profiles (
   id         text primary key,
   list_order text,
   updated_at text
 );
+
+-- Board columns ("lists"), user-created since 2026-07-07. Before this they were a
+-- hardcoded const (lib/lists.ts DEFAULT_LISTS); those five are now seeded per board
+-- on first render (ensureLists in lib/columns.ts), keeping their original ids so
+-- existing items.list values still resolve. Ordered by position (real, same
+-- fractional-insert trick as items). Soft-deleted (archived=1) rather than removed,
+-- so a since-deleted column's label still resolves in history/archive/time-travel.
+-- No triggers: columns are board STRUCTURE, not change-tracked content. Scoped like
+-- items: user_id + user_id-IS guard in every query.
+-- (id, user_id) is the key, not id alone: every account seeds the SAME default ids
+-- ("today"…), so id is only unique WITHIN a user's board — exactly the scope items
+-- reference it at (items.list + the user_id guard). Custom columns get a uuid id.
+create table if not exists lists (
+  id         text not null,
+  user_id    text references users(id),
+  label      text not null check (length(label) > 0),
+  hint       text not null default '',
+  position   real not null default 0,
+  archived   integer not null default 0,
+  created_at text not null default (${ISO_NOW}),
+  primary key (id, user_id)
+);
+
+create index if not exists lists_user_idx on lists(user_id, archived, position);
 `;
 
 export const CREATE_TRIGGERS = `

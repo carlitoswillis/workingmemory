@@ -21,30 +21,30 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
-import type { LISTS, ListId } from "@/lib/lists";
-import { isListId } from "@/lib/lists";
+import type { ListId, ListDef } from "@/lib/lists";
+import { NOTE_LIST, MAX_LISTS } from "@/lib/lists";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
   addItemAction,
+  addListAction,
+  deleteListAction,
   moveItemAction,
+  renameListAction,
   reorderItemAction,
   reorderItemsAction,
-  saveListOrderAction,
+  reorderListsAction,
   timelineDataAction,
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
+import AddColumn from "./AddColumn";
 import CardPanel from "./CardPanel";
 import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
 import TimeMachineBar from "./TimeMachineBar";
 import QuickCapture from "./QuickCapture";
 
-type ListDef = (typeof LISTS)[number];
 type Grouped = Record<string, Item[]>;
 type Move = { id: string; list: string; position: number };
-
-// The daily note lives in items with this sentinel list (never a real board column).
-const NOTE_LIST: string = "note";
 
 const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6";
 
@@ -88,9 +88,11 @@ function groupChildren(items: Item[]): Map<string, Item[]> {
 
 export default function Board({
   lists,
+  listLabels,
   items,
 }: {
   lists: readonly ListDef[];
+  listLabels: Record<string, string>;
   items: Item[];
 }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -195,13 +197,29 @@ export default function Board({
   const minMs = markers[0] ?? now;
   const asOf = valueMs != null ? new Date(valueMs).toISOString() : null;
 
-  // Column order (optimistic; persisted per-user)
+  // Column order (optimistic; persisted per-board). Columns are user-created data now
+  // (a `lists` table); `lists` arrives pre-ordered by position from the server.
   const [listOrder, setListOrder] = useState<string[]>(lists.map((l) => l.id));
   useEffect(() => setListOrder(lists.map((l) => l.id)), [lists]);
   const listById = new Map<string, ListDef>(lists.map((l) => [l.id, l]));
   const orderedLists = listOrder
     .map((id) => listById.get(id))
     .filter((l): l is ListDef => !!l);
+
+  // Column CRUD. Add/rename/delete round-trip to the server and rely on revalidation
+  // to reflect (columns change rarely; not worth the optimistic bookkeeping cards get).
+  // Delete can be refused (last column / still holds cards) — surface the reason.
+  const [columnError, setColumnError] = useState<string | null>(null);
+  async function addColumn(label: string) {
+    const err = await addListAction(label);
+    if (err) setColumnError(err);
+  }
+  function renameColumn(id: string, label: string) {
+    renameListAction(id, label);
+  }
+  async function deleteColumn(id: string) {
+    setColumnError(await deleteListAction(id)); // err | null (clears on success)
+  }
 
   // Cards grouped by list. A ref mirrors state so drag handlers never read stale data.
   const [itemsByList, setItemsByList] = useState<Grouped>(() => groupItems(items, lists));
@@ -279,7 +297,7 @@ export default function Board({
   // pattern the drag handlers use — not useOptimistic, which would fight itemsRef.
   function addCard(listId: string, text: string) {
     const t = text.trim();
-    if (!t || !isListId(listId)) return;
+    if (!t || !listById.has(listId)) return;
     const nowIso = new Date().toISOString();
     const temp: Item = {
       id: `temp-${crypto.randomUUID()}`,
@@ -306,7 +324,7 @@ export default function Board({
   // the card between lists locally, then persist. Sub-cards aren't in itemsByList — they
   // just fall through to the server action.
   function moveCardToList(id: string, toList: string) {
-    if (!isListId(toList)) return;
+    if (!listById.has(toList)) return;
     const c = itemsRef.current;
     let moved: Item | undefined;
     const next: Grouped = {};
@@ -427,6 +445,20 @@ export default function Board({
   const openSnap = openSnapId ? snapById.get(openSnapId) ?? null : null;
   const openSnapParent = openSnap?.parent_id ? snapById.get(openSnap.parent_id) ?? null : null;
 
+  // Columns for a time-travel snapshot: the live columns, plus any since-deleted
+  // column that still held a card at that past moment — so deleting a column never
+  // erases it from history (its label survives via listLabels; the row is only
+  // soft-archived). Live board obviously shows only live columns.
+  const snapshotLists: ListDef[] = [...orderedLists];
+  if (snapshot) {
+    const known = new Set(orderedLists.map((l) => l.id));
+    for (const s of snapshot) {
+      if (s.parent_id || s.list === NOTE_LIST || known.has(s.list)) continue;
+      known.add(s.list);
+      snapshotLists.push({ id: s.list, label: listLabels[s.list] ?? s.list, hint: "" });
+    }
+  }
+
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
     setActiveId(id);
@@ -479,7 +511,7 @@ export default function Board({
       if (oldI >= 0 && newI >= 0 && oldI !== newI) {
         const nextOrder = arrayMove(listOrder, oldI, newI);
         setListOrder(nextOrder);
-        saveListOrderAction(nextOrder);
+        reorderListsAction(nextOrder);
       }
       return;
     }
@@ -584,7 +616,7 @@ export default function Board({
           <SnapshotNoteColumn
             body={snapshot.find((i) => i.list === NOTE_LIST && !i.parent_id)?.details ?? ""}
           />
-          {orderedLists.map((list) => (
+          {snapshotLists.map((list) => (
             <SnapshotColumn
               key={list.id}
               list={list}
@@ -614,11 +646,15 @@ export default function Board({
                   childrenByParent={childrenByParent}
                   selection={selection}
                   activeId={activeId}
+                  canDelete={orderedLists.length > 1}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}
                   onAdd={addCard}
+                  onRename={renameColumn}
+                  onDelete={deleteColumn}
                 />
               ))}
+              <AddColumn onAdd={addColumn} disabled={orderedLists.length >= MAX_LISTS} />
             </div>
           </SortableContext>
           <DragOverlay>
@@ -676,6 +712,18 @@ export default function Board({
         </div>
       )}
 
+      {columnError && (
+        <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
+          <span className="text-sm text-[var(--text-mid)]">{columnError}</span>
+          <button
+            onClick={() => setColumnError(null)}
+            className="rounded-full px-3 py-1 text-xs text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {!snapshot && !captureOpen && selection.size === 0 && (
         <button
           onClick={() => setCaptureOpen(true)}
@@ -693,13 +741,22 @@ export default function Board({
         </button>
       )}
 
-      <QuickCapture open={captureOpen} onClose={() => setCaptureOpen(false)} />
+      <QuickCapture
+        open={captureOpen}
+        listId={
+          listById.has("braindump")
+            ? "braindump"
+            : orderedLists[orderedLists.length - 1]?.id ?? ""
+        }
+        onClose={() => setCaptureOpen(false)}
+      />
 
       {openCard && (
         <CardPanel
           item={openCard}
           parent={openParent}
           allLists={lists}
+          listLabels={listLabels}
           childItems={childrenByParent.get(openCard.id) ?? []}
           childrenByParent={childrenByParent}
           onOpenCard={(item) => navigateTo(item.id)}
@@ -712,6 +769,7 @@ export default function Board({
         <SnapshotCardPanel
           item={openSnap}
           parent={openSnapParent}
+          listLabels={listLabels}
           childItems={snapChildren.get(openSnap.id) ?? []}
           asOf={asOf}
           onOpenCard={setOpenSnapId}

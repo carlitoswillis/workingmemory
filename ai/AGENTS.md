@@ -40,7 +40,13 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 - **booleans ↔ 0/1**: SQLite stores `done`/`archived` as integers; `lib/queries.ts` maps
   rows to the boolean `Item` shape. Bind `done ? 1 : 0` in writes (better-sqlite3 rejects JS
   booleans).
-- **Single sources of truth**: columns in `lib/lists.ts`, row shapes in `lib/types.ts`.
+- **Columns are user data** (since 2026-07-07): a `lists` table keyed by `(id,
+  user_id)`, CRUD in `lib/columns.ts`, seeded per board on first render from
+  `DEFAULT_LISTS` (`lib/lists.ts`) with their stable ids (`today`…`braindump`) so
+  existing `items.list` values resolve. Delete is a soft-delete (`archived=1`) and is
+  refused while a column holds a visible card or is the last one — so time-travel /
+  history labels survive and no card is ever orphaned. Every item mutation validates
+  its target list with `listExists` (not a static const). Row shapes: `lib/types.ts`.
 
 ## Coding Conventions
 - **Explicit over implicit**: avoid hidden logic and clever indirection.

@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node lib/timetravel.test.ts && node lib/demo/seed.test.ts && node lib/auth.test.ts && node lib/streaks.test.ts && node lib/users.test.ts"
+    "test": "node lib/timetravel.test.ts && node lib/demo/seed.test.ts && node lib/auth.test.ts && node lib/streaks.test.ts && node lib/users.test.ts && node lib/columns.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
