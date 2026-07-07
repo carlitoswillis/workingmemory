@@ -19,8 +19,10 @@ const fmt = (iso: string) =>
   });
 
 export default function ArchiveView({
+  boardId,
   listLabels,
 }: {
+  boardId: string | null;
   listLabels: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,12 +32,12 @@ export default function ArchiveView({
   function openView() {
     setOpen(true);
     setItems(null);
-    archivedItemsAction().then(setItems);
+    archivedItemsAction(boardId).then(setItems);
   }
 
   function restore(id: string) {
     setItems((cur) => cur?.filter((i) => i.id !== id) ?? cur);
-    startTransition(() => unarchiveItemAction(id));
+    startTransition(() => unarchiveItemAction(boardId, id));
   }
 
   // Esc closes while open.

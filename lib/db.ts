@@ -3,9 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema";
 import { buildSeed } from "./demo/seed";
 import { SESSION_COOKIE, hashPassword, verifyUserSession } from "./auth";
+import { defaultBoardId, getMembership } from "./boards";
 
 // The local store: one SQLite file under DATA_DIR (gitignored). Single-user,
 // offline, no auth — your data lives on your machine. History is written by
@@ -44,11 +46,64 @@ function openAt(file: string, opts?: { bootstrapOwner?: boolean }): Database.Dat
   db.pragma("foreign_keys = ON");
   db.exec(CREATE_TABLES);
   migrateDb(db);
-  // Bootstrap runs BEFORE triggers attach so re-owning legacy rows doesn't bump
-  // every item's updated_at (the touch trigger fires on ANY update).
-  if (opts?.bootstrapOwner) bootstrapLegacyOwner(db);
+  // Bootstrap runs BEFORE triggers attach so backfills don't bump every item's
+  // updated_at. The touch trigger fires on ANY update, so on an already-triggered
+  // DB we drop it first (CREATE_TRIGGERS recreates it); the logging triggers only
+  // fire on content columns, which bootstrap never touches.
+  if (opts?.bootstrapOwner) {
+    db.exec("drop trigger if exists items_touch_updated_at");
+    bootstrapLegacyOwner(db);
+    bootstrapBoards(db);
+  }
   db.exec(CREATE_TRIGGERS);
   return db;
+}
+
+// Shared boards v1 bootstrap (main DB only), idempotent, one transaction, before
+// triggers attach. Gives every account a "Personal" board (owner) and backfills
+// items.board_id + re-homes the pre-boards `lists` columns (lists_legacy, produced
+// by migrateDb's re-key) onto each owner's personal board. Keyed on "the membership
+// is missing," so re-running — including after a pre-boards backup restore — is a
+// no-op. actor_id/touched_by stay null on old rows (history before this feature has
+// no actor; the UI shows nothing).
+function bootstrapBoards(db: Database.Database) {
+  const legacyExists = !!db
+    .prepare("select 1 from sqlite_master where type = 'table' and name = 'lists_legacy'")
+    .get();
+  const usersNoBoard = db
+    .prepare(
+      "select id from users u where not exists (select 1 from board_members m where m.user_id = u.id)",
+    )
+    .all() as { id: string }[];
+  if (usersNoBoard.length === 0 && !legacyExists) return;
+
+  db.transaction(() => {
+    for (const u of usersNoBoard) {
+      const boardId = randomUUID();
+      db.prepare("insert into boards (id, name, created_by) values (?, 'Personal', ?)").run(
+        boardId,
+        u.id,
+      );
+      db.prepare(
+        "insert into board_members (board_id, user_id, role) values (?, ?, 'owner')",
+      ).run(boardId, u.id);
+      db.prepare("update items set board_id = ? where user_id = ? and board_id is null").run(
+        boardId,
+        u.id,
+      );
+    }
+    if (legacyExists) {
+      // Each user has exactly one owner membership at bootstrap (their personal
+      // board), so this join re-homes their columns unambiguously.
+      db.prepare(
+        `insert or ignore into lists (id, board_id, label, hint, position, archived, created_at)
+         select l.id, m.board_id, l.label, l.hint, l.position, l.archived, l.created_at
+         from lists_legacy l
+         join board_members m on m.user_id = l.user_id and m.role = 'owner'`,
+      ).run();
+      db.exec("drop table lists_legacy");
+    }
+  })();
 }
 
 // One-time, idempotent cutover of the pre-accounts hosted board (main DB only):
@@ -262,21 +317,31 @@ export function isDemoRequest(): boolean {
   return DEMO_MODE && !getRequestUserId();
 }
 
-// The board for the current request: which DB file, and which user's rows
-// within it. userId null means "the whole file is the board" (local mode and
-// per-visitor demo files); every query filters `user_id IS ?` so both cases
-// use the same SQL shape (IS matches null).
-export type BoardContext = { db: Database.Database; userId: string | null };
+// The board for the current request: which DB file, which board within it, and
+// who's acting. boardId null means "the whole file is the board" (local mode and
+// per-visitor demo files); every query filters `board_id IS ?` so both cases use
+// the same SQL shape (IS matches null). userId is the acting account (for
+// attribution + membership) or null off the hosted instance.
+export type BoardContext = { db: Database.Database; userId: string | null; boardId: string | null };
 
-export function getBoardContext(): BoardContext {
-  if (!DEMO_MODE) return { db: localDb(), userId: null };
+// `requestedBoardId` comes from the URL (/b/[id]) or an action's explicit arg;
+// omit it for the default (personal) board. Membership is verified HERE — the one
+// choke point — so no query downstream re-checks it. A non-member (or bogus id)
+// gets a 404, never a 403 (don't confirm a board exists to someone off it).
+export function getBoardContext(requestedBoardId?: string | null): BoardContext {
+  if (!DEMO_MODE) return { db: localDb(), userId: null, boardId: null };
   const userId = getRequestUserId();
-  if (userId) return { db: mainDb(), userId };
+  if (userId) {
+    const db = mainDb();
+    const boardId = requestedBoardId ?? defaultBoardId(db, userId);
+    if (boardId && !getMembership(db, boardId, userId)) notFound();
+    return { db, userId, boardId };
+  }
   const raw = cookies().get(DEMO_COOKIE)?.value?.toLowerCase() ?? "";
   // Sanitized: only a UUID ever becomes a filename. Cookieless clients (bots,
   // curl) share one throwaway board rather than erroring.
   const id = UUID_RE.test(raw) ? raw : "shared-fallback";
-  return { db: demoDb(id), userId: null };
+  return { db: demoDb(id), userId: null, boardId: null };
 }
 
 // The main (accounts) DB regardless of request cookies — for login/signup and

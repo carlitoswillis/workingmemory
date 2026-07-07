@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addItemAction } from "@/app/actions";
+import { useBoardId } from "./board-context";
 
 // Keyboard-first "brain dump": a global hotkey (c or ⌘/Ctrl-K) opens this small
 // overlay anywhere on the board; type a thought, Enter files it into the capture
@@ -19,6 +20,7 @@ export default function QuickCapture({
   listId: string;
   onClose: () => void;
 }) {
+  const boardId = useBoardId();
   const [text, setText] = useState("");
   const [added, setAdded] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -41,7 +43,7 @@ export default function QuickCapture({
     if (!t || !listId) return;
     setText("");
     setAdded((n) => n + 1);
-    startTransition(() => addItemAction(t, listId));
+    startTransition(() => addItemAction(boardId, t, listId));
     inputRef.current?.focus();
   }
 

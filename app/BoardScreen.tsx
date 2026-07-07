@@ -2,24 +2,36 @@ import { getItems } from "@/lib/queries";
 import { ensureLists, getLists, getListLabels } from "@/lib/columns";
 import { getBoardContext, getMainDb, isDemoRequest } from "@/lib/db";
 import { getUsername } from "@/lib/users";
+import { getUserBoards, getBoardName, getBoardMembers, getMemberUsernames } from "@/lib/boards";
 import Board from "@/components/Board";
 import ArchiveView from "@/components/ArchiveView";
 import ThemeToggle from "@/components/ThemeToggle";
+import BoardSwitcher from "@/components/BoardSwitcher";
 
-// The board for the current request (local file, account rows, or a demo
-// visitor's throwaway DB — lib/db.ts decides). Rendered at "/" for signed-in
-// accounts + local mode, and at "/demo" for anonymous hosted visitors (whose
-// "/" is the landing page).
-export default function BoardScreen() {
-  const { db, userId } = getBoardContext();
+// The board for the current request. Rendered at "/" (the signed-in user's personal
+// board, local mode, or a demo visitor's throwaway DB) and at "/b/[boardId]" for any
+// other board the user is a member of. `boardId` comes from the /b/ route; omit it
+// for "/". getBoardContext verifies membership (404s a non-member) and resolves the
+// scope; everything below is scoped to that board.
+export default function BoardScreen({ boardId }: { boardId?: string }) {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
   // Seed the five default columns on a board's first render (idempotent), then read
   // the live columns + a label map (incl. deleted columns) for history/archive views.
-  ensureLists(db, userId);
-  const items = getItems(db, userId);
-  const lists = getLists(db, userId);
-  const listLabels = getListLabels(db, userId);
+  ensureLists(db, bid);
+  const items = getItems(db, bid);
+  const lists = getLists(db, bid);
+  const listLabels = getListLabels(db, bid);
   const demo = isDemoRequest();
-  const username = userId ? getUsername(getMainDb(), userId) : null;
+
+  // Account context: the switcher (boards you belong to), this board's name +
+  // members, and an actor_id -> username map so history can say who did what.
+  const main = userId ? getMainDb() : null;
+  const username = userId ? getUsername(main!, userId) : null;
+  const boards = userId ? getUserBoards(main!, userId) : [];
+  const boardName = userId && bid ? getBoardName(main!, bid) : null;
+  const members = userId && bid ? getBoardMembers(main!, bid) : [];
+  const myRole = members.find((m) => m.userId === userId)?.role ?? null;
+  const actors = userId && bid ? getMemberUsernames(main!, bid) : {};
 
   return (
     <main className="mx-auto max-w-[1640px] px-6 py-10 sm:px-10">
@@ -69,6 +81,16 @@ export default function BoardScreen() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {userId && bid && (
+            <BoardSwitcher
+              boardId={bid}
+              boardName={boardName ?? "Board"}
+              boards={boards}
+              members={members}
+              myRole={myRole}
+              me={userId}
+            />
+          )}
           {username && (
             <a
               href="/login"
@@ -83,12 +105,18 @@ export default function BoardScreen() {
               @{username}
             </a>
           )}
-          <ArchiveView listLabels={listLabels} />
+          <ArchiveView boardId={bid} listLabels={listLabels} />
           <ThemeToggle />
         </div>
       </header>
 
-      <Board lists={lists} listLabels={listLabels} items={items} />
+      <Board
+        boardId={bid}
+        lists={lists}
+        listLabels={listLabels}
+        actors={actors}
+        items={items}
+      />
     </main>
   );
 }

@@ -593,6 +593,35 @@ co-editing (CRDT territory); invite links; viewer role; notifications
 (email/push — no email in this product yet by design); board archive/transfer;
 multi-instance scaling (see PROJECT_STATE's escalation-path item).
 
+## 12b. Reconciliation with custom columns (added 2026-07-07, at build time)
+
+Green-lit 2026-07-07 with: distinct boards (Option B), username invites, column
+order **shared per board**, ship **Phases 0+1 together**. One thing this plan
+predates: **columns became a real `lists` table** on 2026-07-07 (keyed
+`(id, user_id)`, CRUD in `lib/columns.ts`). Consequences:
+
+- **§6's `boards.list_order` is dropped** — column order already lives in
+  `lists.position`. No JSON column needed; "shared per board" falls out of
+  scoping the `lists` table by `board_id`.
+- **The `lists` table re-keys `(id, user_id)` → `(id, board_id)`** (a user can now
+  have two boards that each have a "Today"). Because the table shipped only a day
+  earlier, the migration is a small rebuild: `migrateDb` renames the old table,
+  creates the board-scoped one, copies unowned rows (local/demo, `board_id` null)
+  straight over, and leaves owned rows in `lists_legacy` for the bootstrap to
+  re-home onto each user's Personal board (then drops it). Idempotent: once the
+  table has a `board_id` column the rebuild is skipped.
+- `lib/columns.ts` swaps its `userId` param for `boardId` (same mechanical
+  `IS ?` swap as everything else); `ensureLists` seeds a *board's* defaults on
+  first render and no longer reads `profiles.list_order`.
+
+Build order (0 then 1, deployed together): schema + `migrateDb` + trigger v2 +
+bootstrap + `BoardContext.boardId` + `lib/columns.ts`/`lib/queries.ts`/
+`app/actions.ts` scoping swap + `touched_by` stamping + `lib/boards.ts` +
+`lib/boards.test.ts` → then `/b/[boardId]` route + switcher + invite-by-username
++ roles + "· @username" history. Actions take an explicit `boardId` arg
+(membership verified in `getBoardContext`) — explicit over a "current board"
+cookie, and it keeps two tabs / two boards honest.
+
 ## 13. Open questions for the owner (green-light gates)
 
 1. **Is "share my whole personal board" enough, or do you want distinct boards

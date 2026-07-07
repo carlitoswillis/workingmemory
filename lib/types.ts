@@ -29,5 +29,6 @@ export interface ItemEvent {
   field: string | null;
   old_value: string | null;
   new_value: string | null;
+  actor_id: string | null; // who did it (shared boards); null pre-feature + local/demo
   at: string;
 }

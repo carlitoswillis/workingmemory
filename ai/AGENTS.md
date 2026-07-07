@@ -25,14 +25,22 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 ## Architecture Constraints
 - **History is DB-driven**: never log events in app code — **SQLite triggers** in
   `lib/schema.ts` write `item_events` on insert/update. App actions do plain CRUD.
-- **Accounts (hosted) / single-user (local)** — multiple-accounts v1, 2026-07-04: on the
-  hosted instance (`DEMO_MODE=1`) all signed-up users share ONE multi-tenant SQLite file
-  (`DATA_DIR/owner/wm.db` — legacy path, read it as "main.db") with **app-level scoping**:
-  `items.user_id` + `user_id IS ?` in EVERY read and `and user_id is ?` on EVERY mutation
-  (no RLS — the guard is the query shape; never write a query without it). Local mode
-  (flag off) stays auth-free, userId null. Sessions are stateless HMAC cookies
-  (`wm_session`, `SESSION_SECRET`); `OWNER_SECRET` is only the ops bearer for
-  /api/export|import. `item_events` has NO user_id — history scopes through its items join.
+- **Boards are the scope** — shared boards v1, 2026-07-07 (supersedes the user_id scoping
+  of multiple-accounts v1): on the hosted instance (`DEMO_MODE=1`) all accounts share ONE
+  multi-tenant SQLite file (`DATA_DIR/owner/wm.db` — legacy path, read it as "main.db")
+  with **app-level scoping by `board_id`**: `board_id IS ?` in EVERY read and
+  `and board_id is ?` on EVERY mutation (no RLS — the guard is the query shape; never
+  write a query without it). Membership is verified ONCE per request in
+  `getBoardContext(boardId)` (a 404, not 403, for a non-member), so downstream queries
+  trust a plain `board_id = ?`. `items.user_id` now means CREATOR; `items.touched_by` is
+  the last actor, copied by the v2 triggers into `item_events.actor_id` ("who did it").
+  Every mutation stamps `touched_by`. Actions take an explicit `boardId` arg (the client
+  provides it via `useBoardId()`); this is IDOR-safe — knowing a card id can't mutate it
+  from another board. Local mode (flag off) + demo stay auth-free, boardId null, IS null
+  matches the whole file. Sessions are stateless HMAC cookies (`wm_session`,
+  `SESSION_SECRET`); `OWNER_SECRET` is the ops bearer for /api/export|import. `item_events`
+  scopes through its items join (events carry no board_id). Boards + membership:
+  `lib/boards.ts`; every account gets a "Personal" board (signup + idempotent bootstrap).
 - **Schema**: defined in `lib/schema.ts` (`CREATE_TABLES` + `CREATE_TRIGGERS`, kept separate
   so the importer can load data before triggers exist). `lib/db.ts` applies it idempotently
   on first connection — no migration runner. (The Postgres-era `supabase/migrations/`

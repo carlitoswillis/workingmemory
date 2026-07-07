@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import type { Item } from "@/lib/types";
 import { createNoteAction, editDetailsAction } from "@/app/actions";
+import { useBoardId } from "./board-context";
 
 // The daily note: a single pinned note that carries over day to day. Its body lives
 // in the item's `details`, so every edit is change-tracked (and time-traveled) by the
@@ -20,6 +21,7 @@ const Markdown = dynamic(() => import("./Markdown"), {
 });
 
 export default function NoteColumn({ note }: { note: Item | null }) {
+  const boardId = useBoardId();
   const [body, setBody] = useState(note?.details ?? "");
   const [editing, setEditing] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -34,10 +36,10 @@ export default function NoteColumn({ note }: { note: Item | null }) {
   function save() {
     setEditing(false);
     if (!note || body === note.details) return;
-    startTransition(() => editDetailsAction(note.id, body));
+    startTransition(() => editDetailsAction(boardId, note.id, body));
   }
   function startNote() {
-    startTransition(() => createNoteAction());
+    startTransition(() => createNoteAction(boardId));
   }
 
   const hasBody = body.trim().length > 0;

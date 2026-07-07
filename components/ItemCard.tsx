@@ -6,6 +6,7 @@ import type { ListDef } from "@/lib/lists";
 import { setDailyDoneAction, toggleDoneAction } from "@/app/actions";
 import { effectiveDone, localToday } from "@/lib/recurrence";
 import { currentStreak } from "@/lib/streaks";
+import { useBoardId } from "./board-context";
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
 function recencyAmount(updatedAt: string): number {
@@ -31,6 +32,7 @@ export default function ItemCard({
   onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
 }) {
+  const boardId = useBoardId();
   const isDaily = item.recurrence === "daily";
   const [doneLocal, setDoneLocal] = useState(effectiveDone(item));
   useEffect(() => setDoneLocal(effectiveDone(item)), [item]);
@@ -40,9 +42,9 @@ export default function ItemCard({
     const next = !doneLocal;
     setDoneLocal(next);
     if (isDaily) {
-      startTransition(() => setDailyDoneAction(item.id, next ? localToday() : null));
+      startTransition(() => setDailyDoneAction(boardId, item.id, next ? localToday() : null));
     } else {
-      startTransition(() => toggleDoneAction(item.id, next));
+      startTransition(() => toggleDoneAction(boardId, item.id, next));
     }
   }
 

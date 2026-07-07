@@ -37,6 +37,7 @@ import {
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
 import AddColumn from "./AddColumn";
+import { BoardIdProvider } from "./board-context";
 import CardPanel from "./CardPanel";
 import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
@@ -87,12 +88,16 @@ function groupChildren(items: Item[]): Map<string, Item[]> {
 }
 
 export default function Board({
+  boardId,
   lists,
   listLabels,
+  actors,
   items,
 }: {
+  boardId: string | null;
   lists: readonly ListDef[];
   listLabels: Record<string, string>;
+  actors: Record<string, string>; // actor_id -> username, for history attribution
   items: Item[];
 }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -181,7 +186,7 @@ export default function Board({
 
   useEffect(() => {
     let alive = true;
-    timelineDataAction().then((d) => alive && setTimeline(d));
+    timelineDataAction(boardId).then((d) => alive && setTimeline(d));
     return () => {
       alive = false;
     };
@@ -215,15 +220,15 @@ export default function Board({
   const [columnError, setColumnError] = useState<string | null>(null);
   function addColumn(label: string) {
     startTransition(async () => {
-      const err = await addListAction(label);
+      const err = await addListAction(boardId, label);
       if (err) setColumnError(err);
     });
   }
   function renameColumn(id: string, label: string) {
-    startTransition(() => renameListAction(id, label));
+    startTransition(() => renameListAction(boardId, id, label));
   }
   function deleteColumn(id: string) {
-    startTransition(async () => setColumnError(await deleteListAction(id)));
+    startTransition(async () => setColumnError(await deleteListAction(boardId, id)));
   }
 
   // Cards grouped by list. A ref mirrors state so drag handlers never read stale data.
@@ -293,7 +298,7 @@ export default function Board({
     setUndoHint(null);
     if (!prev || prev.length === 0) return;
     applyMoves(prev);
-    startTransition(() => reorderItemsAction(prev));
+    startTransition(() => reorderItemsAction(boardId, prev));
   }
 
   // Optimistic add: drop a temp card into its list immediately, then persist. When the
@@ -322,7 +327,7 @@ export default function Board({
     const next: Grouped = { ...c, [listId]: [...(c[listId] ?? []), temp] };
     itemsRef.current = next;
     setItemsByList(next);
-    startTransition(() => addItemAction(t, listId));
+    startTransition(() => addItemAction(boardId, t, listId));
   }
 
   // Optimistic cross-list move (the CardPanel dropdown; drag already does its own). Move
@@ -347,7 +352,7 @@ export default function Board({
       itemsRef.current = next;
       setItemsByList(next);
     }
-    startTransition(() => moveItemAction(id, toList));
+    startTransition(() => moveItemAction(boardId, id, toList));
   }
 
   const sensors = useSensors(
@@ -516,7 +521,7 @@ export default function Board({
       if (oldI >= 0 && newI >= 0 && oldI !== newI) {
         const nextOrder = arrayMove(listOrder, oldI, newI);
         setListOrder(nextOrder);
-        reorderListsAction(nextOrder);
+        reorderListsAction(boardId, nextOrder);
       }
       return;
     }
@@ -568,6 +573,7 @@ export default function Board({
       pushUndo(dragOriginRef.current, `Moved ${block.length} cards`);
       startTransition(() =>
         reorderItemsAction(
+          boardId,
           block.map((b) => ({ id: b.id, list: targetList, position: b.position })),
         ),
       );
@@ -600,11 +606,11 @@ export default function Board({
     if (!origin || origin.list !== list || oldIndex !== newIndex) {
       pushUndo(dragOriginRef.current, "Moved card");
     }
-    startTransition(() => reorderItemAction(String(active.id), list, pos));
+    startTransition(() => reorderItemAction(boardId, String(active.id), list, pos));
   }
 
   return (
-    <>
+    <BoardIdProvider value={boardId}>
       <TimeMachineBar
         markers={markers}
         minMs={minMs}
@@ -762,6 +768,7 @@ export default function Board({
           parent={openParent}
           allLists={lists}
           listLabels={listLabels}
+          actors={actors}
           childItems={childrenByParent.get(openCard.id) ?? []}
           childrenByParent={childrenByParent}
           onOpenCard={(item) => navigateTo(item.id)}
@@ -781,7 +788,7 @@ export default function Board({
           onClose={() => setOpenSnapId(null)}
         />
       )}
-    </>
+    </BoardIdProvider>
   );
 }
 

@@ -17,12 +17,14 @@ export function demoAddBlocked(db: Database.Database): boolean {
   return c >= DEMO_MAX_ITEMS;
 }
 
-// Item cap for the current board: per-user on the main DB, whole-file on demo.
-export function addBlocked(db: Database.Database, userId: string | null): boolean {
-  if (userId === null) return demoAddBlocked(db);
+// Item cap for the current board: per-board on the main DB, whole-file on demo
+// (boardId null → the throwaway demo file). Only called under DEMO_MODE, so a null
+// boardId always means a demo visitor, never local mode.
+export function addBlocked(db: Database.Database, boardId: string | null): boolean {
+  if (boardId === null) return demoAddBlocked(db);
   const { c } = db
-    .prepare("select count(*) c from items where user_id is ?")
-    .get(userId) as { c: number };
+    .prepare("select count(*) c from items where board_id is ?")
+    .get(boardId) as { c: number };
   return c >= ACCOUNT_MAX_ITEMS;
 }
 

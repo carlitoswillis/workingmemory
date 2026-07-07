@@ -49,6 +49,16 @@ a real structure without losing its looseness.
   restoring a pre-accounts backup simply re-bootstraps.
 - **Landing page eyeball** (built + deployed 2026-07-04): check `/` at desktop +
   phone widths; click through Try-the-demo → `/demo`, Create account, Sign in.
+- **Shared boards eyeball** (Phases 0+1 built 2026-07-07): after deploy, first load
+  runs the migration + bootstrap (every account gets a "Personal" board; existing
+  cards/columns re-homed onto it — the board should look identical). Then: the board
+  switcher (header, next to @username) → create a board, rename it, invite a second
+  account by username; sign in as that account and confirm the shared board appears
+  and both can add/move/edit/archive; card history shows "· @username"; a non-member
+  hitting `/b/<id>` gets a 404; "Leave board" works; the personal board can't be
+  left. Two-browser pass is the real test of it. **Deploy note:** additive migration,
+  no downtime; a pre-boards backup restores clean (bootstrap re-runs). Real-time
+  (Phase 2) is NOT in yet — updates need a manual refresh across sessions.
 - **Custom columns eyeball** (built 2026-07-07): the board's columns are now
   user-created. Eyeball on the live board: the "＋ New column" tile (end of the
   grid) → name → Add; hover a column header for rename (✎, or click the title) +
@@ -147,6 +157,25 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-07 — Shared boards, Phases 0+1 (model + sharing).** Built per
+  `ai/plans/2026-07-05-shared-boards.md` (+ §12b reconciliation). Boards are now a
+  first-class entity: `boards` + `board_members` tables, scope moved from `user_id`
+  to `board_id` across every query/action (`getBoardContext(boardId)` verifies
+  membership once — 404 not 403 — then plain `board_id IS ?`; IDOR-safe). `lib/
+  boards.ts` (pure) holds board CRUD + membership/roles; `lib/columns.ts` re-keyed
+  `lists` to `(id, board_id)` (migrateDb rebuild + bootstrap re-home). Attribution:
+  `items.touched_by` stamped by every action, copied into `item_events.actor_id` by
+  drop-then-create **v2 triggers** (no double-logging, self-migrating). Every account
+  gets a "Personal" board (signup + idempotent `bootstrapBoards`). Phase 1 UI:
+  `/b/[boardId]` route, `BoardSwitcher` (switch/create/rename/invite-by-username/
+  remove/leave, owner-gated), "· @username" in card history. Client threads `boardId`
+  via a `board-context`. NOT built: Phase 2 real-time (SSE) — next. Verified: tsc, 7
+  node suites (new `lib/boards.test.ts`: board isolation, IDOR, roles, invite
+  idempotency, actor attribution, no-double-log, lists re-key migration), prod build
+  (121kB), and a live local-DB migration (44 items / 5 lists re-keyed, board_id/
+  actor_id added, lists_legacy consumed, 8 v2 triggers, board renders clean).
+  **Follow-ups noted:** rate-limit the invite action in middleware (username
+  enumeration hardening, §6); actor labels in the snapshot panel; board delete.
 - **2026-07-07 — Custom columns (make/name your own).** The board's columns were a
   hardcoded const; they're now user-created data. New `lists` table keyed by
   `(id, user_id)` (defaults share ids across users, so id alone can't be the PK),

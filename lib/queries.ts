@@ -4,14 +4,15 @@ import type { ListId } from "./lists";
 // .ts extension so plain-node tests can import this module (see lib/users.ts).
 import { completedDays } from "./streaks.ts";
 
-// Reads from a SQLite board (multiple-accounts v1). Every function takes the
-// request's { db, userId } from lib/db.ts#getBoardContext() explicitly — this
-// module stays pure (no Next imports) so tests can run it against scratch DBs.
+// Reads from a SQLite board (shared boards v1). Every function takes the request's
+// { db, boardId } from lib/db.ts#getBoardContext() explicitly — this module stays
+// pure (no Next imports) so tests can run it against scratch DBs.
 //
-// Scoping: `user_id IS ?`. On the multi-tenant main DB userId is the signed-in
-// user's uuid; on local/demo boards it's null, and IS null matches every row
-// there (they're all unowned) — one SQL shape for both. history/timeline scope
-// item_events through a join on items (events carry no user_id of their own).
+// Scoping: `board_id IS ?`. On the multi-tenant main DB boardId is the resolved
+// board's uuid (membership already verified in getBoardContext); on local/demo
+// boards it's null, and IS null matches every row there — one SQL shape for both.
+// history/timeline scope item_events through a join on items (events carry no
+// board_id of their own).
 //
 // SQLite stores done/archived as 0/1, so map every row through `rowToItem` to
 // get the boolean shape the app expects.
@@ -35,12 +36,12 @@ function rowToItem(r: ItemRow): Item {
   };
 }
 
-export function getItems(db: Database.Database, userId: string | null): Item[] {
+export function getItems(db: Database.Database, boardId: string | null): Item[] {
   const rows = db
     .prepare(
-      "select * from items where archived = 0 and user_id is ? order by position asc, created_at asc",
+      "select * from items where archived = 0 and board_id is ? order by position asc, created_at asc",
     )
-    .all(userId) as ItemRow[];
+    .all(boardId) as ItemRow[];
   const items = rows.map(rowToItem);
 
   // Attach completed-day history to daily tasks (streaks). One query for all
@@ -51,10 +52,10 @@ export function getItems(db: Database.Database, userId: string | null): Item[] {
       .prepare(
         `select e.item_id, e.field, e.old_value, e.new_value
          from item_events e join items i on i.id = e.item_id
-         where e.field = 'completed_on' and i.user_id is ?
+         where e.field = 'completed_on' and i.board_id is ?
          order by e.at asc, e.id asc`,
       )
-      .all(userId) as { item_id: string; field: string; old_value: string | null; new_value: string | null }[];
+      .all(boardId) as { item_id: string; field: string; old_value: string | null; new_value: string | null }[];
     const byItem = new Map<string, typeof evRows>();
     for (const e of evRows) {
       const arr = byItem.get(e.item_id);
@@ -72,24 +73,24 @@ export function getItems(db: Database.Database, userId: string | null): Item[] {
 // Archived items, most-recently-archived first (updated_at is bumped on archive).
 // Drives the Archive view (browse + restore). Full history is preserved either way;
 // this is just the "where did it go" list. Includes archived sub-cards.
-export function getArchivedItems(db: Database.Database, userId: string | null): Item[] {
+export function getArchivedItems(db: Database.Database, boardId: string | null): Item[] {
   const rows = db
-    .prepare("select * from items where archived = 1 and user_id is ? order by updated_at desc")
-    .all(userId) as ItemRow[];
+    .prepare("select * from items where archived = 1 and board_id is ? order by updated_at desc")
+    .all(boardId) as ItemRow[];
   return rows.map(rowToItem);
 }
 
 export function getHistory(
   db: Database.Database,
-  userId: string | null,
+  boardId: string | null,
   itemId: string,
 ): ItemEvent[] {
   return db
     .prepare(
       `select e.* from item_events e join items i on i.id = e.item_id
-       where e.item_id = ? and i.user_id is ? order by e.at asc`,
+       where e.item_id = ? and i.board_id is ? order by e.at asc`,
     )
-    .all(itemId, userId) as ItemEvent[];
+    .all(itemId, boardId) as ItemEvent[];
 }
 
 // All items + events for client-side time-travel. Shipped once when the user opens
@@ -97,16 +98,16 @@ export function getHistory(
 // is tiny per board) with no per-tick server round-trip.
 export function getTimelineData(
   db: Database.Database,
-  userId: string | null,
+  boardId: string | null,
 ): { items: Item[]; events: ItemEvent[] } {
   const items = (
-    db.prepare("select * from items where user_id is ?").all(userId) as ItemRow[]
+    db.prepare("select * from items where board_id is ?").all(boardId) as ItemRow[]
   ).map(rowToItem);
   const events = db
     .prepare(
       `select e.* from item_events e join items i on i.id = e.item_id
-       where i.user_id is ? order by e.at asc`,
+       where i.board_id is ? order by e.at asc`,
     )
-    .all(userId) as ItemEvent[];
+    .all(boardId) as ItemEvent[];
   return { items, events };
 }

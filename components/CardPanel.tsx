@@ -34,6 +34,7 @@ import { effectiveDone, localToday } from "@/lib/recurrence";
 import { currentStreak, prevDay } from "@/lib/streaks";
 import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
+import { useBoardId } from "./board-context";
 
 // Code-split the markdown renderer (react-markdown + remark-gfm, ~43kB): it's only
 // needed once a card panel is open, so keep it out of the initial board bundle.
@@ -76,6 +77,7 @@ export default function CardPanel({
   parent,
   allLists,
   listLabels,
+  actors,
   childItems,
   childrenByParent,
   onOpenCard,
@@ -86,6 +88,7 @@ export default function CardPanel({
   parent: Item | null;
   allLists: readonly ListDef[];
   listLabels: Record<string, string>;
+  actors: Record<string, string>;
   childItems: Item[];
   childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
@@ -93,6 +96,7 @@ export default function CardPanel({
   onClose: () => void;
 }) {
   const labelOf = (id: string) => listLabels[id] ?? id;
+  const boardId = useBoardId();
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
   // Optimistic list value so the dropdown reflects the pick instantly; Board moves the
@@ -113,7 +117,7 @@ export default function CardPanel({
     const t = childDraft.trim();
     if (!t) return;
     setChildDraft("");
-    startTransition(() => addChildAction(item.id, t));
+    startTransition(() => addChildAction(boardId, item.id, t));
   }
 
   // Local (optimistic) order of the sub-cards so drag-reorder feels instant; re-syncs
@@ -144,7 +148,7 @@ export default function CardPanel({
     else if (next != null) pos = next - 1000;
     else pos = Date.now();
     const moved = reordered[newI];
-    startTransition(() => reorderItemAction(moved.id, moved.list, pos));
+    startTransition(() => reorderItemAction(boardId, moved.id, moved.list, pos));
   }
 
   useEffect(() => setTitle(item.text), [item.text]);
@@ -156,20 +160,20 @@ export default function CardPanel({
   }, [editingDetails]);
   useEffect(() => {
     let alive = true;
-    historyAction(item.id).then((e) => alive && setEvents(e));
+    historyAction(boardId, item.id).then((e) => alive && setEvents(e));
     return () => {
       alive = false;
     };
-  }, [item.id, item.updated_at]);
+  }, [boardId, item.id, item.updated_at]);
 
   function saveTitle() {
     const t = title.trim();
     if (!t || t === item.text) return setTitle(item.text);
-    startTransition(() => editItemAction(item.id, t));
+    startTransition(() => editItemAction(boardId, item.id, t));
   }
   function saveDetails() {
     if (details === item.details) return;
-    startTransition(() => editDetailsAction(item.id, details));
+    startTransition(() => editDetailsAction(boardId, item.id, details));
   }
 
   const isDaily = item.recurrence === "daily";
@@ -195,9 +199,9 @@ export default function CardPanel({
   }
   function toggleDone() {
     if (isDaily) {
-      startTransition(() => setDailyDoneAction(item.id, effDone ? null : localToday()));
+      startTransition(() => setDailyDoneAction(boardId, item.id, effDone ? null : localToday()));
     } else {
-      startTransition(() => toggleDoneAction(item.id, !item.done));
+      startTransition(() => toggleDoneAction(boardId, item.id, !item.done));
     }
   }
 
@@ -380,7 +384,7 @@ export default function CardPanel({
           </select>
           <button
             onClick={() => {
-              startTransition(() => archiveItemAction(item.id));
+              startTransition(() => archiveItemAction(boardId, item.id));
               onClose();
             }}
             className="ml-auto rounded-md px-2 py-1 text-xs text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
@@ -390,7 +394,7 @@ export default function CardPanel({
         </div>
 
         <button
-          onClick={() => startTransition(() => setRecurrenceAction(item.id, isDaily ? "none" : "daily"))}
+          onClick={() => startTransition(() => setRecurrenceAction(boardId, item.id, isDaily ? "none" : "daily"))}
           className={`mt-3 flex items-center gap-2 rounded-md px-1 py-1 text-xs transition-colors ${
             isDaily ? "text-[var(--now)]" : "text-[var(--text-lo)] hover:text-[var(--text-mid)]"
           }`}
@@ -459,7 +463,12 @@ export default function CardPanel({
                       <span className="text-[var(--text-mid)]">→ {e.new_value}</span>
                     </p>
                   )}
-                  <p className="mt-1 text-[11px] tabular-nums text-[var(--text-lo)]">{fmt(e.at)}</p>
+                  <p className="mt-1 text-[11px] tabular-nums text-[var(--text-lo)]">
+                    {fmt(e.at)}
+                    {e.actor_id && actors[e.actor_id] && (
+                      <span className="ml-1 text-[var(--text-mid)]">· @{actors[e.actor_id]}</span>
+                    )}
+                  </p>
                 </li>
               ))}
             </ol>
