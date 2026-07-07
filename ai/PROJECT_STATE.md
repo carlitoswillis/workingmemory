@@ -114,7 +114,12 @@ a real structure without losing its looseness.
       your history". Plan: `ai/plans/2026-07-03-ai-weekly-review.md`. Owner call
       2026-07-03: build the native Anthropic adapter only (keep the tiny provider
       interface so model-agnostic stays a 40-line add later). `item_events` is the
-      substrate and the moat.
+      substrate and the moat. **Plan revised 2026-07-07** — reconciled with shared
+      boards (review is per-`board_id`, digest reads custom columns, and
+      `item_events.actor_id` lets a shared-board review attribute actions to members)
+      and grounded on the current Claude API (`claude-opus-4-8`, Messages API,
+      `output_config.effort`, env-gated off). Awaiting green-light on the plan's §9
+      gates: SDK vs fetch, any-member vs owner-only, model default, review window.
 - [ ] Weekly-reset + weekday-specific recurring tasks (e.g. "Wednesdays: no car,
       do laundry"). Lower priority than the daily reset that already shipped.
 - [ ] Life-area tags (Maintenance / Health / Career / Recreation) as a
@@ -161,6 +166,12 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-07 — Board deletion (✕ button in switcher).** Added support for deleting a board
+  (owner action) or leaving a board (member action) directly from the switcher dropdown list.
+  Added `deleteBoard` pure db method (cleans up lists, items, and item_events inside a transaction)
+  and its corresponding Next.js server action `deleteBoardAction`. Rendered a hoverable "✕" button next to
+  each board item in `BoardSwitcher` (hidden when the user has only 1 board total). Verified via typecheck,
+  successful production build, unit tests in `lib/boards.test.ts`, and full test suite execution.
 - **2026-07-07 — Shared boards, Phase 2 (real-time).** Notify-then-pull over SSE, no
   new deps, per plan §7–§8. In-process poke bus (`lib/realtime.ts`, an EventEmitter on
   globalThis); every mutation calls `pokeBoard(bid)` (folded into `revalidateBoard`,
@@ -197,7 +208,7 @@ a real structure without losing its looseness.
   (121kB), and a live local-DB migration (44 items / 5 lists re-keyed, board_id/
   actor_id added, lists_legacy consumed, 8 v2 triggers, board renders clean).
   **Follow-ups noted:** rate-limit the invite action in middleware (username
-  enumeration hardening, §6); actor labels in the snapshot panel; board delete.
+  enumeration hardening, §6); actor labels in the snapshot panel.
 - **2026-07-07 — Custom columns (make/name your own).** The board's columns were a
   hardcoded const; they're now user-created data. New `lists` table keyed by
   `(id, user_id)` (defaults share ids across users, so id alone can't be the PK),

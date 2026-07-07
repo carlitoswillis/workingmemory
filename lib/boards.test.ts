@@ -18,6 +18,7 @@ import {
   inviteMember,
   removeMember,
   MAX_MEMBERS_PER_BOARD,
+  deleteBoard,
 } from "./boards.ts";
 
 let failures = 0;
@@ -133,6 +134,40 @@ ok(
 ok("owner can remove a member", "ok" in removeMember(db, aBoard, bob), true);
 ok("bob dropped from aBoard", getMembership(db, aBoard, bob), null);
 ok("last owner can't leave", "error" in removeMember(db, aBoard, aliceId), true);
+
+// --- board deletion --------------------------------------------------------
+const deleteDb = freshDb();
+const user1 = newUser(deleteDb, "user1");
+const user2 = newUser(deleteDb, "user2");
+
+// Create first board (personal) for user1
+const u1Board1Res = createBoard(deleteDb, user1, "User1 Personal");
+const u1Board1 = "id" in u1Board1Res ? u1Board1Res.id : "";
+ensureLists(deleteDb, u1Board1);
+
+ok("cannot delete last remaining board", "error" in deleteBoard(deleteDb, u1Board1, user1), true);
+
+// Create second board for user1
+const u1Board2Res = createBoard(deleteDb, user1, "User1 Second");
+const u1Board2 = "id" in u1Board2Res ? u1Board2Res.id : "";
+ensureLists(deleteDb, u1Board2);
+
+// Add items to second board
+const insItem = deleteDb.prepare(
+  "insert into items (id, text, list, position, user_id, board_id, touched_by) values (?, ?, ?, ?, ?, ?, ?)",
+);
+insItem.run("item_to_delete", "will be deleted", "today", 1, user1, u1Board2, user1);
+
+// Invite user2 to second board
+inviteMember(deleteDb, u1Board2, "user2");
+
+ok("non-owner cannot delete board", "error" in deleteBoard(deleteDb, u1Board2, user2), true);
+ok("owner can delete board when they have another board", "ok" in deleteBoard(deleteDb, u1Board2, user1), true);
+ok("deleted board is no longer queryable for user", getMembership(deleteDb, u1Board2, user1), null);
+ok("invited user no longer belongs to deleted board", getMembership(deleteDb, u1Board2, user2), null);
+ok("deleted board items are cleaned up", getItems(deleteDb, u1Board2), []);
+ok("deleted board columns are cleaned up", getLists(deleteDb, u1Board2), []);
+
 
 // member cap: owner + (MAX-1) invitees fills the board; one more is refused.
 const capDb = freshDb();

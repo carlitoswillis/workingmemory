@@ -163,3 +163,42 @@ export function removeMember(
   db.prepare("delete from board_members where board_id = ? and user_id = ?").run(boardId, userId);
   return { ok: true };
 }
+
+// Delete a board. Deletes all associated lists, items, and events, and the board itself.
+// Caller must verify that the user is an owner of the board.
+// Enforces that a user cannot delete their last remaining board.
+export function deleteBoard(
+  db: Database.Database,
+  boardId: string,
+  userId: string,
+): { ok: true } | { error: string } {
+  const role = getMembership(db, boardId, userId);
+  if (role !== "owner") {
+    return { error: "Only the board owner can delete it." };
+  }
+
+  // Count how many boards this user belongs to
+  const boardCount = (
+    db
+      .prepare("select count(*) c from board_members where user_id = ?")
+      .get(userId) as { c: number }
+  ).c;
+  if (boardCount <= 1) {
+    return { error: "You can't delete your last remaining board." };
+  }
+
+  db.transaction(() => {
+    // Delete columns (lists)
+    db.prepare("delete from lists where board_id = ?").run(boardId);
+    // Delete items (this will cascade delete item_events because item_events has a
+    // foreign key with "on delete cascade" on item_id)
+    db.prepare("delete from items where board_id = ?").run(boardId);
+    // Delete board members (not strictly needed due to cascade, but good hygiene)
+    db.prepare("delete from board_members where board_id = ?").run(boardId);
+    // Delete board
+    db.prepare("delete from boards where id = ?").run(boardId);
+  })();
+
+  return { ok: true };
+}
+

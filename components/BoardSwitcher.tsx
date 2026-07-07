@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BoardSummary, Member, Role } from "@/lib/boards";
 import {
   createBoardAction,
+  deleteBoardAction,
   inviteMemberAction,
   leaveBoardAction,
   removeMemberAction,
@@ -63,6 +64,20 @@ export default function BoardSwitcher({
   const run = (p: Promise<string | null>) =>
     startTransition(async () => setError((await p) ?? null));
 
+  const handleDeleteOrLeave = (id: string, name: string, role: Role) => {
+    const isOwn = role === "owner";
+    const msg = isOwn
+      ? `Are you sure you want to delete the board "${name}"? This will permanently delete all its columns, cards, and history for everyone.`
+      : `Are you sure you want to leave the board "${name}"?`;
+    if (!window.confirm(msg)) return;
+
+    if (isOwn) {
+      run(deleteBoardAction(id, boardId));
+    } else {
+      run(leaveBoardAction(id, boardId));
+    }
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -87,13 +102,16 @@ export default function BoardSwitcher({
           </p>
           <ul className="flex flex-col">
             {boards.map((b) => (
-              <li key={b.id}>
+              <li
+                key={b.id}
+                className="group flex w-full items-center justify-between gap-1 rounded-md px-1 hover:bg-[var(--surface-2)]"
+              >
                 <button
                   onClick={() => {
                     setOpen(false);
                     router.push(hrefFor(b.id));
                   }}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-[var(--surface-2)]"
+                  className="flex flex-1 items-center justify-between gap-2 min-w-0 py-1.5 px-1 text-left text-sm"
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span
@@ -107,6 +125,19 @@ export default function BoardSwitcher({
                     {b.members > 1 ? `${b.members}` : ""}
                   </span>
                 </button>
+
+                {boards.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteOrLeave(b.id, b.name, b.role);
+                    }}
+                    title={b.role === "owner" ? `Delete "${b.name}"` : `Leave "${b.name}"`}
+                    className="shrink-0 rounded p-1 text-[11px] text-[var(--text-lo)] hover:bg-[var(--surface-3)] hover:text-[var(--text-hi)] opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                  >
+                    ✕
+                  </button>
+                )}
               </li>
             ))}
           </ul>

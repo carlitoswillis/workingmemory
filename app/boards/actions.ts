@@ -10,6 +10,7 @@ import {
   inviteMember,
   removeMember,
   renameBoard,
+  deleteBoard,
 } from "@/lib/boards";
 
 // Board management (shared boards v1). Distinct from app/actions.ts (card CRUD):
@@ -70,11 +71,31 @@ export async function removeMemberAction(
 }
 
 // Leave a board (self-removal). Any member can; the last owner can't (they'd orphan
-// board management). Redirects home afterward since you're no longer a member.
-export async function leaveBoardAction(boardId: string): Promise<string | null> {
+// board management). Redirects home afterward if it's the current board.
+export async function leaveBoardAction(boardId: string, currentBoardId?: string): Promise<string | null> {
   const { db, userId } = getBoardContext(boardId);
   if (!userId) redirect("/login");
   const res = removeMember(db, boardId, userId);
   if ("error" in res) return res.error;
-  redirect("/");
+  revalidatePath("/", "layout");
+  pokeBoard(boardId);
+  if (!currentBoardId || boardId === currentBoardId) {
+    redirect("/");
+  }
+  return null;
 }
+
+// Delete a board. Only the owner can; the last owner can't delete if it's their only board.
+// If the deleted board is the one currently being viewed, redirects to "/".
+export async function deleteBoardAction(boardId: string, currentBoardId?: string): Promise<string | null> {
+  const { db, userId } = requireOwner(boardId);
+  const res = deleteBoard(db, boardId, userId);
+  if ("error" in res) return res.error;
+  revalidatePath("/", "layout");
+  pokeBoard(boardId);
+  if (!currentBoardId || boardId === currentBoardId) {
+    redirect("/");
+  }
+  return null;
+}
+
