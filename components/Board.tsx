@@ -209,16 +209,21 @@ export default function Board({
   // Column CRUD. Add/rename/delete round-trip to the server and rely on revalidation
   // to reflect (columns change rarely; not worth the optimistic bookkeeping cards get).
   // Delete can be refused (last column / still holds cards) — surface the reason.
+  // NOTE: these MUST run inside startTransition — that's what makes the action's
+  // revalidatePath refresh the board on the client. Called bare, the soft-delete
+  // lands on the server but the column lingers on screen until a reload.
   const [columnError, setColumnError] = useState<string | null>(null);
-  async function addColumn(label: string) {
-    const err = await addListAction(label);
-    if (err) setColumnError(err);
+  function addColumn(label: string) {
+    startTransition(async () => {
+      const err = await addListAction(label);
+      if (err) setColumnError(err);
+    });
   }
   function renameColumn(id: string, label: string) {
-    renameListAction(id, label);
+    startTransition(() => renameListAction(id, label));
   }
-  async function deleteColumn(id: string) {
-    setColumnError(await deleteListAction(id)); // err | null (clears on success)
+  function deleteColumn(id: string) {
+    startTransition(async () => setColumnError(await deleteListAction(id)));
   }
 
   // Cards grouped by list. A ref mirrors state so drag handlers never read stale data.
