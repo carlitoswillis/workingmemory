@@ -111,14 +111,32 @@ exported + verified to `backups/<stamp>/` and re-imported into SQLite.
 ### 5. Deploy (portfolio plan Phase 2 — hosted demo + owner board)
 `Dockerfile` (node:22-slim, multi-stage; better-sqlite3 uses its prebuilt linux binary;
 Litestream baked in) with `scripts/start.sh` as entrypoint: when `LITESTREAM_REPLICA_URL`
-is set it runs `litestream restore -if-db-not-exists` then the app under `litestream
-replicate -exec`, so the owner DB continuously replicates to object storage (R2/B2) and
-a fresh disk self-heals on boot — the disk is disposable by design (demo boards are NOT
-replicated on purpose). `GET /api/health` is the platform probe (deliberately no SQLite —
-it must not defeat the demo idle-TTL sweep). Two platform configs, owner picks one:
-`fly.toml` (persistent volume, scale-to-zero, ~$2–5/mo) or `render.yaml` (free tier, no
-disk — viable purely because of restore-on-boot; 15-min idle spin-down, ~1-min cold
-start). Env surface: `DEMO_MODE`, `DATA_DIR`, `OWNER_SECRET`, `LITESTREAM_*`.
+is set it runs `litestream restore -config /etc/litestream.yml -if-db-not-exists` then the
+app under `litestream replicate -config /etc/litestream.yml -exec`, so the owner DB
+continuously replicates to object storage (R2/B2) and a fresh disk self-heals on boot —
+the disk is disposable by design (demo boards are NOT replicated on purpose). `GET
+/api/health` is the platform probe (deliberately no SQLite — it must not defeat the demo
+idle-TTL sweep). Two platform configs, owner picks one: `fly.toml` (persistent volume,
+scale-to-zero, ~$2–5/mo) or `render.yaml` (free tier, no disk — viable purely because of
+restore-on-boot; 15-min idle spin-down, ~1-min cold start). Env surface: `DEMO_MODE`,
+`DATA_DIR`, `OWNER_SECRET`, `LITESTREAM_*`.
+
+- **`litestream.yml` (baked at `/etc/litestream.yml`, added 2026-07-08).** Litestream's
+  retention settings can ONLY be set via a config file — the old positional `db url`
+  invocation ran on pure defaults, which on the diskless Render free tier caused the
+  Backblaze **Class C (`s3_list_objects`) blowup**: every ~15-min cold start re-lists the
+  bucket to restore and opens a fresh generation, while the default hourly retention check
+  never fires inside the short process life, so generations accumulate and each restore
+  lists across all of them (~6k list calls/day → past B2's 2,500/day free cap). The config
+  makes retention explicit (`retention 24h`, `retention-check-interval 1h`, `snapshot 24h`,
+  `sync-interval 10s`); it references the existing `LITESTREAM_*` env vars, so no dashboard
+  change. **But the config is only the belt-and-suspenders** — the actual cure is
+  *removing the cold starts*: an external uptime ping (UptimeRobot → `/api/health` every
+  5 min) keeps the container warm, so restore runs only on real deploys and retention
+  actually runs. On Fly's persistent disk this whole class of problem disappears (one
+  long-lived generation). Full incident + decision log in
+  `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + the incident section. NB: the daily
+  Mac pull-backup is NOT a Class C source — it `curl`s `/api/export`, never the bucket.
 - `lib/demo/seed.ts` — pure, deterministic seed generator: an authored SCRIPT of actions
   is replayed to produce item rows + ~3 weeks of event history that are consistent by
   construction (events emitted exactly as the triggers would write them). Tested by

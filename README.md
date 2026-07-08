@@ -92,9 +92,21 @@ boards are deliberately not replicated (throwaway by design).
 
 - `render.yaml` — free tier blueprint (what the live demo runs)
 - `fly.toml` — the ~$3/mo no-cold-start alternative
+- `litestream.yml` — Litestream retention config (baked into the image); keeps
+  the B2 bucket bounded so restores stay cheap
 - `ai/plans/2026-07-03-free-deploy-runbook.md` — the full runbook, including the
-  two failures you'll hit if you deviate (schemeless replica URLs; slim images
-  shipping no CA certs)
+  failures you'll hit if you deviate (schemeless replica URLs; slim images
+  shipping no CA certs) and the Class C incident write-up below
+
+**One catch worth knowing on the free tier:** the diskless design means every
+cold start makes Litestream re-list the bucket and open a fresh generation. On a
+service that spins down every 15 idle minutes, that listing churn can blow past
+Backblaze's free **Class C** (`s3_list_objects`) allowance. The fix is to stop
+the cold starts — an external uptime ping (e.g. UptimeRobot → `/api/health`
+every 5 min) keeps the container warm so restore only runs on real deploys.
+`litestream.yml`'s explicit retention is the backstop. (Fly.io's persistent disk
+sidesteps the whole thing.) The daily Mac backup is *not* involved — it hits
+`/api/export`, never the bucket.
 
 Your data stays yours: `GET /api/export` streams a consistent snapshot of the
 main DB (operator bearer token only, since it now holds every account),

@@ -41,6 +41,18 @@ a real structure without losing its looseness.
   `npm test` (5 plain-node suites), next build.
 
 ## Awaiting owner
+- **B2 Class C fix — ops half (code committed 2026-07-08, `1d64182`, NOT yet
+  pushed/deployed).** The retention config (`litestream.yml`) is in the repo; the
+  deploy was held because (a) it's untested and (b) B2 was actively refusing
+  Class C calls that day, so a fresh deploy's restore would just fail on the cap.
+  To finish: (1) raise the B2 Class C daily cap off $0 (→ ~$0.10) so replication
+  resumes; (2) set up an UptimeRobot HTTP monitor on
+  `https://workingmemory.onrender.com/api/health` at a 5-min interval (the root
+  cure — kills the cold-start churn); (3) `git push` to deploy the config (Docker
+  rebuild bakes it in, no dashboard/env change); (4) verify over ~a day that B2
+  Reports `s3_list_objects` collapses to double digits and the Render logs show
+  one restore per deploy, not one per ~15 min. Full detail:
+  `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + incident log.
 - **Multi-accounts v1 go-live checklist** (code deployed 2026-07-04): set
   `SESSION_SECRET` on Render (`openssl rand -base64 32`); first login as
   `owner` / `<OWNER_SECRET>` runs the idempotent user-#1 bootstrap; verify board +
@@ -180,6 +192,22 @@ a real structure without losing its looseness.
   `replicate -exec next start`).
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-08 — Litestream retention config; diagnosed the B2 Class C blowup.**
+  Backblaze hit its free Class C (`s3_list_objects`) cap — ~6,034/day vs 2,500
+  allowed — and started refusing calls (stalling replication). Diagnosed as
+  Render free-tier cold-start churn, NOT the app or the daily backup script (that
+  hits `/api/export`, never the bucket): the diskless free tier makes every
+  ~15-min cold start re-list the bucket to restore AND open a fresh Litestream
+  generation, while the default hourly retention check never fires in the short
+  process life, so generations pile up and every restore lists across all of them.
+  Fix shipped (commit `1d64182`, NOT yet deployed — see Awaiting owner): added
+  `litestream.yml` (explicit `retention 24h` / `retention-check-interval 1h` /
+  `snapshot 24h` / `sync-interval 10s`) baked into the image (`Dockerfile`) and
+  wired via `scripts/start.sh -config` — the old positional `db url` invocation
+  had no way to set retention. The real cure is operational (keep the service warm
+  with an uptime ping so cold starts stop; the config is belt-and-suspenders).
+  No new env vars. Decision log (weighed: keep-alive vs. retention-only vs. Fly)
+  in `ai/plans/2026-07-03-free-deploy-runbook.md`.
 - **2026-07-07 — Board deletion (✕ button in switcher).** Added support for deleting a board
   (owner action) or leaving a board (member action) directly from the switcher dropdown list.
   Added `deleteBoard` pure db method (cleans up lists, items, and item_events inside a transaction)
