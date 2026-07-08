@@ -34,6 +34,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/.next ./.next
 COPY next.config.js ./
+COPY litestream.yml /etc/litestream.yml
 COPY scripts/start.sh ./scripts/start.sh
 RUN chmod +x scripts/start.sh
 

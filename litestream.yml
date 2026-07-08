@@ -1,0 +1,33 @@
+# Litestream config for the hosted owner DB (baked into the image at
+# /etc/litestream.yml; see Dockerfile + scripts/start.sh).
+#
+# WHY THIS FILE EXISTS: the old start.sh invoked litestream with positional
+# `db url` args, which support NO retention flags — so we ran on pure defaults
+# and, on Render's diskless free tier, every 15-min cold start created a fresh
+# generation while the default 1h retention check never had time to fire. Old
+# generations piled up and every restore re-listed all of them (the Class C /
+# s3_list_objects blowup on Backblaze B2). The real cure is keeping the service
+# warm (no cold starts); this file is the belt-and-suspenders so retention is
+# explicit and bounded even across deploy restarts.
+#
+# The URL and B2 credentials come from the environment
+# (LITESTREAM_REPLICA_URL / LITESTREAM_ACCESS_KEY_ID /
+# LITESTREAM_SECRET_ACCESS_KEY) — litestream expands ${VAR} at load time and
+# reads S3 creds from the env automatically. The db `path` is the one hardcode;
+# it MUST match OWNER_DB in scripts/start.sh ($DATA_DIR/owner/wm.db, DATA_DIR
+# pinned to /data in render.yaml).
+dbs:
+  - path: /data/owner/wm.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}
+        # Keep only ~a day of history in the bucket. Plenty to restore from;
+        # bounds the object count so restores stay cheap.
+        retention: 24h
+        # Default is 1h. Fine now that the service stays warm long enough for it
+        # to actually run and sweep expired generations.
+        retention-check-interval: 1h
+        # One snapshot/day is enough for a low-write personal board.
+        snapshot-interval: 24h
+        # Default is 1s. This board's write volume is tiny; batching WAL uploads
+        # every 10s cuts upload churn (Class A calls) with negligible RPO cost.
+        sync-interval: 10s

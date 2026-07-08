@@ -18,10 +18,14 @@ OWNER_DB="$DATA_DIR/owner/wm.db"
 mkdir -p "$DATA_DIR/owner" "$DATA_DIR/demo"
 
 if [ -n "${LITESTREAM_REPLICA_URL:-}" ]; then
+  # Config baked at /etc/litestream.yml (see litestream.yml + Dockerfile) resolves
+  # the db path + replica URL AND carries the retention settings — the old
+  # positional `db url` form has no way to set retention, which is why we ran on
+  # pure defaults and the bucket accumulated a generation per cold start.
   # -if-replica-exists: an EMPTY bucket (very first boot, before any replication)
   # is not an error — without it, restore fails and set -e crash-loops the app.
-  litestream restore -if-db-not-exists -if-replica-exists -o "$OWNER_DB" "$LITESTREAM_REPLICA_URL"
-  exec litestream replicate -exec "npx next start -p $PORT" "$OWNER_DB" "$LITESTREAM_REPLICA_URL"
+  litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists "$OWNER_DB"
+  exec litestream replicate -config /etc/litestream.yml -exec "npx next start -p $PORT"
 fi
 
 exec npx next start -p "$PORT"

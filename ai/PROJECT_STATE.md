@@ -148,6 +148,20 @@ a real structure without losing its looseness.
 - node:22-slim ships no CA store → the litestream binary fails with
   `x509: certificate signed by unknown authority`; Dockerfile installs
   `ca-certificates` in the runtime stage (commit 5b12c14).
+- **B2 Class C (list) blowup = Render cold-start churn, NOT the app or the
+  backup script** (diagnosed 2026-07-08). Render free spins down after 15 min
+  idle; each cold start begins on a blank disk, so `litestream restore` re-lists
+  the bucket AND `replicate` opens a brand-new generation — while the default 1h
+  retention check never fires inside the ~15-min process life, so generations
+  pile up and every restore lists across all of them (~6k `s3_list_objects`/day
+  observed). Fixes: (1) THE cure — keep the service warm (external uptime ping to
+  `/api/health` every 5 min, under the 15-min idle window) so cold starts stop
+  and retention actually runs; (2) `litestream.yml` (baked at `/etc/litestream.yml`,
+  wired via `start.sh -config`) now sets explicit retention/sync intervals — the
+  old positional `db url` invocation had NO way to. Once warm, steady-state
+  Class C ≈ the hourly retention check only. The daily launchd pull-backup is
+  NOT involved (it hits `/api/export`, never touches B2). If B2 caps you: raise
+  the Class C daily cap a few cents — a $0 cap silently stops replication.
 - **Restart immediately after any `/api/import`** (fresh Litestream generation).
   Restarts before that re-replicate the stale pre-import DB as generations that
   look newest — a later restore can resurrect the old board. Fix if it recurs:
