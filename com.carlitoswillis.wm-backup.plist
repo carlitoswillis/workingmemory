@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.carlitoswillis.wm-backup</string>
+  <!--
+  to reschedule this: run
+  cp ~/workspace/workingmemory/com.carlitoswillis.wm-backup.plist ~/Library/LaunchAgents/launchctl load ~/Library/LaunchAgents/com.carlitoswillis.wm-backup.plist
+  -->
+  <!-- Daily working-memory pull-backup (replaces runbook step 7's crontab).
+       StartCalendarInterval catches up on wake: if the Mac was asleep at
+       09:15, the job runs once when it wakes. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>set -a; . "$HOME/.wm-backup.env"; set +a; exec "$HOME/workspace/workingmemory/scripts/pull-backup.sh"</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+
+  <!-- pull-backup.sh needs node (homebrew) for the integrity check. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/carlitoswillis/workspace/workingmemory/backups/pull/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/carlitoswillis/workspace/workingmemory/backups/pull/backup.log</string>
+</dict>
+</plist>
