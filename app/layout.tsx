@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -20,6 +20,12 @@ const grotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Working Memory",
   description: "What's on your mind — now, and everything it used to be.",
+};
+
+// A single colour, not a light/dark media pair: the app renders dark whatever
+// the device prefers unless "light" was explicitly stored (see THEME_INIT).
+export const viewport: Viewport = {
+  themeColor: "#0b0e1a",
 };
 
 // Applies the saved theme before anything paints (inline + synchronous at the
