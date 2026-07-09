@@ -41,52 +41,6 @@ a real structure without losing its looseness.
   `npm test` (5 plain-node suites), next build.
 
 ## Awaiting owner
-- **B2 Class C fix — ops half (code committed 2026-07-08, `1d64182`, NOT yet
-  pushed/deployed).** The retention config (`litestream.yml`) is in the repo; the
-  deploy was held because (a) it's untested and (b) B2 was actively refusing
-  Class C calls that day, so a fresh deploy's restore would just fail on the cap.
-  To finish: (1) raise the B2 Class C daily cap off $0 (→ ~$0.10) so replication
-  resumes; (2) set up an UptimeRobot HTTP monitor on
-  `https://workingmemory.onrender.com/api/health` at a 5-min interval (the root
-  cure — kills the cold-start churn); (3) `git push` to deploy the config (Docker
-  rebuild bakes it in, no dashboard/env change); (4) verify over ~a day that B2
-  Reports `s3_list_objects` collapses to double digits and the Render logs show
-  one restore per deploy, not one per ~15 min. Full detail:
-  `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + incident log.
-- **Multi-accounts v1 go-live checklist** (code deployed 2026-07-04): set
-  `SESSION_SECRET` on Render (`openssl rand -base64 32`); first login as
-  `owner` / `<OWNER_SECRET>` runs the idempotent user-#1 bootstrap; verify board +
-  history + time machine; **change the password** (on `/login`); eyeball signup
-  with a second account. The launchd pull backup keeps working (bearer auth);
-  restoring a pre-accounts backup simply re-bootstraps.
-- **Landing page eyeball** (built + deployed 2026-07-04): check `/` at desktop +
-  phone widths; click through Try-the-demo → `/demo`, Create account, Sign in.
-- **Shared boards eyeball** (Phases 0+1 built 2026-07-07): after deploy, first load
-  runs the migration + bootstrap (every account gets a "Personal" board; existing
-  cards/columns re-homed onto it — the board should look identical). Then: the board
-  switcher (header, next to @username) → create a board, rename it, invite a second
-  account by username; sign in as that account and confirm the shared board appears
-  and both can add/move/edit/archive; card history shows "· @username"; a non-member
-  hitting `/b/<id>` gets a 404; "Leave board" works; the personal board can't be
-  left. Two-browser pass is the real test of it. **Deploy note:** additive migration,
-  no downtime; a pre-boards backup restores clean (bootstrap re-runs). Real-time is
-  now in (Phase 2): with two browsers on the same board, one person's add/move/edit/
-  archive should appear on the other within ~1s with no manual refresh; a card mid-drag
-  or a time-machine scrub shouldn't get yanked; closing a tab shouldn't leak (the
-  server unsubscribes on abort).
-- **Custom columns eyeball** (built 2026-07-07): the board's columns are now
-  user-created. Eyeball on the live board: the "＋ New column" tile (end of the
-  grid) → name → Add; hover a column header for rename (✎, or click the title) +
-  delete (✕); drag-reorder still works; try deleting a column that holds cards
-  (should refuse: "Move or archive this column's cards first") and the last column
-  (refuses). Confirm history ("Moved X → Y"), Archive labels, and time-travel still
-  read right — incl. scrubbing to a moment in a since-deleted column. Quick-capture
-  (c) now files into the Brain Dump column if present, else the last column.
-- **Light mode eyeball** (built 2026-07-05): flip the sun/moon toggle (board
-  header, landing nav, login/signup top-right) and eyeball BOTH themes across
-  board, card panel, time machine scrub + snapshot panel, archive, quick
-  capture, note markdown, landing, login/signup. Palette values in
-  `globals.css` are first-pass — tune to taste.
 - **Plans awaiting green-light** (planned, deliberately not built):
   - Self-serve password recovery via one-time recovery codes —
     `ai/plans/2026-07-04-password-self-serve.md`. Build before (or with) the
@@ -99,6 +53,7 @@ a real structure without losing its looseness.
     owner questions at the bottom gate the build.
 
 ## Backlog
+- [ ] stress testing [nvm maybe] + response time reduction
 - [x] **Light and Dark mode options** — BUILT 2026-07-05 per
       `ai/plans/2026-07-05-light-mode.md`, awaiting owner eyeball (see Awaiting
       owner).
@@ -190,6 +145,56 @@ a real structure without losing its looseness.
 - Demo boards are deliberately NOT replicated; the hosted disk is fully
   disposable (`scripts/start.sh`: `litestream restore -if-db-not-exists` →
   `replicate -exec next start`).
+
+
+## completed (to be condensed) (all done)
+- **B2 Class C fix — ops half (code committed 2026-07-08, `1d64182`, NOT yet
+  pushed/deployed).** The retention config (`litestream.yml`) is in the repo; the
+  deploy was held because (a) it's untested and (b) B2 was actively refusing
+  Class C calls that day, so a fresh deploy's restore would just fail on the cap.
+  To finish: (1) raise the B2 Class C daily cap off $0 (→ ~$0.10) so replication
+  resumes; (2) set up an UptimeRobot HTTP monitor on
+  `https://workingmemory.onrender.com/api/health` at a 5-min interval (the root
+  cure — kills the cold-start churn); (3) `git push` to deploy the config (Docker
+  rebuild bakes it in, no dashboard/env change); (4) verify over ~a day that B2
+  Reports `s3_list_objects` collapses to double digits and the Render logs show
+  one restore per deploy, not one per ~15 min. Full detail:
+  `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + incident log.
+- **Multi-accounts v1 go-live checklist** (code deployed 2026-07-04): set
+  `SESSION_SECRET` on Render (`openssl rand -base64 32`); first login as
+  `owner` / `<OWNER_SECRET>` runs the idempotent user-#1 bootstrap; verify board +
+  history + time machine; **change the password** (on `/login`); eyeball signup
+  with a second account. The launchd pull backup keeps working (bearer auth);
+  restoring a pre-accounts backup simply re-bootstraps.
+- **Landing page eyeball** (built + deployed 2026-07-04): check `/` at desktop +
+  phone widths; click through Try-the-demo → `/demo`, Create account, Sign in.
+- **Shared boards eyeball** (Phases 0+1 built 2026-07-07): after deploy, first load
+  runs the migration + bootstrap (every account gets a "Personal" board; existing
+  cards/columns re-homed onto it — the board should look identical). Then: the board
+  switcher (header, next to @username) → create a board, rename it, invite a second
+  account by username; sign in as that account and confirm the shared board appears
+  and both can add/move/edit/archive; card history shows "· @username"; a non-member
+  hitting `/b/<id>` gets a 404; "Leave board" works; the personal board can't be
+  left. Two-browser pass is the real test of it. **Deploy note:** additive migration,
+  no downtime; a pre-boards backup restores clean (bootstrap re-runs). Real-time is
+  now in (Phase 2): with two browsers on the same board, one person's add/move/edit/
+  archive should appear on the other within ~1s with no manual refresh; a card mid-drag
+  or a time-machine scrub shouldn't get yanked; closing a tab shouldn't leak (the
+  server unsubscribes on abort).
+- **Custom columns eyeball** (built 2026-07-07): the board's columns are now
+  user-created. Eyeball on the live board: the "＋ New column" tile (end of the
+  grid) → name → Add; hover a column header for rename (✎, or click the title) +
+  delete (✕); drag-reorder still works; try deleting a column that holds cards
+  (should refuse: "Move or archive this column's cards first") and the last column
+  (refuses). Confirm history ("Moved X → Y"), Archive labels, and time-travel still
+  read right — incl. scrubbing to a moment in a since-deleted column. Quick-capture
+  (c) now files into the Brain Dump column if present, else the last column.
+- **Light mode eyeball** (built 2026-07-05): flip the sun/moon toggle (board
+  header, landing nav, login/signup top-right) and eyeball BOTH themes across
+  board, card panel, time machine scrub + snapshot panel, archive, quick
+  capture, note markdown, landing, login/signup. Palette values in
+  `globals.css` are first-pass — tune to taste.
+
 
 ## Completed log (condensed; details in git history of this file)
 - **2026-07-08 — Litestream retention config; diagnosed the B2 Class C blowup.**
