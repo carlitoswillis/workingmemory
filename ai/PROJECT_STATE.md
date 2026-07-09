@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-07-05. Full build/verification narratives for every completed
+_Last updated: 2026-07-09. Full build/verification narratives for every completed
 item live in this file's git history — this doc keeps the current picture and the
 durable lessons, not the play-by-play._
 
@@ -29,6 +29,8 @@ a real structure without losing its looseness.
   a daily launchd pull to the Mac (`backups/pull/`, 09:15, via
   `com.carlitoswillis.wm-backup`). The local `data/wm.db` is frozen pre-cutover
   history; `push-local-db.sh` / `pull-backup.sh` move the file either way at will.
+  An external uptime ping keeps `/api/health` warm (~5 min) — not a nicety: it's
+  what stops the cold-start churn that blew the B2 Class C cap (see Ops notes).
 - **Multi-account since 2026-07-04** (open signup at `/signup`): ONE multi-tenant
   SQLite file (`DATA_DIR/owner/wm.db`, read as "main.db"), app-level scoping via
   `items.user_id` on every query (see AGENTS.md). Owner is user #1. Anonymous
@@ -121,11 +123,12 @@ a real structure without losing its looseness.
   the bucket AND `replicate` opens a brand-new generation — while the default 1h
   retention check never fires inside the ~15-min process life, so generations
   pile up and every restore lists across all of them (~6k `s3_list_objects`/day
-  observed). Fixes: (1) THE cure — keep the service warm (external uptime ping to
-  `/api/health` every 5 min, under the 15-min idle window) so cold starts stop
-  and retention actually runs; (2) `litestream.yml` (baked at `/etc/litestream.yml`,
-  wired via `start.sh -config`) now sets explicit retention/sync intervals — the
-  old positional `db url` invocation had NO way to. Once warm, steady-state
+  observed). Both fixes are in place as of 2026-07-09: (1) THE cure — an external
+  uptime ping keeps `/api/health` warm every ~5 min, under the 15-min idle window,
+  so cold starts stop and retention actually runs; (2) `litestream.yml` (baked at
+  `/etc/litestream.yml`, wired via `start.sh -config`) sets explicit retention/sync
+  intervals — the old positional `db url` invocation had NO way to. If the churn
+  ever returns, check the uptime monitor first. Once warm, steady-state
   Class C ≈ the hourly retention check only. The daily launchd pull-backup is
   NOT involved (it hits `/api/export`, never touches B2). If B2 caps you: raise
   the Class C daily cap a few cents — a $0 cap silently stops replication.
@@ -148,18 +151,15 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
-- **B2 Class C fix — ops half (code committed 2026-07-08, `1d64182`, NOT yet
-  pushed/deployed).** The retention config (`litestream.yml`) is in the repo; the
-  deploy was held because (a) it's untested and (b) B2 was actively refusing
-  Class C calls that day, so a fresh deploy's restore would just fail on the cap.
-  To finish: (1) raise the B2 Class C daily cap off $0 (→ ~$0.10) so replication
-  resumes; (2) set up an UptimeRobot HTTP monitor on
-  `https://workingmemory.onrender.com/api/health` at a 5-min interval (the root
-  cure — kills the cold-start churn); (3) `git push` to deploy the config (Docker
-  rebuild bakes it in, no dashboard/env change); (4) verify over ~a day that B2
-  Reports `s3_list_objects` collapses to double digits and the Render logs show
-  one restore per deploy, not one per ~15 min. Full detail:
-  `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + incident log.
+- **B2 Class C fix — ops half. DONE 2026-07-09; site confirmed back up.** All four
+  steps landed: the B2 Class C daily cap was raised off $0 (replication resumed),
+  the keep-alive HTTP monitor now hits `/api/health` every ~5 min (the root cure —
+  it holds the service above Render's 15-min idle window, so cold starts stop and
+  the retention check actually fires), and `1d64182` (the `litestream.yml`
+  retention config) is deployed. Still worth a glance after ~a day of warm
+  running: B2 Reports `s3_list_objects` should collapse to double digits, and the
+  Render logs should show one restore per deploy rather than one per ~15 min. Full
+  detail: `ai/plans/2026-07-03-free-deploy-runbook.md` §8 + incident log.
 - **Multi-accounts v1 go-live checklist** (code deployed 2026-07-04): set
   `SESSION_SECRET` on Render (`openssl rand -base64 32`); first login as
   `owner` / `<OWNER_SECRET>` runs the idempotent user-#1 bootstrap; verify board +
@@ -197,6 +197,30 @@ a real structure without losing its looseness.
 
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-09 — B2 Class C incident closed.** Cap raised off $0, keep-alive
+  monitor on `/api/health` live, `1d64182` deployed; site confirmed back up.
+  The keep-alive is the load-bearing piece — the retention config only helps once
+  the process lives long enough to run a retention check.
+- **2026-07-09 — App mark: favicon, apple-touch icon, web manifest.** Three
+  stacked bars (top = `--now` amber, two beneath = `--past` blue, each shorter and
+  fainter): the Today column seen from the side, an item receding into its own
+  history. Geometry, not a pictograph, per the no-emoji taste. Nothing in the
+  toolchain can rasterize (no sharp/rsvg/ImageMagick), so `scripts/gen-icons.mjs`
+  (`npm run icons`) does it dependency-free — rounded-rect coverage from a signed
+  distance field, PNG/ICO assembled with `node:zlib`. It defines the geometry once
+  and emits BOTH `app/icon.svg` and the PNGs, so vector and bitmaps can't drift.
+  Outputs: `app/icon.svg` + `app/favicon.ico` (16/32/48), full-bleed
+  `app/apple-icon.png` (Apple masks its own squircle and rejects transparency),
+  and `public/icon-{192,512}.png` + `icon-maskable-512.png` (content inset to the
+  centre 80% safe zone). `app/manifest.ts` → `/manifest.webmanifest`;
+  `short_name` is "Memory" because Android clips ~12 chars; `theme_color` is a
+  single dark value, not a light/dark media pair, since `THEME_INIT` only reads an
+  explicit stored "light" (the app is dark regardless of device preference).
+  **Middleware matcher widened** to skip the icons + manifest — they're fetched on
+  nearly every cold load and in `DEMO_MODE` each fetch would otherwise mint a
+  visitor cookie. Verified: tsc, prod build, and live curls against a DEMO_MODE
+  instance (all 7 asset routes 200 with right content-types and zero `Set-Cookie`,
+  while `/` still mints).
 - **2026-07-08 — Litestream retention config; diagnosed the B2 Class C blowup.**
   Backblaze hit its free Class C (`s3_list_objects`) cap — ~6,034/day vs 2,500
   allowed — and started refusing calls (stalling replication). Diagnosed as
@@ -205,7 +229,7 @@ a real structure without losing its looseness.
   ~15-min cold start re-list the bucket to restore AND open a fresh Litestream
   generation, while the default hourly retention check never fires in the short
   process life, so generations pile up and every restore lists across all of them.
-  Fix shipped (commit `1d64182`, NOT yet deployed — see Awaiting owner): added
+  Fix shipped (commit `1d64182`; deployed 2026-07-09): added
   `litestream.yml` (explicit `retention 24h` / `retention-check-interval 1h` /
   `snapshot 24h` / `sync-interval 10s`) baked into the image (`Dockerfile`) and
   wired via `scripts/start.sh -config` — the old positional `db url` invocation
