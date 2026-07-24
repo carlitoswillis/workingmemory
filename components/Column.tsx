@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext } from "@dnd-kit/sortable";
 import type { Item } from "@/lib/types";
 import { MAX_LIST_LABEL, type ListDef } from "@/lib/lists";
+import { stillStrategy } from "@/lib/dnd";
 import { effectiveDone } from "@/lib/recurrence";
 import ItemCard from "./ItemCard";
 import SortableItemCard from "./SortableItemCard";
@@ -16,6 +17,7 @@ export default function Column({
   selection,
   activeId,
   nestTargetId,
+  dropLine,
   canDelete,
   onSelect,
   onOpenCard,
@@ -31,6 +33,9 @@ export default function Column({
   selection: Set<string>;
   activeId: string | null;
   nestTargetId: string | null; // the card a release would drop INTO, if any
+  // Where the drop line goes in THIS column, if the drag is over it: above the named
+  // card, or below the last one (beforeId null). Absent = the drag is somewhere else.
+  dropLine?: { beforeId: string | null } | null;
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
@@ -78,6 +83,7 @@ export default function Column({
 
   return (
     <section
+      data-drop-zone={list.id}
       className={`flex min-h-[220px] flex-col rounded-2xl border p-3 ${
         isNow ? "col-now" : "border-[var(--veil-soft)] bg-[var(--wash)]"
       }`}
@@ -172,9 +178,10 @@ export default function Column({
       </form>
 
       <div className="flex flex-1 flex-col gap-1.5">
-        <SortableContext items={openIds} strategy={verticalListSortingStrategy}>
+        {/* Cards hold still under a drag (stillStrategy); the drop point is the line. */}
+        <SortableContext items={openIds} strategy={stillStrategy}>
           <div className="flex min-h-[8px] flex-col gap-1.5">
-            {open.map((item) => (
+            {open.map((item, i) => (
               <SortableItemCard
                 key={item.id}
                 item={item}
@@ -183,12 +190,24 @@ export default function Column({
                 selected={selection.has(item.id)}
                 muted={mutedId(item.id)}
                 nestTarget={nestTargetId === item.id}
+                dropEdge={
+                  !dropLine
+                    ? undefined
+                    : dropLine.beforeId === item.id
+                      ? "top"
+                      : dropLine.beforeId === null && i === open.length - 1
+                        ? "bottom"
+                        : undefined
+                }
                 onSelect={onSelect}
                 onOpenCard={onOpenCard}
               />
             ))}
           </div>
         </SortableContext>
+        {dropLine && open.length === 0 && (
+          <div aria-hidden className="h-[2px] rounded-full bg-[var(--now)]" />
+        )}
 
         {open.length === 0 && done.length === 0 && (
           <p className="px-1.5 pt-2 font-display text-xs italic text-[var(--text-lo)]">

@@ -15,6 +15,7 @@ export default function SortableColumn(props: {
   selection: Set<string>;
   activeId: string | null;
   nestTargetId: string | null;
+  dropLine?: { beforeId: string | null } | null;
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;

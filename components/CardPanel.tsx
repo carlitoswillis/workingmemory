@@ -13,12 +13,8 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { anchorAt, stillStrategy } from "@/lib/dnd";
 import type { Item, ItemEvent } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
 import {
@@ -212,27 +208,48 @@ export default function CardPanel({
   const [childDragging, setChildDragging] = useState(false);
   const [dragOut, setDragOut] = useState(false);
   const [activeKidId, setActiveKidId] = useState<string | null>(null);
+  const activeKidRef = useRef<string | null>(null);
   const activeKid = activeKidId ? kids.find((k) => k.id === activeKidId) ?? null : null;
+  // Sub-cards hold still under a drag too, exactly like the board's columns: the drop
+  // point is a line in the gap above `beforeId` (null = below the last sub-card).
+  const kidsRef = useRef<HTMLDivElement>(null);
+  const [kidDrop, setKidDrop] = useState<{ beforeId: string | null } | null>(null);
+  const kidDropRef = useRef<{ beforeId: string | null } | null>(null);
 
   function onChildDragStart(e: DragStartEvent) {
+    activeKidRef.current = String(e.active.id);
     setActiveKidId(String(e.active.id));
     setChildDragging(true);
   }
   function onChildDragCancel() {
+    activeKidRef.current = null;
     setActiveKidId(null);
     setChildDragging(false);
     setDragOut(false);
+    kidDropRef.current = null;
+    setKidDrop(null);
   }
 
   useEffect(() => {
     if (!childDragging) return;
-    const check = (x: number) => {
+    const check = (x: number, y: number) => {
       const left = asideRef.current?.getBoundingClientRect().left ?? 0;
       // Only when there IS a board beside the panel — on a phone it fills the screen.
-      setDragOut(left > 40 && x < left - 4);
+      const out = left > 40 && x < left - 4;
+      setDragOut(out);
+      const zone = kidsRef.current;
+      const next =
+        out || !zone
+          ? null
+          : { beforeId: anchorAt(zone, y, (id) => id === activeKidRef.current) };
+      const cur = kidDropRef.current;
+      if (cur?.beforeId === next?.beforeId) return;
+      kidDropRef.current = next;
+      setKidDrop(next);
     };
-    const fromPointer = (e: PointerEvent) => check(e.clientX);
-    const fromTouch = (e: TouchEvent) => e.touches[0] && check(e.touches[0].clientX);
+    const fromPointer = (e: PointerEvent) => check(e.clientX, e.clientY);
+    const fromTouch = (e: TouchEvent) =>
+      e.touches[0] && check(e.touches[0].clientX, e.touches[0].clientY);
     window.addEventListener("pointermove", fromPointer, { passive: true });
     window.addEventListener("touchmove", fromTouch, { passive: true });
     return () => {
@@ -254,24 +271,34 @@ export default function CardPanel({
   function onChildDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     const releasedOutside = dragOut;
+    const drop = kidDropRef.current;
+    const id = String(active.id);
+    activeKidRef.current = null;
     setActiveKidId(null);
     setChildDragging(false);
     setDragOut(false);
-    if (releasedOutside) return popChildOut(String(active.id));
-    if (!over || active.id === over.id) return;
-    const oldI = kids.findIndex((k) => k.id === active.id);
-    const newI = kids.findIndex((k) => k.id === over.id);
-    if (oldI < 0 || newI < 0) return;
-    const reordered = arrayMove(kids, oldI, newI);
-    setKids(reordered);
-    const prev = reordered[newI - 1]?.position;
-    const next = reordered[newI + 1]?.position;
+    kidDropRef.current = null;
+    setKidDrop(null);
+    if (releasedOutside) return popChildOut(id);
+
+    const oldI = kids.findIndex((k) => k.id === id);
+    if (oldI < 0) return;
+    const rest = kids.filter((k) => k.id !== id);
+    // No pointer (keyboard drag): fall back to whatever dnd-kit had under the card.
+    const beforeId = drop ? drop.beforeId : over && over.id !== active.id ? String(over.id) : null;
+    let insertAt = beforeId ? rest.findIndex((k) => k.id === beforeId) : rest.length;
+    if (insertAt < 0) insertAt = rest.length;
+    if (insertAt === oldI) return; // dropped back where it started
+
+    const prev = rest[insertAt - 1]?.position;
+    const next = rest[insertAt]?.position;
     let pos: number;
     if (prev != null && next != null) pos = (prev + next) / 2;
     else if (prev != null) pos = prev + 1000;
     else if (next != null) pos = next - 1000;
     else pos = Date.now();
-    const moved = reordered[newI];
+    const moved = { ...kids[oldI], position: pos };
+    setKids([...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)]);
     startTransition(() => reorderItemAction(boardId, moved.id, moved.list, pos));
   }
 
@@ -504,17 +531,23 @@ export default function CardPanel({
           </div>
 
           {kids.length > 0 && (
-            <SortableContext
-              items={kids.map((k) => k.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="mb-2 flex flex-col gap-1.5">
-                {kids.map((child) => (
+            <SortableContext items={kids.map((k) => k.id)} strategy={stillStrategy}>
+              <div ref={kidsRef} className="mb-2 flex flex-col gap-1.5">
+                {kids.map((child, i) => (
                   <SortableItemCard
                     key={child.id}
                     item={child}
                     allLists={allLists}
                     childItems={childrenByParent.get(child.id)}
+                    dropEdge={
+                      !kidDrop
+                        ? undefined
+                        : kidDrop.beforeId === child.id
+                          ? "top"
+                          : kidDrop.beforeId === null && i === kids.length - 1
+                            ? "bottom"
+                            : undefined
+                    }
                     onOpenCard={onOpenCard}
                   />
                 ))}

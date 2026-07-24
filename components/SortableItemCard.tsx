@@ -12,7 +12,11 @@ import ItemCard from "./ItemCard";
 // `nestTarget` means "releasing here would drop the dragged card INSIDE this one" —
 // armed by pausing over the card (Board's HOLD_MS). Drawn as a pointer-events-none
 // overlay, deliberately NOT a droppable: an extra droppable takes `over` off the
-// sortable list mid-drag, which collapses the make-space gap and makes every card jump.
+// sortable list mid-drag, which used to collapse the make-space gap and make every
+// card jump.
+//
+// `dropEdge` draws the drop line on this card's top or bottom edge. It's absolutely
+// positioned in the gap between cards, so showing it moves nothing (see lib/dnd.ts).
 export default function SortableItemCard(props: {
   item: Item;
   allLists: readonly ListDef[];
@@ -20,16 +24,18 @@ export default function SortableItemCard(props: {
   selected?: boolean;
   muted?: boolean;
   nestTarget?: boolean;
+  dropEdge?: "top" | "bottom";
   onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
 }) {
-  const { nestTarget, ...cardProps } = props;
+  const { nestTarget, dropEdge, ...cardProps } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: props.item.id, data: { type: "card" } });
 
   return (
     <div
       ref={setNodeRef}
+      data-card-id={props.item.id}
       {...attributes}
       {...listeners}
       style={{
@@ -42,6 +48,14 @@ export default function SortableItemCard(props: {
       className="relative cursor-grab touch-manipulation active:cursor-grabbing"
     >
       <ItemCard {...cardProps} />
+      {dropEdge && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-x-0 h-[2px] rounded-full bg-[var(--now)] ${
+            dropEdge === "top" ? "-top-1" : "-bottom-1"
+          }`}
+        />
+      )}
       {nestTarget && (
         <div
           aria-hidden

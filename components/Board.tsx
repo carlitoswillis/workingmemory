@@ -13,7 +13,6 @@ import {
   useSensors,
   type DragEndEvent,
   type DragMoveEvent,
-  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
@@ -25,6 +24,8 @@ import {
 import type { Item, ItemEvent } from "@/lib/types";
 import type { ListId, ListDef } from "@/lib/lists";
 import { NOTE_LIST, MAX_LISTS } from "@/lib/lists";
+import { anchorAt, cardAt } from "@/lib/dnd";
+import { effectiveDone } from "@/lib/recurrence";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
   addItemAction,
@@ -51,6 +52,8 @@ import SearchOverlay from "./SearchOverlay";
 
 type Grouped = Record<string, Item[]>;
 type Move = { id: string; list: string; position: number };
+// The gap a release would drop into: above `beforeId`, or below the column's last card.
+type DropAt = { list: string; beforeId: string | null };
 
 const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6";
 
@@ -279,6 +282,11 @@ export default function Board({
   }, [items, lists]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Where a release would land: the gap above `beforeId` in that column (or below its
+  // last card, when beforeId is null). Nothing on the board moves during a drag — this
+  // is drawn as a line in the gap instead (see lib/dnd.ts).
+  const [dropAt, setDropAt] = useState<DropAt | null>(null);
+  const dropRef = useRef<DropAt | null>(null);
   // The card a release would drop INTO, once the hold has armed it. Visual only — it's
   // the card's own sortable id, so no extra droppable disturbs the drag.
   const [nestTargetId, setNestTargetId] = useState<string | null>(null);
@@ -639,24 +647,59 @@ export default function Board({
     }
   }
 
-  // Mid-drag: start (or keep) the hold that arms a nest. The pointer has to actually
-  // be inside the card's box — dnd-kit's collision can hand us a card the cursor isn't
-  // on — and any real movement restarts the clock. Note the timer: if you hold PERFECTLY
-  // still no further drag events arrive, so the arming can't be driven by moves alone.
+  function setDrop(next: DropAt | null) {
+    const cur = dropRef.current;
+    if (cur?.list === next?.list && cur?.beforeId === next?.beforeId) return;
+    dropRef.current = next;
+    setDropAt(next);
+  }
+
+  // The column under the pointer. Measured off the real boxes rather than dnd-kit's
+  // collisions, which work from the dragged card's rect (parked wherever you grabbed
+  // it) — with the board holding still, the cursor is the only thing worth asking.
+  // A little slack so the gutter between two columns doesn't read as "nowhere".
+  function zoneUnder(x: number, y: number): HTMLElement | null {
+    let best: HTMLElement | null = null;
+    let bestD = Infinity;
+    for (const z of Array.from(document.querySelectorAll<HTMLElement>("[data-drop-zone]"))) {
+      const r = z.getBoundingClientRect();
+      const dx = Math.max(r.left - x, 0, x - r.right);
+      const dy = Math.max(r.top - y, 0, y - r.bottom);
+      const d = Math.hypot(dx, dy);
+      if (d < bestD) {
+        bestD = d;
+        best = z;
+      }
+    }
+    return bestD <= 60 ? best : null; // dragged well clear of the board: no drop
+  }
+
+  // The cards travelling with this drag — they're not drop targets for themselves.
+  function movingWith(draggedId: string): Set<string> {
+    return selection.has(draggedId) && selection.size > 1 ? selection : new Set([draggedId]);
+  }
+
+  // Mid-drag: place the drop line, and start (or keep) the hold that arms a nest. The
+  // pointer has to actually be inside the card's box, and any real movement restarts the
+  // clock. Note the timer: if you hold PERFECTLY still no further drag events arrive, so
+  // the arming can't be driven by moves alone.
   function onDragMove(e: DragMoveEvent) {
-    const { active, over } = e;
+    const { active } = e;
     const p = pointerRef.current;
-    if (active.data.current?.type !== "card" || !over || !p) return cancelHold();
-    const overId = String(over.id);
-    // Skip columns (they're droppables too), the card being dragged, and any card
-    // travelling with it in a multi-select.
-    if (itemsRef.current[overId] || overId === String(active.id) || selection.has(overId)) {
+    if (active.data.current?.type !== "card" || !p) return cancelHold();
+    const draggedId = String(active.id);
+    const moving = movingWith(draggedId);
+    const skip = (id: string) => moving.has(id);
+
+    const zone = zoneUnder(p.x, p.y);
+    if (!zone) {
+      setDrop(null);
       return cancelHold();
     }
-    const r = over.rect;
-    const insideCard =
-      p.x >= r.left && p.x <= r.left + r.width && p.y >= r.top && p.y <= r.top + r.height;
-    if (!insideCard) return cancelHold();
+    setDrop({ list: zone.dataset.dropZone as string, beforeId: anchorAt(zone, p.y, skip) });
+
+    const overId = cardAt(zone, p.x, p.y, skip);
+    if (!overId) return cancelHold();
     if (nestTargetRef.current === overId) return; // already armed on this card
 
     const d = dwellRef.current;
@@ -687,42 +730,33 @@ export default function Board({
     }
   }
 
-  // Mid-drag: move a card into whatever column it's hovering.
-  function onDragOver(e: DragOverEvent) {
-    const { active, over } = e;
-    if (!over || active.data.current?.type !== "card") return;
-    const from = containerOf(String(active.id));
-    const to = containerOf(String(over.id));
-    if (!from || !to || from === to) return;
-
-    const c = itemsRef.current;
-    const fromItems = c[from];
-    const toItems = c[to];
-    const idx = fromItems.findIndex((i) => i.id === active.id);
-    if (idx < 0) return;
-    const moved = { ...fromItems[idx], list: to as ListId };
-    let insertAt = toItems.findIndex((i) => i.id === over.id);
-    if (insertAt < 0) insertAt = toItems.length;
-
-    const next: Grouped = {
-      ...c,
-      [from]: fromItems.filter((i) => i.id !== active.id),
-      [to]: [...toItems.slice(0, insertAt), moved, ...toItems.slice(insertAt)],
-    };
-    itemsRef.current = next;
-    setItemsByList(next);
+  // Turn "the gap above beforeId" into an index in the column's full array. A column
+  // shows its done cards in their own tray at the bottom, so "below the last card"
+  // means below the last OPEN one — the done ones aren't part of the line's list.
+  function gapIndex(arr: Item[], beforeId: string | null): number {
+    if (beforeId) {
+      const i = arr.findIndex((it) => it.id === beforeId);
+      if (i >= 0) return i;
+    }
+    let end = 0;
+    arr.forEach((it, i) => {
+      if (!effectiveDone(it)) end = i + 1;
+    });
+    return end;
   }
 
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     const type = active.data.current?.type;
     const nestInto = nestTargetRef.current;
+    const pointerDrop = dropRef.current;
     setActiveId(null);
     cancelHold();
+    setDrop(null);
     pointerRef.current = null;
-    if (!over) return;
 
     if (type === "column") {
+      if (!over) return;
       const oldI = listOrder.indexOf(String(active.id));
       const newI = listOrder.indexOf(String(over.id));
       if (oldI >= 0 && newI >= 0 && oldI !== newI) {
@@ -734,9 +768,8 @@ export default function Board({
     }
 
     const draggedId = String(active.id);
-    const overId = String(over.id);
 
-    // NEST: released on the right side of another card — the dragged card (or the
+    // NEST: released while held over another card — the dragged card (or the
     // whole selection) moves INSIDE it and off the board's top level. Optimistically
     // pull the cards out of their columns; the server decides for real (it refuses
     // loops), and a refusal puts the board straight back.
@@ -778,13 +811,30 @@ export default function Board({
       return;
     }
 
+    // Where the line was when you let go. A keyboard drag never moves the pointer, so
+    // fall back to dnd-kit's `over`: the gap above it, or the gap below the card being
+    // stepped past when it's further down the same column.
+    const c = itemsRef.current;
+    let drop = pointerDrop;
+    if (!drop && over && over.id !== active.id) {
+      const overId = String(over.id);
+      const list = containerOf(overId);
+      if (list) {
+        if (c[overId]) drop = { list: overId, beforeId: null }; // the column itself
+        else {
+          const arr = c[list];
+          const oi = arr.findIndex((i) => i.id === draggedId);
+          const ni = arr.findIndex((i) => i.id === overId);
+          drop = { list, beforeId: oi >= 0 && ni > oi ? arr[ni + 1]?.id ?? null : overId };
+        }
+      }
+    }
+    if (!drop || !c[drop.list]) return;
+
     // MULTI-SELECT: relocate the whole selected set as a contiguous block, in board
     // reading order, into the target list at the drop point.
     if (selection.has(draggedId) && selection.size > 1) {
-      const c = itemsRef.current;
-      const targetList = containerOf(draggedId);
-      if (!targetList) return;
-
+      const targetList = drop.list;
       const block: Item[] = [];
       for (const lid of listOrder) {
         for (const it of c[lid] ?? []) {
@@ -793,28 +843,19 @@ export default function Board({
       }
       if (block.length === 0) return;
 
-      // Insertion point = where `over` sits among the NON-selected cards of the list.
-      const fullTarget = c[targetList];
-      let anchorIndex = fullTarget.findIndex((it) => it.id === overId);
-      if (anchorIndex < 0) anchorIndex = fullTarget.length; // dropped on an empty column
-      let insertAt = 0;
-      for (let i = 0; i < anchorIndex; i++) if (!selection.has(fullTarget[i].id)) insertAt++;
-
+      // Insertion point = the line's gap among the cards that AREN'T coming along.
       const work: Grouped = {};
       for (const k of Object.keys(c)) work[k] = c[k].filter((it) => !selection.has(it.id));
       const rest = work[targetList];
-      const merged = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
+      const insertAt = gapIndex(rest, drop.beforeId);
 
       const positions = spacedPositions(
-        merged[insertAt - 1]?.position,
-        merged[insertAt + block.length]?.position,
+        rest[insertAt - 1]?.position,
+        rest[insertAt]?.position,
         block.length,
       );
-      for (let i = 0; i < block.length; i++) {
-        block[i] = { ...block[i], position: positions[i] };
-        merged[insertAt + i] = block[i];
-      }
-      work[targetList] = merged;
+      for (let i = 0; i < block.length; i++) block[i] = { ...block[i], position: positions[i] };
+      work[targetList] = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
 
       itemsRef.current = work;
       setItemsByList(work);
@@ -829,33 +870,34 @@ export default function Board({
       return;
     }
 
-    // Card: finalize order within its (possibly new) column, then persist.
-    const list = containerOf(String(active.id));
-    if (!list) return;
-    const c = itemsRef.current;
-    const arr = c[list];
-    const oldIndex = arr.findIndex((i) => i.id === active.id);
-    let newIndex = arr.findIndex((i) => i.id === over.id);
-    if (newIndex < 0) newIndex = arr.length - 1;
-    const reordered = oldIndex === newIndex ? arr : arrayMove(arr, oldIndex, newIndex);
+    // Card: slot it into the gap the line was showing, then persist.
+    const from = containerOf(draggedId);
+    if (!from) return;
+    const moved = c[from].find((i) => i.id === draggedId);
+    if (!moved) return;
+    const rest = c[drop.list].filter((i) => i.id !== draggedId);
+    const insertAt = gapIndex(rest, drop.beforeId);
+    // Dropped back in the gap it came from: leave the board (and its history) alone.
+    if (from === drop.list && insertAt === c[from].findIndex((i) => i.id === draggedId)) return;
 
-    const fi = reordered.findIndex((i) => i.id === active.id);
-    const prevPos = reordered[fi - 1]?.position;
-    const nextPos = reordered[fi + 1]?.position;
+    const prevPos = rest[insertAt - 1]?.position;
+    const nextPos = rest[insertAt]?.position;
     let pos: number;
     if (prevPos != null && nextPos != null) pos = (prevPos + nextPos) / 2;
     else if (prevPos != null) pos = prevPos + 1000;
     else if (nextPos != null) pos = nextPos - 1000;
     else pos = Date.now();
 
-    const next: Grouped = { ...c, [list]: reordered };
+    const next: Grouped = { ...c, [from]: c[from].filter((i) => i.id !== draggedId) };
+    next[drop.list] = [
+      ...rest.slice(0, insertAt),
+      { ...moved, list: drop.list as ListId, position: pos },
+      ...rest.slice(insertAt),
+    ];
     itemsRef.current = next;
     setItemsByList(next);
-    const origin = dragOriginRef.current[0];
-    if (!origin || origin.list !== list || oldIndex !== newIndex) {
-      pushMoveUndo(dragOriginRef.current, "Moved card");
-    }
-    startTransition(() => reorderItemAction(boardId, String(active.id), list, pos));
+    pushMoveUndo(dragOriginRef.current, "Moved card");
+    startTransition(() => reorderItemAction(boardId, draggedId, drop.list, pos));
   }
 
   return (
@@ -892,11 +934,11 @@ export default function Board({
           collisionDetection={closestCorners}
           onDragStart={onDragStart}
           onDragMove={onDragMove}
-          onDragOver={onDragOver}
           onDragEnd={onDragEnd}
           onDragCancel={() => {
             setActiveId(null);
             cancelHold();
+            setDrop(null);
           }}
         >
           <SortableContext items={listOrder} strategy={rectSortingStrategy}>
@@ -912,6 +954,12 @@ export default function Board({
                   selection={selection}
                   activeId={activeId}
                   nestTargetId={nestTargetId}
+                  // An armed nest wins: the card is going INSIDE something, not between.
+                  dropLine={
+                    dropAt && !nestTargetId && dropAt.list === list.id
+                      ? { beforeId: dropAt.beforeId }
+                      : null
+                  }
                   canDelete={orderedLists.length > 1}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}
