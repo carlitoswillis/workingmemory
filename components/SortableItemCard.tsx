@@ -9,11 +9,10 @@ import ItemCard from "./ItemCard";
 // Drag anywhere on the card to reorder; clicks still edit (sensor has a small
 // activation distance, and inputs stop propagation).
 //
-// `nestTarget` means "releasing here would drop the dragged card INSIDE this one"
-// (Board decides that from the pointer's position — see NEST_ZONE). It's drawn as a
-// pointer-events-none overlay, deliberately NOT a droppable: an extra droppable takes
-// `over` off the sortable list mid-drag, which collapses the make-space gap and makes
-// every card jump.
+// `nestTarget` means "releasing here would drop the dragged card INSIDE this one" —
+// armed by pausing over the card (Board's HOLD_MS). Drawn as a pointer-events-none
+// overlay, deliberately NOT a droppable: an extra droppable takes `over` off the
+// sortable list mid-drag, which collapses the make-space gap and makes every card jump.
 export default function SortableItemCard(props: {
   item: Item;
   allLists: readonly ListDef[];
@@ -46,10 +45,10 @@ export default function SortableItemCard(props: {
       {nestTarget && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 flex items-center justify-end rounded-lg border-2 border-[var(--now)] bg-[var(--now-wash)] pr-1.5"
+          className="pointer-events-none absolute inset-0 flex items-center justify-end rounded-lg border border-[var(--now)] pr-1.5"
         >
-          <span className="rounded-full bg-[var(--now)] px-1.5 py-[1px] text-[10px] font-medium leading-none text-[var(--bg-0)]">
-            ↳ inside
+          <span className="bg-[var(--surface-2)] px-1 text-[10px] uppercase tracking-[0.14em] leading-none text-[var(--now)]">
+            inside
           </span>
         </div>
       )}

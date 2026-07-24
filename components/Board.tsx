@@ -66,15 +66,18 @@ function spacedPositions(prev: number | undefined, next: number | undefined, n: 
   return Array.from({ length: n }, (_, i) => base + 1000 * i);
 }
 
-// How far across a card you have to be for a drop to mean "put it INSIDE this one"
-// rather than "put it next to this one". Nesting is decided from the pointer's
-// position within the card you're already over — NOT from a droppable of its own.
-// (v1 made the nest zone a real droppable; entering it took `over` off the sortable
-// list, which collapsed dnd-kit's make-space gap and snapped every card back, moving
-// the target out from under the cursor. Owner verdict: "realllyyy difficult". With no
-// extra droppable the board behaves exactly as it always did while dragging, and only
-// the release point decides.)
-const NEST_ZONE = 0.55;
+// HOLD-TO-NEST: pause over a card for a beat and it arms as "drop inside me"; release
+// then and the dragged card goes in. Move on and it disarms — so an ordinary drag,
+// which never stops moving, can't nest by accident.
+//
+// Two earlier shapes were worse. A nest strip as its own droppable (v1) took `over`
+// off the SortableContext's items the moment you entered it, which collapsed dnd-kit's
+// make-space gap and snapped every card back — the target jumped out from under the
+// cursor ("realllyyy difficult"). Splitting each card left/right (v2) kept the drag
+// smooth but asked for pixel aim on a ~30px-tall card. A pause needs no aim at all,
+// reads the same on touch as on a mouse, and costs nothing while you're still moving.
+const HOLD_MS = 550;
+const HOLD_SLOP = 10; // px of jitter still counted as "holding still"
 
 // Group TOP-LEVEL items into per-list arrays, preserving their (position-sorted)
 // order. Sub-cards (parent_id set) never render as board cards — they live inside
@@ -276,12 +279,15 @@ export default function Board({
   }, [items, lists]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  // The card a release would drop INTO (see NEST_ZONE). Visual only — it's the card's
-  // own sortable id, so no extra droppable disturbs the drag.
+  // The card a release would drop INTO, once the hold has armed it. Visual only — it's
+  // the card's own sortable id, so no extra droppable disturbs the drag.
   const [nestTargetId, setNestTargetId] = useState<string | null>(null);
+  const nestTargetRef = useRef<string | null>(null); // same value, readable from timers
   // Where the finger/cursor actually is. dnd-kit's collisions work off the dragged
-  // card's rect, but a person aims with the pointer, so nesting is judged by that.
+  // card's rect, but a person aims with the pointer, so the hold is judged by that.
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const dwellRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeItem = activeId
     ? Object.values(itemsByList).flat().find((i) => i.id === activeId) ?? null
     : null;
@@ -620,30 +626,56 @@ export default function Board({
     };
   }, []);
 
-  // Mid-drag: is the pointer far enough across the card it's over to mean "inside"?
-  // Requires the pointer to be within that card's box, so a collision with a card the
-  // cursor isn't actually on can never nest.
+  // Give up on the current hold (and disarm if it had already fired).
+  function cancelHold() {
+    dwellRef.current = null;
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    if (nestTargetRef.current !== null) {
+      nestTargetRef.current = null;
+      setNestTargetId(null);
+    }
+  }
+
+  // Mid-drag: start (or keep) the hold that arms a nest. The pointer has to actually
+  // be inside the card's box — dnd-kit's collision can hand us a card the cursor isn't
+  // on — and any real movement restarts the clock. Note the timer: if you hold PERFECTLY
+  // still no further drag events arrive, so the arming can't be driven by moves alone.
   function onDragMove(e: DragMoveEvent) {
     const { active, over } = e;
-    if (active.data.current?.type !== "card" || !over) return setNestTargetId(null);
-    const overId = String(over.id);
     const p = pointerRef.current;
-    const r = over.rect;
-    if (!p || !r) return setNestTargetId(null);
+    if (active.data.current?.type !== "card" || !over || !p) return cancelHold();
+    const overId = String(over.id);
     // Skip columns (they're droppables too), the card being dragged, and any card
     // travelling with it in a multi-select.
     if (itemsRef.current[overId] || overId === String(active.id) || selection.has(overId)) {
-      return setNestTargetId(null);
+      return cancelHold();
     }
+    const r = over.rect;
     const insideCard =
       p.x >= r.left && p.x <= r.left + r.width && p.y >= r.top && p.y <= r.top + r.height;
-    setNestTargetId(insideCard && p.x >= r.left + r.width * NEST_ZONE ? overId : null);
+    if (!insideCard) return cancelHold();
+    if (nestTargetRef.current === overId) return; // already armed on this card
+
+    const d = dwellRef.current;
+    const moved =
+      !d || d.id !== overId || Math.abs(p.x - d.x) > HOLD_SLOP || Math.abs(p.y - d.y) > HOLD_SLOP;
+    if (!moved) return;
+    dwellRef.current = { id: overId, x: p.x, y: p.y };
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null;
+      nestTargetRef.current = overId;
+      setNestTargetId(overId);
+    }, HOLD_MS);
   }
 
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
     setActiveId(id);
-    setNestTargetId(null);
+    cancelHold();
     if (e.active.data.current?.type === "card") {
       // Remember where the dragged card(s) started, for undo.
       const ids = selection.has(id) && selection.size > 1 ? [...selection] : [id];
@@ -684,9 +716,9 @@ export default function Board({
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     const type = active.data.current?.type;
-    const nestInto = nestTargetId;
+    const nestInto = nestTargetRef.current;
     setActiveId(null);
-    setNestTargetId(null);
+    cancelHold();
     pointerRef.current = null;
     if (!over) return;
 
@@ -864,7 +896,7 @@ export default function Board({
           onDragEnd={onDragEnd}
           onDragCancel={() => {
             setActiveId(null);
-            setNestTargetId(null);
+            cancelHold();
           }}
         >
           <SortableContext items={listOrder} strategy={rectSortingStrategy}>
@@ -917,7 +949,30 @@ export default function Board({
         </DndContext>
       )}
 
-      {!snapshot && selection.size > 0 && (
+      {/* Nobody guesses "hold to nest" — say it, but only while a card is in the air.
+          Once armed it names the card, so a mis-hold is obvious before you let go. */}
+      {!snapshot && activeItem && (
+        <div className="fixed bottom-5 left-1/2 z-40 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 py-2 text-xs shadow-2xl">
+          {nestTargetId ? (
+            <span className="text-[var(--text-mid)]">
+              Release to put it inside{" "}
+              <span className="text-[var(--now)]">
+                “
+                {Object.values(itemsByList)
+                  .flat()
+                  .find((i) => i.id === nestTargetId)?.text ?? "this card"}
+                ”
+              </span>
+            </span>
+          ) : (
+            <span className="text-[var(--text-lo)]">
+              Hold still over a card to put this one inside it
+            </span>
+          )}
+        </div>
+      )}
+
+      {!snapshot && !activeItem && selection.size > 0 && (
         <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
           <span className="text-sm text-[var(--text-hi)]">
             <span className="font-medium tabular-nums">{selection.size}</span> selected

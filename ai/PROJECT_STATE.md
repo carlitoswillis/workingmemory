@@ -171,9 +171,14 @@ a real structure without losing its looseness.
   another card to nest is realllyyy difficult… because dragging currently shifts cards
   around", and dragging a sub-card off the panel should put it back on the board).
   Both addressed; needs an owner pass:
-  - Nesting is no longer a droppable. Release with the cursor on the **right ~45% of a
-    card** and it goes inside; the card lights up with "↳ inside" while you're there.
-    Everything else about dragging is exactly as it was before nesting existed.
+  - Nesting is **hold-to-nest** (owner call, after trying the zone split): pause over a
+    card for ~550ms and it arms — a thin `--now` outline and the word "inside" — then
+    release. Keep moving and nothing nests, so ordinary dragging can't trigger it. A
+    pill at the bottom says "Hold still over a card…", and names the card once armed.
+    Still no extra droppable, so the drag itself behaves as it did before nesting
+    existed. (Zone-split v2 kept the drag smooth but wanted pixel aim on a ~30px card;
+    the solid amber "↳ inside" chip it used was too loud — the armed state is matte
+    now.)
   - **Drag a sub-card left, off the panel** → it goes back on the board (into its own
     column). A dashed target appears while dragging, and the card now follows the
     cursor out instead of being clipped at the panel edge. Desktop only by design —
