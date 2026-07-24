@@ -10,9 +10,19 @@ import {
   reorderLists,
 } from "@/lib/columns";
 import { DEMO_MODE, getBoardContext } from "@/lib/db";
+import { setParent } from "@/lib/nesting";
+import { formatRecurrence, parseRecurrence } from "@/lib/recurrence";
 import { pokeBoard } from "@/lib/realtime";
 import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
-import { getArchivedItems, getHistory, getTimelineData } from "@/lib/queries";
+import {
+  getArchivedItems,
+  getHistory,
+  getItem,
+  getTimelineData,
+  searchHistory,
+} from "@/lib/queries";
+import { searchEvents, searchItems, searchTerms } from "@/lib/search";
+import type { HistoryHit, SearchHit } from "@/lib/search";
 import type { Item, ItemEvent } from "@/lib/types";
 
 // Mutations are plain CRUD against the request's board ({db, userId, boardId} from
@@ -111,6 +121,25 @@ export async function moveItemAction(boardId: string | null, id: string, list: s
   revalidateBoard(bid);
 }
 
+// Move cards into another card (parentId set) or back out onto the board (null) —
+// drag a card onto another card's nest strip, or use the "Inside" picker in the panel.
+// The rules (no cycles, no nesting the note, board-scoped ids) live in lib/nesting.ts;
+// a refusal comes back as a string for the UI to show. `list` only matters when popping
+// out: it's the column the card lands in.
+export async function setParentAction(
+  boardId: string | null,
+  ids: string[],
+  parentId: string | null,
+  list?: string,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  if (list != null && !listExists(db, bid, list)) return "That column no longer exists.";
+  const res = setParent(db, bid, { ids, parentId, actorId: userId, list });
+  if ("error" in res) return res.error;
+  if (res.moved > 0) revalidateBoard(bid);
+  return null;
+}
+
 export async function toggleDoneAction(boardId: string | null, id: string, done: boolean) {
   const { db, userId, boardId: bid } = getBoardContext(boardId);
   db.prepare("update items set done = ?, touched_by = ? where id = ? and board_id is ?").run(
@@ -151,8 +180,20 @@ export async function archivedItemsAction(boardId: string | null): Promise<Item[
   return getArchivedItems(db, bid);
 }
 
+// "none" | "daily" | "weekly:<0-6>" — normalized through lib/recurrence.ts, so
+// anything unrecognised lands on "none" rather than in the column.
+// One card by id (archived included) — how the search overlay opens something that
+// isn't on the live board it already has.
+export async function getItemAction(
+  boardId: string | null,
+  id: string,
+): Promise<Item | null> {
+  const { db, boardId: bid } = getBoardContext(boardId);
+  return getItem(db, bid, id);
+}
+
 export async function setRecurrenceAction(boardId: string | null, id: string, recurrence: string) {
-  const value = recurrence === "daily" ? "daily" : "none";
+  const value = formatRecurrence(parseRecurrence(recurrence));
   const { db, userId, boardId: bid } = getBoardContext(boardId);
   db.prepare("update items set recurrence = ?, touched_by = ? where id = ? and board_id is ?").run(
     value,
@@ -261,6 +302,24 @@ export async function createNoteAction(boardId: string | null) {
     "insert into items (id, text, list, details, user_id, board_id, touched_by) values (?, 'Daily note', 'note', '', ?, ?, ?)",
   ).run(randomUUID(), userId, bid, userId);
   revalidateBoard(bid);
+}
+
+// The half of search that isn't already in the browser: ARCHIVED cards, and the
+// board's HISTORY (what a card used to say). The live board is searched client-side
+// with the same pure matchers (lib/search.ts) — this is the debounced server trip the
+// overlay makes alongside it. Ranking happens here so only the hits cross the wire.
+export async function deepSearchAction(
+  boardId: string | null,
+  query: string,
+): Promise<{ archived: SearchHit[]; history: HistoryHit[] }> {
+  const terms = searchTerms(query);
+  if (terms.length === 0) return { archived: [], history: [] };
+  const { db, boardId: bid } = getBoardContext(boardId);
+  const archivedItems = getArchivedItems(db, bid);
+  return {
+    archived: searchItems(archivedItems, query, 10),
+    history: searchEvents(searchHistory(db, bid, terms), query, 15),
+  };
 }
 
 export async function historyAction(boardId: string | null, id: string): Promise<ItemEvent[]> {

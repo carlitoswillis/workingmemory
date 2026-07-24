@@ -9,11 +9,11 @@ export interface Item {
   details: string;
   list: ListId;
   done: boolean;
-  recurrence: string; // 'none' | 'daily'
+  recurrence: string; // 'none' | 'daily' | 'weekly:<0-6>' — see lib/recurrence.ts
   completed_on: string | null; // YYYY-MM-DD a daily task was last checked off
-  // Every day this daily task ended up checked, from completed_on history events
-  // (lib/streaks.ts). Populated by lib/queries.ts for daily items only — not a DB
-  // column. Streak display = currentStreak() over these, client-side (browser TZ).
+  // Every day this repeating task ended up checked, from completed_on history events
+  // (lib/streaks.ts). Populated by lib/queries.ts for repeating items only — not a DB
+  // column. Streak display = streakFor() over these, client-side (browser TZ).
   completed_days?: string[];
   parent_id: string | null; // a sub-card's parent item; null = top-level board card
   position: number;

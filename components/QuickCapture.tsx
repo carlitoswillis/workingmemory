@@ -47,6 +47,13 @@ export default function QuickCapture({
     inputRef.current?.focus();
   }
 
+  // Clicking away files what you've typed, then closes — same "deselecting commits"
+  // rule as the column capture box (owner call 2026-07-23). Esc still means cancel.
+  function commitAndClose() {
+    submit();
+    onClose();
+  }
+
   // Keep the input's keys away from Board's global handler (undo/select/hotkeys).
   function onKeyDown(e: React.KeyboardEvent) {
     e.stopPropagation();
@@ -63,7 +70,7 @@ export default function QuickCapture({
     <div
       className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[18vh]"
       style={{ background: "var(--scrim-deep)" }}
-      onMouseDown={onClose}
+      onMouseDown={commitAndClose}
       role="dialog"
       aria-modal="true"
       aria-label="Quick capture to Brain Dump"

@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
 import { setDailyDoneAction, toggleDoneAction } from "@/app/actions";
-import { effectiveDone, localToday } from "@/lib/recurrence";
-import { currentStreak } from "@/lib/streaks";
+import { describeRecurrence, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
+import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "./board-context";
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
@@ -33,7 +33,8 @@ export default function ItemCard({
   onOpenCard: (item: Item) => void;
 }) {
   const boardId = useBoardId();
-  const isDaily = item.recurrence === "daily";
+  const rec = parseRecurrence(item.recurrence);
+  const repeats = rec.kind !== "none";
   const [doneLocal, setDoneLocal] = useState(effectiveDone(item));
   useEffect(() => setDoneLocal(effectiveDone(item)), [item]);
   const [, startTransition] = useTransition();
@@ -41,23 +42,25 @@ export default function ItemCard({
   function toggleDone() {
     const next = !doneLocal;
     setDoneLocal(next);
-    if (isDaily) {
+    if (repeats) {
+      // Repeating cards record the DAY they were checked off; done-ness is derived
+      // from it (today for daily, this week for weekly — see lib/recurrence.ts).
       startTransition(() => setDailyDoneAction(boardId, item.id, next ? localToday() : null));
     } else {
       startTransition(() => toggleDoneAction(boardId, item.id, next));
     }
   }
 
-  // Streak follows the optimistic checkbox: fold doneLocal into today before
-  // counting, so checking off shows the new streak instantly.
-  let streak = 0;
-  if (isDaily) {
-    const today = localToday();
-    const days = new Set(item.completed_days ?? []);
-    if (doneLocal) days.add(today);
-    else days.delete(today);
-    streak = currentStreak(days, today);
-  }
+  // Streak follows the optimistic checkbox: fold doneLocal in before counting, so
+  // checking off shows the new streak instantly.
+  const today = localToday();
+  const streak = repeats
+    ? streakFor(
+        daysWithLiveCheck(item.completed_days ?? [], today, item.recurrence, doneLocal, item.completed_on),
+        today,
+        rec,
+      )
+    : 0;
 
   const hasDetails = item.details.trim().length > 0;
   const subTotal = childItems?.length ?? 0;
@@ -125,10 +128,16 @@ export default function ItemCard({
             ↳ {subDone}/{subTotal}
           </span>
         )}
-        {isDaily && (
+        {repeats && (
           <span
             className="mt-[1px] shrink-0 text-[11px] leading-none tabular-nums text-[var(--text-lo)]"
-            title={streak >= 2 ? `Repeats daily — done ${streak} days running` : "Repeats daily"}
+            title={
+              streak >= 2
+                ? `${describeRecurrence(rec)} — done ${streak} ${
+                    rec.kind === "daily" ? "days" : "weeks"
+                  } running`
+                : describeRecurrence(rec)
+            }
             aria-hidden
           >
             ↻{streak >= 2 && <span className="ml-0.5 text-[10px]">{streak}</span>}

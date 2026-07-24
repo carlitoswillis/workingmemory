@@ -15,6 +15,7 @@ export default function Column({
   childrenByParent,
   selection,
   activeId,
+  nesting,
   canDelete,
   onSelect,
   onOpenCard,
@@ -29,6 +30,7 @@ export default function Column({
   childrenByParent: Map<string, Item[]>;
   selection: Set<string>;
   activeId: string | null;
+  nesting: boolean; // a card is mid-drag: open cards offer a "drop inside me" strip
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
@@ -57,12 +59,19 @@ export default function Column({
   const done = items.filter((i) => effectiveDone(i));
   const openIds = open.map((i) => i.id);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  // Enter submits; so does leaving the field with something typed in it (owner call
+  // 2026-07-23: "deselecting the text box should create the card / push enter for u").
+  // A half-typed thought is never silently thrown away.
+  function commitDraft() {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
     onAdd(list.id, text); // optimistic insert lives in Board (owns the card lists)
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    commitDraft();
   }
 
   const isNow = list.id === "today";
@@ -156,6 +165,7 @@ export default function Column({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitDraft}
           placeholder="Capture a thought…"
           className="w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
         />
@@ -172,6 +182,7 @@ export default function Column({
                 childItems={childrenByParent.get(item.id)}
                 selected={selection.has(item.id)}
                 muted={mutedId(item.id)}
+                nestTarget={nesting && item.id !== activeId && !selection.has(item.id)}
                 onSelect={onSelect}
                 onOpenCard={onOpenCard}
               />

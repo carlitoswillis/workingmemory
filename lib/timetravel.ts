@@ -1,5 +1,7 @@
 import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
+// .ts extension so plain-node tests can import this module (see lib/columns.ts).
+import { effectiveDone } from "./recurrence.ts";
 
 // A reconstructed item as it was at some past moment T.
 export interface BoardItemAt {
@@ -42,6 +44,7 @@ export function reconstructItemAt(
   let { text, list, done, archived } = item;
   let details = item.details ?? "";
   let completed_on = item.completed_on ?? null;
+  let parent_id = item.parent_id ?? null;
 
   const after = events
     .filter((e) => ms(e.at) > tt)
@@ -67,6 +70,11 @@ export function reconstructItemAt(
       case "completed_on":
         completed_on = e.old_value;
         break;
+      // Nesting (move into / out of another card). old_value null = it was a
+      // top-level board card at that moment.
+      case "parent":
+        parent_id = e.old_value ?? null;
+        break;
     }
   }
 
@@ -78,13 +86,13 @@ export function reconstructItemAt(
     text,
     details,
     list,
-    // A daily task's done-ness at t is "was it checked off for t's calendar
-    // day" — the live board's effectiveDone(), applied to the reverted state.
-    // (completed_on events only exist from 2026-07-03 on; older moments fall
-    // back to whatever completed_on survives, which mirrors pre-streaks
-    // behavior.) Non-daily items keep the reverted `done` flag.
-    done: item.recurrence === "daily" ? completed_on === localDateOf(t) : done,
-    parent_id: item.parent_id ?? null,
+    // A repeating task's done-ness at t is the live board's effectiveDone() applied
+    // to the reverted state, as of t's calendar day: "was it checked off for that
+    // day" (daily) / "for that week" (weekly). (completed_on events only exist from
+    // 2026-07-03 on; older moments fall back to whatever completed_on survives, which
+    // mirrors pre-streaks behavior.) Non-repeating items keep the reverted `done` flag.
+    done: effectiveDone({ recurrence: item.recurrence, completed_on, done }, localDateOf(t)),
+    parent_id,
     existed: bornAt <= tt,
     archived,
   };

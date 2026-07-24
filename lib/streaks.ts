@@ -8,6 +8,9 @@
 // timestamp (late-night check-offs land on the day the UI said, not the UTC
 // day the write happened).
 
+// .ts extension so plain-node tests can import this module (see lib/columns.ts).
+import { addDays, parseRecurrence, periodStart, type Recurrence } from "./recurrence.ts";
+
 export interface CompletedOnEvent {
   field: string | null;
   old_value: string | null;
@@ -53,4 +56,52 @@ export function currentStreak(days: Set<string>, today: string): number {
     cursor = prevDay(cursor);
   }
   return n;
+}
+
+// The weekly equivalent: consecutive weekly periods with a check-off in them, ending
+// with the current one — or with the previous one when this week's hasn't happened
+// yet (an unfinished week shouldn't read as a broken streak until it's over).
+export function weeklyStreak(days: Set<string>, today: string, weekday: number): number {
+  const checkedIn = (start: string) => {
+    for (let i = 0; i < 7; i++) if (days.has(addDays(start, i))) return true;
+    return false;
+  };
+  const thisPeriod = periodStart(today, weekday);
+  let cursor = checkedIn(thisPeriod) ? thisPeriod : addDays(thisPeriod, -7);
+  let n = 0;
+  while (checkedIn(cursor)) {
+    n++;
+    cursor = addDays(cursor, -7);
+  }
+  return n;
+}
+
+// One call for either kind — how many days/weeks running is this card done?
+export function streakFor(days: Set<string>, today: string, rec: Recurrence): number {
+  if (rec.kind === "daily") return currentStreak(days, today);
+  if (rec.kind === "weekly") return weeklyStreak(days, today, rec.weekday);
+  return 0;
+}
+
+// Fold the LIVE checkbox into the historical day set, so a streak display tracks an
+// optimistic toggle instead of waiting for the refetch. Daily: today is in or out.
+// Weekly: the whole current period is replaced by whatever the checkbox now says.
+export function daysWithLiveCheck(
+  days: Iterable<string>,
+  today: string,
+  recurrence: string,
+  checked: boolean,
+  completedOn: string | null,
+): Set<string> {
+  const rec = parseRecurrence(recurrence);
+  const out = new Set(days);
+  if (rec.kind === "daily") {
+    if (checked) out.add(today);
+    else out.delete(today);
+  } else if (rec.kind === "weekly") {
+    const start = periodStart(today, rec.weekday);
+    for (let i = 0; i < 7; i++) out.delete(addDays(start, i));
+    if (checked) out.add(completedOn ?? today);
+  }
+  return out;
 }

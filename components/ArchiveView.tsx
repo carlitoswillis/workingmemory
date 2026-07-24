@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { archivedItemsAction, unarchiveItemAction } from "@/app/actions";
+import { searchItems } from "@/lib/search";
 import type { Item } from "@/lib/types";
 
 // Browse + restore archived items. Archiving is non-destructive (full history is
@@ -27,11 +28,17 @@ export default function ArchiveView({
 }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Item[] | null>(null);
+  // The board's own search (the "/" overlay) covers live cards only — an archived card
+  // isn't on the board to open. This filters the drawer with the same matcher.
+  const [q, setQ] = useState("");
   const [, startTransition] = useTransition();
+  const shown =
+    items && q.trim() ? searchItems(items, q, items.length).map((h) => h.item) : items;
 
   function openView() {
     setOpen(true);
     setItems(null);
+    setQ("");
     archivedItemsAction(boardId).then(setItems);
   }
 
@@ -91,7 +98,16 @@ export default function ArchiveView({
               board, exactly where its list is now.
             </p>
 
-            {items === null ? (
+            {items !== null && items.length > 0 && (
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter the archive…"
+                className="mb-3 w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
+              />
+            )}
+
+            {items === null || shown === null ? (
               <p className="px-0.5 font-display text-sm italic text-[var(--text-lo)]">
                 Remembering…
               </p>
@@ -99,9 +115,13 @@ export default function ArchiveView({
               <p className="px-0.5 font-display text-sm italic text-[var(--text-lo)]">
                 Nothing archived — the board is all there is.
               </p>
+            ) : shown.length === 0 ? (
+              <p className="px-0.5 font-display text-sm italic text-[var(--text-lo)]">
+                Nothing archived matches that.
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {items.map((it) => {
+                {shown.map((it) => {
                   const preview = it.details.trim();
                   return (
                     <li

@@ -48,6 +48,17 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 - **booleans ↔ 0/1**: SQLite stores `done`/`archived` as integers; `lib/queries.ts` maps
   rows to the boolean `Item` shape. Bind `done ? 1 : 0` in writes (better-sqlite3 rejects JS
   booleans).
+- **Cards nest** (since 2026-07-23): `items.parent_id` was write-once (sub-cards were
+  born inside a parent); re-parenting lives in `lib/nesting.ts` — it refuses loops (walk
+  the parent chain), the note, archived parents, and other boards' ids, and a nested
+  card inherits its parent's list. `items_log_parent_v2` logs it (`moved`/`parent`,
+  values are item ids) so time-travel reconstructs past structure — never log it in app
+  code. Sub-cards still never render as board cards.
+- **Repeating cards are derived, not scheduled** (weekly added 2026-07-23):
+  `recurrence` is `none | daily | weekly:<0-6>` and done-ness comes from whether
+  `completed_on` falls in the current period (`lib/recurrence.ts#effectiveDone`). No
+  midnight job, and the same function answers "was it done at time T". Never store a
+  reset.
 - **Columns are user data** (since 2026-07-07): a `lists` table keyed by `(id,
   user_id)`, CRUD in `lib/columns.ts`, seeded per board on first render from
   `DEFAULT_LISTS` (`lib/lists.ts`) with their stable ids (`today`…`braindump`) so
@@ -59,7 +70,7 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 ## Coding Conventions
 - **Explicit over implicit**: avoid hidden logic and clever indirection.
 - **Verify before declaring done**: `npx tsc --noEmit`, `npm run build`, and `npm test`
-  (5 plain-node suites incl. `lib/users.test.ts` for account isolation). Note: drag interactions can't be auto-tested here
+  (11 plain-node suites). Note: drag interactions can't be auto-tested here
   (no browser) — flag those for owner testing.
 - **Match the owner's taste**: low-key, matte (no glow), thin/uniform cards, smooth on
   desktop AND mobile. See the design notes in `ARCHITECTURE.md`.
@@ -79,5 +90,8 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
 
 ## Gotchas
 - Dev 404s everything / won't start → stale `.next`: `rm -rf .next && npm run dev`.
+- Running `npm run build` while `next dev` is up corrupts the dev server's manifests
+  (every route 500s with "Cannot read properties of undefined (reading 'call')") —
+  they share `.next`. Stop dev first, or `rm -rf .next` and restart after building.
 - Stale process holding port 3000 → `lsof -ti tcp:3000 | xargs kill -9` before restart.
 - dnd-kit + inputs: stop propagation so the keyboard sensor doesn't hijack Enter.

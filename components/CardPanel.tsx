@@ -26,12 +26,23 @@ import {
   editItemAction,
   historyAction,
   reorderItemAction,
+  unarchiveItemAction,
   setDailyDoneAction,
+  setParentAction,
   setRecurrenceAction,
   toggleDoneAction,
 } from "@/app/actions";
-import { effectiveDone, localToday } from "@/lib/recurrence";
-import { currentStreak, prevDay } from "@/lib/streaks";
+import {
+  WEEKDAYS,
+  addDays,
+  describeRecurrence,
+  effectiveDone,
+  formatRecurrence,
+  localToday,
+  parseRecurrence,
+  periodStart,
+} from "@/lib/recurrence";
+import { daysWithLiveCheck, prevDay, streakFor } from "@/lib/streaks";
 import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
 import { useBoardId } from "./board-context";
@@ -43,13 +54,22 @@ const Markdown = dynamic(() => import("./Markdown"), {
   loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
 });
 
-function describe(e: ItemEvent, labelOf: (id: string) => string): string {
+function describe(
+  e: ItemEvent,
+  labelOf: (id: string) => string,
+  titleOf: (id: string) => string,
+): string {
   switch (e.type) {
     case "created":
       return `Captured: “${e.new_value}”`;
     case "edited":
       return e.field === "details" ? "Edited details" : "Reworded";
     case "moved":
+      // Two kinds of move: between columns, and in/out of another card (field 'parent').
+      if (e.field === "parent") {
+        if (e.new_value) return `Nested in “${titleOf(e.new_value)}”`;
+        return `Moved out of “${titleOf(e.old_value ?? "")}” onto the board`;
+      }
       return `Moved ${labelOf(e.old_value ?? "")} → ${labelOf(e.new_value ?? "")}`;
     case "completed":
       return e.field === "completed_on" ? `Checked off for ${e.new_value}` : "Marked done";
@@ -78,6 +98,7 @@ export default function CardPanel({
   allLists,
   listLabels,
   actors,
+  allItems,
   childItems,
   childrenByParent,
   onOpenCard,
@@ -89,6 +110,7 @@ export default function CardPanel({
   allLists: readonly ListDef[];
   listLabels: Record<string, string>;
   actors: Record<string, string>;
+  allItems: Item[]; // every live card on the board — the "Inside" picker's candidates
   childItems: Item[];
   childrenByParent: Map<string, Item[]>;
   onOpenCard: (item: Item) => void;
@@ -96,6 +118,7 @@ export default function CardPanel({
   onClose: () => void;
 }) {
   const labelOf = (id: string) => listLabels[id] ?? id;
+  const titleOf = (id: string) => allItems.find((i) => i.id === id)?.text ?? "a card";
   const boardId = useBoardId();
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
@@ -108,16 +131,62 @@ export default function CardPanel({
   const detailsRef = useRef<HTMLTextAreaElement>(null);
   const [childDraft, setChildDraft] = useState("");
   const [events, setEvents] = useState<ItemEvent[] | null>(null);
+  const [nestError, setNestError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // "Inside": move this card into another card, or back out onto the board. (Dragging
+  // a card onto another card's ↳ edge does the same thing from the board.) Candidates
+  // are every live card except this one and its own sub-tree — a card can't contain
+  // itself. Listed per column, indented by depth, so a deep sub-card is pickable too.
+  const subtree = new Set<string>([item.id]);
+  (function collect(id: string) {
+    for (const c of childrenByParent.get(id) ?? []) {
+      subtree.add(c.id);
+      collect(c.id);
+    }
+  })(item.id);
+
+  function candidatesIn(listId: string): { id: string; text: string; depth: number }[] {
+    const out: { id: string; text: string; depth: number }[] = [];
+    (function walk(siblings: Item[], depth: number) {
+      for (const it of siblings) {
+        if (subtree.has(it.id)) continue; // skips its whole branch with it
+        out.push({ id: it.id, text: it.text, depth });
+        walk(childrenByParent.get(it.id) ?? [], depth + 1);
+      }
+    })(allItems.filter((i) => !i.parent_id && i.list === listId), 0);
+    return out;
+  }
+
+  function chooseParent(value: string) {
+    setNestError(null);
+    const parentId = value || null;
+    startTransition(async () => {
+      // Popping out: land it in whatever column the List dropdown currently shows.
+      const err = await setParentAction(
+        boardId,
+        [item.id],
+        parentId,
+        parentId ? undefined : listValue,
+      );
+      if (err) setNestError(err);
+    });
+  }
 
   const subDone = childItems.filter((c) => effectiveDone(c)).length;
 
-  function addChild(e: React.FormEvent) {
-    e.preventDefault();
+  // Enter adds the sub-card; so does leaving the field with text in it (same
+  // "deselecting commits" rule as the column capture box — see Column.tsx).
+  function commitChild() {
     const t = childDraft.trim();
     if (!t) return;
     setChildDraft("");
     startTransition(() => addChildAction(boardId, item.id, t));
+  }
+
+  function addChild(e: React.FormEvent) {
+    e.preventDefault();
+    commitChild();
   }
 
   // Local (optimistic) order of the sub-cards so drag-reorder feels instant; re-syncs
@@ -176,29 +245,42 @@ export default function CardPanel({
     startTransition(() => editDetailsAction(boardId, item.id, details));
   }
 
-  const isDaily = item.recurrence === "daily";
+  const rec = parseRecurrence(item.recurrence);
+  const repeats = rec.kind !== "none";
   const effDone = effectiveDone(item);
 
-  // Streak + last-14-days strip (daily tasks). completed_days comes from the
-  // event log via lib/queries.ts; fold in the live checkbox so the display
-  // tracks an optimistic toggle without waiting for the refetch.
+  // Streak + recent-history strip for a repeating card: the last 14 days (daily) or
+  // the last 8 weeks (weekly). completed_days comes from the event log via
+  // lib/queries.ts; the live checkbox is folded in so the display tracks an
+  // optimistic toggle without waiting for the refetch.
   const today = localToday();
-  const dayset = new Set(item.completed_days ?? []);
-  if (isDaily) {
-    if (effDone) dayset.add(today);
-    else dayset.delete(today);
-  }
-  const streak = isDaily ? currentStreak(dayset, today) : 0;
-  const recentDays: { day: string; done: boolean }[] = [];
-  if (isDaily) {
+  const dayset = daysWithLiveCheck(
+    item.completed_days ?? [],
+    today,
+    item.recurrence,
+    effDone,
+    item.completed_on,
+  );
+  const streak = streakFor(dayset, today, rec);
+  const recent: { key: string; done: boolean; title: string }[] = [];
+  if (rec.kind === "daily") {
     let d = today;
     for (let i = 0; i < 14; i++) {
-      recentDays.unshift({ day: d, done: dayset.has(d) });
+      recent.unshift({ key: d, done: dayset.has(d), title: d });
       d = prevDay(d);
+    }
+  } else if (rec.kind === "weekly") {
+    let start = periodStart(today, rec.weekday);
+    for (let i = 0; i < 8; i++) {
+      const done = Array.from({ length: 7 }, (_, k) => addDays(start, k)).some((d) =>
+        dayset.has(d),
+      );
+      recent.unshift({ key: start, done, title: `week of ${start}` });
+      start = addDays(start, -7);
     }
   }
   function toggleDone() {
-    if (isDaily) {
+    if (repeats) {
       startTransition(() => setDailyDoneAction(boardId, item.id, effDone ? null : localToday()));
     } else {
       startTransition(() => toggleDoneAction(boardId, item.id, !item.done));
@@ -257,7 +339,13 @@ export default function CardPanel({
                 </svg>
               )}
             </span>
-            {effDone ? (isDaily ? "Done today" : "Done") : "Mark done"}
+            {effDone
+              ? rec.kind === "daily"
+                ? "Done today"
+                : rec.kind === "weekly"
+                  ? "Done this week"
+                  : "Done"
+              : "Mark done"}
           </button>
         </div>
 
@@ -359,6 +447,7 @@ export default function CardPanel({
               value={childDraft}
               onChange={(e) => setChildDraft(e.target.value)}
               onKeyDown={(e) => e.stopPropagation()}
+              onBlur={commitChild}
               placeholder="Add a sub-card…"
               className="w-full rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
             />
@@ -382,53 +471,130 @@ export default function CardPanel({
               </option>
             ))}
           </select>
-          <button
-            onClick={() => {
-              startTransition(() => archiveItemAction(boardId, item.id));
-              onClose();
-            }}
-            className="ml-auto rounded-md px-2 py-1 text-xs text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
-          >
-            Archive
-          </button>
+          {/* Search can open an ARCHIVED card (from the archive or from a history
+              hit), so the panel offers the way back rather than a second archive. */}
+          {item.archived ? (
+            <button
+              onClick={() => startTransition(() => unarchiveItemAction(boardId, item.id))}
+              title="Put this card back on the board"
+              className="ml-auto rounded-md border border-[var(--veil)] px-2.5 py-1 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)]"
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                startTransition(() => archiveItemAction(boardId, item.id));
+                onClose();
+              }}
+              className="ml-auto rounded-md px-2 py-1 text-xs text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
+            >
+              Archive
+            </button>
+          )}
         </div>
 
-        <button
-          onClick={() => startTransition(() => setRecurrenceAction(boardId, item.id, isDaily ? "none" : "daily"))}
-          className={`mt-3 flex items-center gap-2 rounded-md px-1 py-1 text-xs transition-colors ${
-            isDaily ? "text-[var(--now)]" : "text-[var(--text-lo)] hover:text-[var(--text-mid)]"
-          }`}
-        >
-          <span aria-hidden>↻</span>
-          {isDaily ? "Repeats daily — resets each morning" : "Repeat daily"}
-        </button>
+        {item.list !== "note" && (
+          <div className="mt-3">
+            <div className="flex items-center gap-2">
+              <label className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+                Inside
+              </label>
+              <select
+                value={item.parent_id ?? ""}
+                onChange={(e) => chooseParent(e.target.value)}
+                title="Move this card into another card, or back out onto the board"
+                className="min-w-0 flex-1 rounded-md border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-1 text-xs text-[var(--text-mid)] focus:border-[var(--now)] focus:outline-none"
+              >
+                <option value="">— on the board —</option>
+                {allLists.map((l) => {
+                  const cands = candidatesIn(l.id);
+                  if (cands.length === 0) return null;
+                  return (
+                    <optgroup key={l.id} label={l.label}>
+                      {cands.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {"· ".repeat(c.depth)}
+                          {c.text.length > 48 ? `${c.text.slice(0, 47)}…` : c.text}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
+            {nestError && (
+              <p className="mt-1.5 px-1 text-[11px] text-[var(--now)]">{nestError}</p>
+            )}
+          </div>
+        )}
 
-        {isDaily && (
+        {/* Repeat: never / every day / a weekday. A weekly card checked off STAYS
+            done until its weekday comes round again — the reset is derived from
+            completed_on, so nothing has to run at midnight (lib/recurrence.ts). */}
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            aria-hidden
+            className={repeats ? "text-[var(--now)]" : "text-[var(--text-lo)]"}
+          >
+            ↻
+          </span>
+          <label className="sr-only" htmlFor="wm-repeat">
+            Repeat
+          </label>
+          <select
+            id="wm-repeat"
+            value={formatRecurrence(rec)}
+            onChange={(e) =>
+              startTransition(() => setRecurrenceAction(boardId, item.id, e.target.value))
+            }
+            className={`min-w-0 flex-1 rounded-md border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-1 text-xs focus:border-[var(--now)] focus:outline-none ${
+              repeats ? "text-[var(--now)]" : "text-[var(--text-mid)]"
+            }`}
+          >
+            <option value="none">{describeRecurrence({ kind: "none" })}</option>
+            <option value="daily">{describeRecurrence({ kind: "daily" })}</option>
+            {WEEKDAYS.map((w, i) => (
+              <option key={w} value={`weekly:${i}`}>
+                {describeRecurrence({ kind: "weekly", weekday: i })}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {repeats && (
           <div className="mt-2 px-1">
             <p className="text-[11px] text-[var(--text-lo)]">
+              {rec.kind === "daily"
+                ? "Resets each morning."
+                : `Stays done until ${WEEKDAYS[rec.weekday]}, then reopens.`}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--text-lo)]">
               {streak >= 2 ? (
                 <>
                   Done{" "}
-                  <span className="tabular-nums text-[var(--text-mid)]">{streak} days</span>{" "}
+                  <span className="tabular-nums text-[var(--text-mid)]">
+                    {streak} {rec.kind === "daily" ? "days" : "weeks"}
+                  </span>{" "}
                   running
                 </>
               ) : streak === 1 ? (
-                "Done today — day 1"
+                rec.kind === "daily" ? "Done today — day 1" : "Done this week — week 1"
               ) : (
                 "No streak yet — check it off to start one"
               )}
             </p>
-            {/* Last 14 days, oldest → today. Filled = checked off that day. */}
+            {/* Oldest → now: the last 14 days, or the last 8 weeks. Filled = done. */}
             <div className="mt-1.5 flex items-center gap-1">
-              {recentDays.map((d) => (
+              {recent.map((r) => (
                 <span
-                  key={d.day}
-                  title={`${d.day}${d.done ? " — done" : ""}`}
-                  className="h-2 w-2 rounded-[3px]"
+                  key={r.key}
+                  title={`${r.title}${r.done ? " — done" : ""}`}
+                  className={`h-2 rounded-[3px] ${rec.kind === "weekly" ? "w-4" : "w-2"}`}
                   style={{
-                    background: d.done ? "var(--done)" : "var(--surface-2)",
+                    background: r.done ? "var(--done)" : "var(--surface-2)",
                     border: "1px solid var(--veil)",
-                    opacity: d.done ? 0.9 : 0.6,
+                    opacity: r.done ? 0.9 : 0.6,
                   }}
                 />
               ))}
@@ -438,6 +604,9 @@ export default function CardPanel({
 
         <p className="mt-3 px-1 text-[11px] text-[var(--text-lo)]">
           Captured {fmt(item.created_at)} · updated {fmt(item.updated_at)}
+          {item.archived && (
+            <span className="ml-1 text-[var(--text-mid)]">· archived</span>
+          )}
         </p>
 
         {/* History */}
@@ -456,7 +625,7 @@ export default function CardPanel({
                       background: i === events.length - 1 ? "var(--now)" : "var(--surface)",
                     }}
                   />
-                  <p className="text-sm text-[var(--text-hi)]">{describe(e, labelOf)}</p>
+                  <p className="text-sm text-[var(--text-hi)]">{describe(e, labelOf, titleOf)}</p>
                   {e.type === "edited" && (
                     <p className="mt-1 font-display text-xs italic leading-snug text-[var(--text-lo)]">
                       <span className="line-through">{e.old_value}</span>{" "}

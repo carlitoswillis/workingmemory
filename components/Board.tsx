@@ -6,11 +6,13 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -29,11 +31,13 @@ import {
   addItemAction,
   addListAction,
   deleteListAction,
+  getItemAction,
   moveItemAction,
   renameListAction,
   reorderItemAction,
   reorderItemsAction,
   reorderListsAction,
+  setParentAction,
   timelineDataAction,
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
@@ -44,6 +48,7 @@ import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
 import TimeMachineBar from "./TimeMachineBar";
 import QuickCapture from "./QuickCapture";
+import SearchOverlay from "./SearchOverlay";
 
 type Grouped = Record<string, Item[]>;
 type Move = { id: string; list: string; position: number };
@@ -61,6 +66,25 @@ function spacedPositions(prev: number | undefined, next: number | undefined, n: 
   const base = Date.now();
   return Array.from({ length: n }, (_, i) => base + 1000 * i);
 }
+
+// Two kinds of drop target now share the board: the sortable cards/columns, and the
+// "nest strip" on each card's right edge (drop INSIDE that card — see
+// SortableItemCard). A nest strip only wins when the pointer is literally inside it;
+// everything else falls through to the usual closest-corners sorting, so reordering
+// behaves exactly as before.
+const boardCollisionDetection: CollisionDetection = (args) => {
+  const nests = args.droppableContainers.filter((c) => c.data.current?.type === "nest");
+  if (nests.length > 0) {
+    const hits = pointerWithin({ ...args, droppableContainers: nests });
+    if (hits.length > 0) return hits;
+  }
+  return closestCorners({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => c.data.current?.type !== "nest",
+    ),
+  });
+};
 
 // Group TOP-LEVEL items into per-list arrays, preserving their (position-sorted)
 // order. Sub-cards (parent_id set) never render as board cards — they live inside
@@ -101,13 +125,21 @@ export default function Board({
   actors: Record<string, string>; // actor_id -> username, for history attribution
   items: Item[];
 }) {
+  // Cards search dug up that aren't on the live board (archived ones, or the card
+  // behind a history hit). Kept alongside `items` purely so the panel can open them;
+  // once one is restored it comes back through `items` and that copy wins.
+  const [found, setFound] = useState<Item[]>([]);
+  const lookup = (id: string): Item | null =>
+    items.find((i) => i.id === id) ?? found.find((i) => i.id === id) ?? null;
+
   const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const openCard = openCardId ? items.find((i) => i.id === openCardId) ?? null : null;
+  const openCard = openCardId ? lookup(openCardId) : null;
 
   // Quick-capture overlay: a keyboard-first "dump to Brain Dump" always in reach.
   const [captureOpen, setCaptureOpen] = useState(false);
-  const openParent =
-    openCard?.parent_id ? items.find((i) => i.id === openCard.parent_id) ?? null : null;
+  // Search overlay ("/"): find a card anywhere on the board, sub-cards included.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openParent = openCard?.parent_id ? lookup(openCard.parent_id) : null;
 
   // Direct children per parent — drives the panel's sub-cards and the board badge.
   const childrenByParent = groupChildren(items);
@@ -135,10 +167,10 @@ export default function Board({
   //    resolves openCardId from the entry we land on — one code path for gesture + button.
   function chainOf(id: string): string[] {
     const chain: string[] = [];
-    let cur: Item | undefined = items.find((i) => i.id === id);
+    let cur: Item | null = lookup(id);
     while (cur) {
       chain.unshift(cur.id);
-      cur = cur.parent_id ? items.find((i) => i.id === cur!.parent_id) : undefined;
+      cur = cur.parent_id ? lookup(cur.parent_id) : null;
     }
     return chain;
   }
@@ -174,6 +206,18 @@ export default function Board({
   function openCardFromBoard(item: Item) {
     clearSelection();
     navigateTo(item.id);
+  }
+
+  // Open a card by id — the search overlay's "pick", which may point at an archived
+  // card or at whatever card a history hit belongs to. Anything not on the live board
+  // is fetched once and parked in `found` so the panel has a row to render.
+  async function openById(id: string) {
+    if (!lookup(id)) {
+      const fetched = await getItemAction(boardId, id);
+      if (!fetched) return;
+      setFound((prev) => [...prev.filter((p) => p.id !== id), fetched]);
+    }
+    navigateTo(id);
   }
 
   // Time machine. The full (small, single-user) event log is shipped to the client once,
@@ -218,18 +262,18 @@ export default function Board({
   // NOTE: these MUST run inside startTransition — that's what makes the action's
   // revalidatePath refresh the board on the client. Called bare, the soft-delete
   // lands on the server but the column lingers on screen until a reload.
-  const [columnError, setColumnError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   function addColumn(label: string) {
     startTransition(async () => {
       const err = await addListAction(boardId, label);
-      if (err) setColumnError(err);
+      if (err) setNotice(err);
     });
   }
   function renameColumn(id: string, label: string) {
     startTransition(() => renameListAction(boardId, id, label));
   }
   function deleteColumn(id: string) {
-    startTransition(async () => setColumnError(await deleteListAction(boardId, id)));
+    startTransition(async () => setNotice(await deleteListAction(boardId, id)));
   }
 
   // Cards grouped by list. A ref mirrors state so drag handlers never read stale data.
@@ -261,9 +305,11 @@ export default function Board({
   timeTravelingRef.current = snapshot !== null;
 
   // Undo for moves: capture each dragged card's origin (list+position) at drag start,
-  // push it on a stack when the move lands, and ⌘/Ctrl-Z (or the Undo pill) restores it.
+  // push a "put it back" step on a stack when the move lands, and ⌘/Ctrl-Z (or the Undo
+  // pill) runs it. A step is a closure rather than a plain list of positions because
+  // nesting has to undo two things (the parent AND where the card sat on the board).
   const dragOriginRef = useRef<Move[]>([]);
-  const undoStack = useRef<Move[][]>([]);
+  const undoStack = useRef<{ label: string; run: () => void }[]>([]);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [undoHint, setUndoHint] = useState<string | null>(null);
 
@@ -282,12 +328,20 @@ export default function Board({
     return out;
   }
 
-  function pushUndo(prev: Move[], label: string) {
-    if (prev.length === 0) return;
-    undoStack.current.push(prev);
+  function pushUndo(label: string, run: () => void) {
+    undoStack.current.push({ label, run });
     setUndoHint(label);
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoHint(null), 6000);
+  }
+
+  // The common case: put these cards back where they were on the board.
+  function pushMoveUndo(prev: Move[], label: string) {
+    if (prev.length === 0) return;
+    pushUndo(label, () => {
+      applyMoves(prev);
+      reorderItemsAction(boardId, prev);
+    });
   }
 
   function applyMoves(moves: Move[]) {
@@ -305,11 +359,10 @@ export default function Board({
   }
 
   function performUndo() {
-    const prev = undoStack.current.pop();
+    const step = undoStack.current.pop();
     setUndoHint(null);
-    if (!prev || prev.length === 0) return;
-    applyMoves(prev);
-    startTransition(() => reorderItemsAction(boardId, prev));
+    if (!step) return;
+    startTransition(() => step.run());
   }
 
   // Optimistic add: drop a temp card into its list immediately, then persist. When the
@@ -411,7 +464,13 @@ export default function Board({
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     if (typing) return;
     // Quick-capture (live board only): ⌘/Ctrl-K or a bare "c". Not while time-traveling.
-    const canCapture = snapshot === null && !captureOpen;
+    const canCapture = snapshot === null && !captureOpen && !searchOpen;
+    // Search: "/" — the same live-board rule (a past card has no panel to open).
+    if (canCapture && e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      setSearchOpen(true);
+      return;
+    }
     if (canCapture && (e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
       e.preventDefault();
       setCaptureOpen(true);
@@ -607,6 +666,48 @@ export default function Board({
     const draggedId = String(active.id);
     const overId = String(over.id);
 
+    // NEST: dropped on a card's "↳" strip — the dragged card (or the whole selection)
+    // moves INSIDE that card and off the board's top level. Optimistically pull the
+    // cards out of their columns; the server decides for real (it refuses loops), and
+    // a refusal puts the board straight back.
+    if (over.data.current?.type === "nest") {
+      const parentId = String(over.data.current.itemId);
+      const ids =
+        selection.has(draggedId) && selection.size > 1 ? [...selection] : [draggedId];
+      if (ids.includes(parentId)) return;
+      const before = itemsRef.current;
+      const next: Grouped = {};
+      for (const k of Object.keys(before)) next[k] = before[k].filter((it) => !ids.includes(it.id));
+      itemsRef.current = next;
+      setItemsByList(next);
+      clearSelection();
+
+      const origins = dragOriginRef.current;
+      const parentText = Object.values(before).flat().find((i) => i.id === parentId)?.text;
+      pushUndo(
+        ids.length > 1 ? `Nested ${ids.length} cards` : "Nested card",
+        () => {
+          // Two steps: back out onto the board, then back into the exact slot it left.
+          setParentAction(boardId, ids, null).then(() => reorderItemsAction(boardId, origins));
+        },
+      );
+      startTransition(async () => {
+        const err = await setParentAction(boardId, ids, parentId);
+        if (err) {
+          itemsRef.current = before;
+          setItemsByList(before);
+          undoStack.current.pop();
+          setUndoHint(null);
+          setNotice(err);
+        } else if (parentText) {
+          setUndoHint(
+            ids.length > 1 ? `Nested ${ids.length} cards in “${parentText}”` : `Nested in “${parentText}”`,
+          );
+        }
+      });
+      return;
+    }
+
     // MULTI-SELECT: relocate the whole selected set as a contiguous block, in board
     // reading order, into the target list at the drop point.
     if (selection.has(draggedId) && selection.size > 1) {
@@ -648,7 +749,7 @@ export default function Board({
       itemsRef.current = work;
       setItemsByList(work);
       clearSelection();
-      pushUndo(dragOriginRef.current, `Moved ${block.length} cards`);
+      pushMoveUndo(dragOriginRef.current, `Moved ${block.length} cards`);
       startTransition(() =>
         reorderItemsAction(
           boardId,
@@ -682,7 +783,7 @@ export default function Board({
     setItemsByList(next);
     const origin = dragOriginRef.current[0];
     if (!origin || origin.list !== list || oldIndex !== newIndex) {
-      pushUndo(dragOriginRef.current, "Moved card");
+      pushMoveUndo(dragOriginRef.current, "Moved card");
     }
     startTransition(() => reorderItemAction(boardId, String(active.id), list, pos));
   }
@@ -718,7 +819,7 @@ export default function Board({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={boardCollisionDetection}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
@@ -735,6 +836,7 @@ export default function Board({
                   childrenByParent={childrenByParent}
                   selection={selection}
                   activeId={activeId}
+                  nesting={activeItem !== null}
                   canDelete={orderedLists.length > 1}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}
@@ -801,11 +903,11 @@ export default function Board({
         </div>
       )}
 
-      {columnError && (
+      {notice && (
         <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
-          <span className="text-sm text-[var(--text-mid)]">{columnError}</span>
+          <span className="text-sm text-[var(--text-mid)]">{notice}</span>
           <button
-            onClick={() => setColumnError(null)}
+            onClick={() => setNotice(null)}
             className="rounded-full px-3 py-1 text-xs text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
           >
             Dismiss
@@ -813,22 +915,47 @@ export default function Board({
         </div>
       )}
 
-      {!snapshot && !captureOpen && selection.size === 0 && (
-        <button
-          onClick={() => setCaptureOpen(true)}
-          title="Quick capture to Brain Dump · c"
-          aria-label="Quick capture to Brain Dump"
-          className="fixed bottom-5 right-5 z-40 flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] pl-3.5 pr-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
-        >
-          <span className="text-[var(--now)]" aria-hidden>
-            ＋
-          </span>
-          Capture
-          <kbd className="hidden font-grotesk text-[11px] text-[var(--text-lo)] sm:inline">
-            c
-          </kbd>
-        </button>
+      {!snapshot && !captureOpen && !searchOpen && selection.size === 0 && (
+        <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2">
+          <button
+            onClick={() => setSearchOpen(true)}
+            title="Search this board · /"
+            aria-label="Search this board"
+            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
+              <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Search
+            <kbd className="hidden font-grotesk text-[11px] text-[var(--text-lo)] sm:inline">
+              /
+            </kbd>
+          </button>
+          <button
+            onClick={() => setCaptureOpen(true)}
+            title="Quick capture to Brain Dump · c"
+            aria-label="Quick capture to Brain Dump"
+            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] pl-3.5 pr-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
+          >
+            <span className="text-[var(--now)]" aria-hidden>
+              ＋
+            </span>
+            Capture
+            <kbd className="hidden font-grotesk text-[11px] text-[var(--text-lo)] sm:inline">
+              c
+            </kbd>
+          </button>
+        </div>
       )}
+
+      <SearchOverlay
+        open={searchOpen}
+        items={items.filter((i) => i.list !== NOTE_LIST)}
+        listLabels={listLabels}
+        onPick={openById}
+        onClose={() => setSearchOpen(false)}
+      />
 
       <QuickCapture
         open={captureOpen}
@@ -847,6 +974,7 @@ export default function Board({
           allLists={lists}
           listLabels={listLabels}
           actors={actors}
+          allItems={items}
           childItems={childrenByParent.get(openCard.id) ?? []}
           childrenByParent={childrenByParent}
           onOpenCard={(item) => navigateTo(item.id)}

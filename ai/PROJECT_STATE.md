@@ -55,6 +55,16 @@ a real structure without losing its looseness.
     owner questions at the bottom gate the build.
 
 ## Backlog
+- [x] **Move cards into other cards and out of cards** — BUILT 2026-07-23, awaiting
+      owner eyeball (see Awaiting owner). Drag a card onto another card's ↳ edge, or
+      use the panel's "Inside" picker; `lib/nesting.ts` + a parent trigger.
+- [x] **Search function** — BUILT 2026-07-23 ("/" or the Search button). Three
+      sections in one overlay: the live board (client-side, instant), the archive, and
+      the HISTORY log (what a card used to say) — the last two on one debounced server
+      action. Opening an archived hit gives you its panel + Restore.
+- [x] **Deselecting text box should create the card** — BUILT 2026-07-23: the column
+      capture box, the sub-card box, and quick-capture all commit on blur (Esc still
+      cancels quick capture).
 - [ ] stress testing [nvm maybe] + response time reduction
 - [x] **Light and Dark mode options** — BUILT 2026-07-05 per
       `ai/plans/2026-07-05-light-mode.md`, awaiting owner eyeball (see Awaiting
@@ -77,7 +87,11 @@ a real structure without losing its looseness.
       app-level field crypto is the likelier shape. Password-derived keys ⇒
       forgotten password = unrecoverable data (hence: recovery codes first).
       Needs its own plan.
-- [ ] Search across items + their history.
+- [x] **Search across items + their history** — BUILT 2026-07-23 together with the
+      search overlay (text/details edits + the original capture wording, over
+      `item_events`). NOT covered: searching *structural* history (when a card was in
+      Waiting, who moved it) — that's a query over `moved` events, worth its own item
+      if you ever want it.
 - [ ] **AI integration** (the real differentiator — point an LLM at the event
       stream): weekly review that writes itself; auto-triage of brain dumps; "ask
       your history". Plan: `ai/plans/2026-07-03-ai-weekly-review.md`. Owner call
@@ -89,8 +103,10 @@ a real structure without losing its looseness.
       and grounded on the current Claude API (`claude-opus-4-8`, Messages API,
       `output_config.effort`, env-gated off). Awaiting green-light on the plan's §9
       gates: SDK vs fetch, any-member vs owner-only, model default, review window.
-- [ ] Weekly-reset + weekday-specific recurring tasks (e.g. "Wednesdays: no car,
-      do laundry"). Lower priority than the daily reset that already shipped.
+- [x] **Weekly-reset + weekday-specific recurring tasks** (e.g. "Wednesdays: no car,
+      do laundry") — BUILT 2026-07-23 per the owner's ask: a card can repeat on a
+      chosen weekday and STAYS done until that weekday comes round again. Awaiting
+      owner eyeball.
 - [ ] Life-area tags (Maintenance / Health / Career / Recreation) as a
       cross-cutting filter over items.
 - [ ] **Capture-from-anywhere via email → append to the Note** (owner idea
@@ -151,6 +167,33 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-07-23 batch eyeball** (built, NOT yet committed or deployed — see Completed
+  log for what each one is). On the board:
+  - **Nesting**: drag a card and watch the other cards grow a "↳" strip on their right
+    edge; drop on it → the card moves inside, the board badge (↳ 0/1) appears, ⌘Z
+    undoes it. Then open a card → the "Inside" picker: move it under another card, and
+    back to "— on the board —" (it lands in whatever the List dropdown says). Check the
+    refusals surface (a card can't go inside its own sub-card), that history reads
+    "Nested in …" / "Moved out of … onto the board", and that a snapshot in the time
+    machine shows the OLD structure at that moment. **Multi-select nest** (⌘-click a
+    few, drag one onto a strip) is the other drag path to try. Phone: the strip is
+    44px, so a long-press drag should be able to hit it — worth a check.
+  - **Search**: "/" or the Search button (bottom right, next to Capture). Type part of
+    a card's title or details; ↑↓ + Enter opens it. Sub-card hits say which card
+    they're in. Then check the two deeper sections (they appear after ~250ms, from 2
+    characters on): **Archived** — open one and the panel offers Restore instead of
+    Archive; **In history** — search a word you've since edited out of a card or out
+    of the daily note, and it should come back labelled "used to say" / "as first
+    captured" with the date. The Archive drawer also has its own filter box.
+  - **Blur commits a draft**: type in a column's capture box and click elsewhere — the
+    card should be created, not lost. Same for the sub-card box, and for quick-capture
+    when you click outside it (Esc still discards).
+  - **Weekly cards**: open a card → the ↻ row is now a picker (Doesn't repeat / Every
+    day / Every ⟨weekday⟩). Set one to Every Wednesday, check it off, confirm it reads
+    "Done this week" and stays done tomorrow; the strip shows the last 8 weeks and the
+    streak counts weeks. Existing daily cards must behave exactly as before.
+  - Not verifiable here: every drag interaction (no browser in this environment — the
+    Chrome extension couldn't reach the local dev server either).
 - **B2 Class C fix — ops half. DONE 2026-07-09; site confirmed back up.** All four
   steps landed: the B2 Class C daily cap was raised off $0 (replication resumed),
   the keep-alive HTTP monitor now hits `/api/health` every ~5 min (the root cure —
@@ -197,6 +240,46 @@ a real structure without losing its looseness.
 
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-07-23 — Cards inside cards (nesting), board search, blur-commits-a-draft,
+  weekly recurring cards.** Four backlog items in one batch; all verified with tsc,
+  11 node suites (3 new), and a prod build (board 125kB First Load, from 118kB).
+  - *Nesting* — sub-cards existed but could only be BORN inside a parent; the missing
+    verb was re-parenting. `lib/nesting.ts` (pure, `board_id IS ?` scoped) refuses
+    loops (walks the parent chain), the daily note, archived parents, and cross-board
+    ids; the subtree rides along by reference. A nested card inherits its parent's
+    column, so popping it out lands somewhere real. History stays DB-driven: a new
+    `items_log_parent_v2` trigger logs `moved`/`parent` (values are item ids, null =
+    the board), and `lib/timetravel.ts` reverts it, so a snapshot shows the structure
+    as it WAS. UI: a 44px "↳" drop strip on each card while another card is dragging
+    (a custom collision detector gives nest strips priority ONLY when the pointer is
+    inside one — plain reordering is untouched), plus an "Inside" picker in the panel
+    (optgroups per column, indented by depth, excludes the card's own subtree). The
+    undo stack now holds closures instead of position lists, so ⌘Z undoes a nest too.
+  - *Search* — "/" (or the button next to Capture) opens one overlay over three
+    layers. **The board**: `lib/search.ts` is pure, AND-of-terms over title + details,
+    title hits above details hits, most-recently-touched first, matched against the
+    cards the client ALREADY has — instant, no round-trip, no index. **The archive**
+    and **the history log**: one debounced (250ms, ≥2 chars) `deepSearchAction`.
+    History is the differentiator — `searchHistory` (lib/queries.ts) narrows
+    `item_events` in SQL (text/details edits + the 'created' wording, escaped LIKE per
+    term, board-scoped through the items join) and `searchEvents` ranks it newest-first
+    with a 2-hits-per-card cap, showing the OLD side ("used to say" / "as first
+    captured"). Picking any hit opens the card: Board keeps a small `found` list for
+    rows that aren't on the live board, fetched via `getItemAction`, and the panel
+    swaps Archive for **Restore** on an archived card. The Archive drawer also got a
+    filter box using the same matcher. The daily note is excluded from the live
+    section only (it has no panel) — its text is still searchable through history.
+  - *Blur commits* — the column capture box, the panel's sub-card box, and
+    quick-capture (click-away) now create the card instead of dropping the draft;
+    Esc on quick-capture still cancels.
+  - *Weekly cards* — `items.recurrence` gained a third form, `weekly:<0-6>` (0 =
+    Sunday), so no migration: done-ness stays DERIVED from `completed_on` — the card
+    counts as done while that date sits inside the current period (today for daily,
+    weekday→next-weekday for weekly), which is why the reset needs no scheduled job
+    and the time machine can ask "was it done then?" by passing a past date.
+    `lib/recurrence.ts` owns the parsing/period math, `lib/streaks.ts` gained
+    `weeklyStreak`/`streakFor`/`daysWithLiveCheck`. The panel's ↻ toggle became a
+    picker; the strip shows 8 weeks for a weekly card and the streak counts weeks.
 - **2026-07-09 — B2 Class C incident closed.** Cap raised off $0, keep-alive
   monitor on `/api/health` live, `1d64182` deployed; site confirmed back up.
   The keep-alive is the load-bearing piece — the retention config only helps once

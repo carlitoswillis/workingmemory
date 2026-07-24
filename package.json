@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "icons": "node scripts/gen-icons.mjs",
-    "test": "node lib/timetravel.test.ts && node lib/demo/seed.test.ts && node lib/auth.test.ts && node lib/streaks.test.ts && node lib/users.test.ts && node lib/columns.test.ts && node lib/boards.test.ts && node lib/realtime.test.ts"
+    "test": "node lib/timetravel.test.ts && node lib/demo/seed.test.ts && node lib/auth.test.ts && node lib/streaks.test.ts && node lib/users.test.ts && node lib/columns.test.ts && node lib/boards.test.ts && node lib/realtime.test.ts && node lib/nesting.test.ts && node lib/search.test.ts && node lib/recurrence.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

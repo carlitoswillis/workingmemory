@@ -170,6 +170,19 @@ begin
   values (new.id, 'moved', 'list', old.list, new.list, new.touched_by, ${ISO_NOW});
 end;
 
+-- Nesting: a card moved into another card (or back out to the board) changes
+-- parent_id. Logged like a list move — type 'moved', field 'parent', values are item
+-- ids (null = the board itself) — so the time machine can put a card back where it
+-- structurally was (lib/timetravel.ts reverts on old_value) and the card's own history
+-- reads "Nested under …" / "Moved out of …". Added 2026-07-23 with move-into-cards;
+-- a NEW trigger name, so create-if-not-exists picks it up on every existing DB, no drop.
+create trigger if not exists items_log_parent_v2 after update of parent_id on items
+when new.parent_id is not old.parent_id
+begin
+  insert into item_events (item_id, type, field, old_value, new_value, actor_id, at)
+  values (new.id, 'moved', 'parent', old.parent_id, new.parent_id, new.touched_by, ${ISO_NOW});
+end;
+
 -- done/archived are stored 0/1 but logged as 'true'/'false' text, matching the
 -- imported Postgres history (lib/timetravel.ts asBool() handles either form).
 create trigger if not exists items_log_done_v2 after update of done on items
