@@ -6,14 +6,13 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
-  pointerWithin,
   KeyboardSensor,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
-  type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -67,24 +66,15 @@ function spacedPositions(prev: number | undefined, next: number | undefined, n: 
   return Array.from({ length: n }, (_, i) => base + 1000 * i);
 }
 
-// Two kinds of drop target now share the board: the sortable cards/columns, and the
-// "nest strip" on each card's right edge (drop INSIDE that card — see
-// SortableItemCard). A nest strip only wins when the pointer is literally inside it;
-// everything else falls through to the usual closest-corners sorting, so reordering
-// behaves exactly as before.
-const boardCollisionDetection: CollisionDetection = (args) => {
-  const nests = args.droppableContainers.filter((c) => c.data.current?.type === "nest");
-  if (nests.length > 0) {
-    const hits = pointerWithin({ ...args, droppableContainers: nests });
-    if (hits.length > 0) return hits;
-  }
-  return closestCorners({
-    ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (c) => c.data.current?.type !== "nest",
-    ),
-  });
-};
+// How far across a card you have to be for a drop to mean "put it INSIDE this one"
+// rather than "put it next to this one". Nesting is decided from the pointer's
+// position within the card you're already over — NOT from a droppable of its own.
+// (v1 made the nest zone a real droppable; entering it took `over` off the sortable
+// list, which collapsed dnd-kit's make-space gap and snapped every card back, moving
+// the target out from under the cursor. Owner verdict: "realllyyy difficult". With no
+// extra droppable the board behaves exactly as it always did while dragging, and only
+// the release point decides.)
+const NEST_ZONE = 0.55;
 
 // Group TOP-LEVEL items into per-list arrays, preserving their (position-sorted)
 // order. Sub-cards (parent_id set) never render as board cards — they live inside
@@ -286,6 +276,12 @@ export default function Board({
   }, [items, lists]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  // The card a release would drop INTO (see NEST_ZONE). Visual only — it's the card's
+  // own sortable id, so no extra droppable disturbs the drag.
+  const [nestTargetId, setNestTargetId] = useState<string | null>(null);
+  // Where the finger/cursor actually is. dnd-kit's collisions work off the dragged
+  // card's rect, but a person aims with the pointer, so nesting is judged by that.
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const activeItem = activeId
     ? Object.values(itemsByList).flat().find((i) => i.id === activeId) ?? null
     : null;
@@ -606,9 +602,48 @@ export default function Board({
     }
   }
 
+  // Track the pointer only while a drag is running (activeRef is set for the whole
+  // drag), so the board isn't listening to every mouse move on an idle page.
+  useEffect(() => {
+    const fromPointer = (e: PointerEvent) => {
+      if (activeRef.current) pointerRef.current = { x: e.clientX, y: e.clientY };
+    };
+    const fromTouch = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (activeRef.current && t) pointerRef.current = { x: t.clientX, y: t.clientY };
+    };
+    window.addEventListener("pointermove", fromPointer, { passive: true });
+    window.addEventListener("touchmove", fromTouch, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", fromPointer);
+      window.removeEventListener("touchmove", fromTouch);
+    };
+  }, []);
+
+  // Mid-drag: is the pointer far enough across the card it's over to mean "inside"?
+  // Requires the pointer to be within that card's box, so a collision with a card the
+  // cursor isn't actually on can never nest.
+  function onDragMove(e: DragMoveEvent) {
+    const { active, over } = e;
+    if (active.data.current?.type !== "card" || !over) return setNestTargetId(null);
+    const overId = String(over.id);
+    const p = pointerRef.current;
+    const r = over.rect;
+    if (!p || !r) return setNestTargetId(null);
+    // Skip columns (they're droppables too), the card being dragged, and any card
+    // travelling with it in a multi-select.
+    if (itemsRef.current[overId] || overId === String(active.id) || selection.has(overId)) {
+      return setNestTargetId(null);
+    }
+    const insideCard =
+      p.x >= r.left && p.x <= r.left + r.width && p.y >= r.top && p.y <= r.top + r.height;
+    setNestTargetId(insideCard && p.x >= r.left + r.width * NEST_ZONE ? overId : null);
+  }
+
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
     setActiveId(id);
+    setNestTargetId(null);
     if (e.active.data.current?.type === "card") {
       // Remember where the dragged card(s) started, for undo.
       const ids = selection.has(id) && selection.size > 1 ? [...selection] : [id];
@@ -649,7 +684,10 @@ export default function Board({
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     const type = active.data.current?.type;
+    const nestInto = nestTargetId;
     setActiveId(null);
+    setNestTargetId(null);
+    pointerRef.current = null;
     if (!over) return;
 
     if (type === "column") {
@@ -666,12 +704,12 @@ export default function Board({
     const draggedId = String(active.id);
     const overId = String(over.id);
 
-    // NEST: dropped on a card's "↳" strip — the dragged card (or the whole selection)
-    // moves INSIDE that card and off the board's top level. Optimistically pull the
-    // cards out of their columns; the server decides for real (it refuses loops), and
-    // a refusal puts the board straight back.
-    if (over.data.current?.type === "nest") {
-      const parentId = String(over.data.current.itemId);
+    // NEST: released on the right side of another card — the dragged card (or the
+    // whole selection) moves INSIDE it and off the board's top level. Optimistically
+    // pull the cards out of their columns; the server decides for real (it refuses
+    // loops), and a refusal puts the board straight back.
+    if (nestInto && nestInto !== draggedId) {
+      const parentId = nestInto;
       const ids =
         selection.has(draggedId) && selection.size > 1 ? [...selection] : [draggedId];
       if (ids.includes(parentId)) return;
@@ -819,10 +857,15 @@ export default function Board({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={boardCollisionDetection}
+          collisionDetection={closestCorners}
           onDragStart={onDragStart}
+          onDragMove={onDragMove}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
+          onDragCancel={() => {
+            setActiveId(null);
+            setNestTargetId(null);
+          }}
         >
           <SortableContext items={listOrder} strategy={rectSortingStrategy}>
             <div className={GRID}>
@@ -836,7 +879,7 @@ export default function Board({
                   childrenByParent={childrenByParent}
                   selection={selection}
                   activeId={activeId}
-                  nesting={activeItem !== null}
+                  nestTargetId={nestTargetId}
                   canDelete={orderedLists.length > 1}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}

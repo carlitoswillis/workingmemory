@@ -15,7 +15,7 @@ export default function Column({
   childrenByParent,
   selection,
   activeId,
-  nesting,
+  nestTargetId,
   canDelete,
   onSelect,
   onOpenCard,
@@ -30,7 +30,7 @@ export default function Column({
   childrenByParent: Map<string, Item[]>;
   selection: Set<string>;
   activeId: string | null;
-  nesting: boolean; // a card is mid-drag: open cards offer a "drop inside me" strip
+  nestTargetId: string | null; // the card a release would drop INTO, if any
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
@@ -182,7 +182,7 @@ export default function Column({
                 childItems={childrenByParent.get(item.id)}
                 selected={selection.has(item.id)}
                 muted={mutedId(item.id)}
-                nestTarget={nesting && item.id !== activeId && !selection.has(item.id)}
+                nestTarget={nestTargetId === item.id}
                 onSelect={onSelect}
                 onOpenCard={onOpenCard}
               />

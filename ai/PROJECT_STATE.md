@@ -167,6 +167,20 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-07-24 — nesting drag, v2** (owner feedback on the shipped v1: "dragging into
+  another card to nest is realllyyy difficult… because dragging currently shifts cards
+  around", and dragging a sub-card off the panel should put it back on the board).
+  Both addressed; needs an owner pass:
+  - Nesting is no longer a droppable. Release with the cursor on the **right ~45% of a
+    card** and it goes inside; the card lights up with "↳ inside" while you're there.
+    Everything else about dragging is exactly as it was before nesting existed.
+  - **Drag a sub-card left, off the panel** → it goes back on the board (into its own
+    column). A dashed target appears while dragging, and the card now follows the
+    cursor out instead of being clipped at the panel edge. Desktop only by design —
+    on a phone the panel fills the screen, so the "Inside" picker is the way.
+  - Worth judging: is the right-45% split the right cut for thin cards, or should
+    nesting want a deliberate pause (hold-to-nest) instead? Say the word and it's a
+    small change either way.
 - **2026-07-23 batch eyeball** (built, NOT yet committed or deployed — see Completed
   log for what each one is). On the board:
   - **Nesting**: drag a card and watch the other cards grow a "↳" strip on their right

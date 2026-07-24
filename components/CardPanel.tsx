@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   DndContext,
+  DragOverlay,
   MouseSensor,
   TouchSensor,
   KeyboardSensor,
@@ -10,6 +11,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -201,8 +203,61 @@ export default function CardPanel({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // Dragging a sub-card LEFT, out past the panel's edge, means "put it back on the
+  // board" — the drag counterpart of the Inside picker, and what dragging a card off
+  // this panel obviously ought to do (owner, 2026-07-24). Tracked by pointer position
+  // rather than a droppable: the board behind the panel belongs to a different
+  // DndContext, so there is nothing there to drop onto.
+  const asideRef = useRef<HTMLElement>(null);
+  const [childDragging, setChildDragging] = useState(false);
+  const [dragOut, setDragOut] = useState(false);
+  const [activeKidId, setActiveKidId] = useState<string | null>(null);
+  const activeKid = activeKidId ? kids.find((k) => k.id === activeKidId) ?? null : null;
+
+  function onChildDragStart(e: DragStartEvent) {
+    setActiveKidId(String(e.active.id));
+    setChildDragging(true);
+  }
+  function onChildDragCancel() {
+    setActiveKidId(null);
+    setChildDragging(false);
+    setDragOut(false);
+  }
+
+  useEffect(() => {
+    if (!childDragging) return;
+    const check = (x: number) => {
+      const left = asideRef.current?.getBoundingClientRect().left ?? 0;
+      // Only when there IS a board beside the panel — on a phone it fills the screen.
+      setDragOut(left > 40 && x < left - 4);
+    };
+    const fromPointer = (e: PointerEvent) => check(e.clientX);
+    const fromTouch = (e: TouchEvent) => e.touches[0] && check(e.touches[0].clientX);
+    window.addEventListener("pointermove", fromPointer, { passive: true });
+    window.addEventListener("touchmove", fromTouch, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", fromPointer);
+      window.removeEventListener("touchmove", fromTouch);
+    };
+  }, [childDragging]);
+
+  function popChildOut(id: string) {
+    const kid = kids.find((k) => k.id === id);
+    if (!kid) return;
+    setKids((prev) => prev.filter((k) => k.id !== id)); // optimistic; server revalidates
+    startTransition(async () => {
+      const err = await setParentAction(boardId, [id], null, kid.list);
+      if (err) setNestError(err);
+    });
+  }
+
   function onChildDragEnd(e: DragEndEvent) {
     const { active, over } = e;
+    const releasedOutside = dragOut;
+    setActiveKidId(null);
+    setChildDragging(false);
+    setDragOut(false);
+    if (releasedOutside) return popChildOut(String(active.id));
     if (!over || active.id === over.id) return;
     const oldI = kids.findIndex((k) => k.id === active.id);
     const newI = kids.findIndex((k) => k.id === over.id);
@@ -288,9 +343,40 @@ export default function CardPanel({
   }
 
   return (
+    // One DndContext around the WHOLE panel, not just the sub-card list: it lets the
+    // DragOverlay render outside the panel's scroll box, so a sub-card dragged left
+    // is visible on its way out instead of being clipped at the panel edge.
+    <DndContext
+      sensors={childSensors}
+      collisionDetection={closestCenter}
+      onDragStart={onChildDragStart}
+      onDragEnd={onChildDragEnd}
+      onDragCancel={onChildDragCancel}
+    >
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
+
+      {/* Where "drag it off the panel" lands. Hidden on phones — there's no board
+          beside the panel there, so the Inside picker is the way. */}
+      {childDragging && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 right-0 z-10 hidden items-center justify-center sm:right-[28rem] sm:flex">
+          <div
+            className={`rounded-2xl border-2 border-dashed px-5 py-3 text-sm transition-colors ${
+              dragOut
+                ? "border-[var(--now)] bg-[var(--now-wash)] text-[var(--now)]"
+                : "border-[var(--veil)] text-[var(--text-lo)]"
+            }`}
+          >
+            <span aria-hidden className="mr-1.5">
+              ↰
+            </span>
+            {dragOut ? "Release to put it back on the board" : "Drag here to leave this card"}
+          </div>
+        </div>
+      )}
+
       <aside
+        ref={asideRef}
         onClick={(e) => e.stopPropagation()}
         className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
       >
@@ -418,28 +504,22 @@ export default function CardPanel({
           </div>
 
           {kids.length > 0 && (
-            <DndContext
-              sensors={childSensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onChildDragEnd}
+            <SortableContext
+              items={kids.map((k) => k.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={kids.map((k) => k.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="mb-2 flex flex-col gap-1.5">
-                  {kids.map((child) => (
-                    <SortableItemCard
-                      key={child.id}
-                      item={child}
-                      allLists={allLists}
-                      childItems={childrenByParent.get(child.id)}
-                      onOpenCard={onOpenCard}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+              <div className="mb-2 flex flex-col gap-1.5">
+                {kids.map((child) => (
+                  <SortableItemCard
+                    key={child.id}
+                    item={child}
+                    allLists={allLists}
+                    childItems={childrenByParent.get(child.id)}
+                    onOpenCard={onOpenCard}
+                  />
+                ))}
+              </div>
+            </SortableContext>
           )}
 
           <form onSubmit={addChild}>
@@ -644,6 +724,21 @@ export default function CardPanel({
           )}
         </div>
       </aside>
+
+      {/* Rendered outside the panel so a sub-card on its way out isn't clipped. */}
+      <DragOverlay>
+        {activeKid ? (
+          <div
+            className={`rounded-lg border bg-[var(--surface-2)] py-1.5 pl-2 pr-2 text-[13.5px] leading-snug shadow-2xl ${
+              dragOut ? "border-[var(--now)] text-[var(--now)]" : "border-[var(--veil)] text-[var(--text-hi)]"
+            }`}
+            style={{ borderLeft: "2px solid var(--now)" }}
+          >
+            {activeKid.text}
+          </div>
+        ) : null}
+      </DragOverlay>
     </div>
+    </DndContext>
   );
 }

@@ -95,3 +95,11 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
   they share `.next`. Stop dev first, or `rm -rf .next` and restart after building.
 - Stale process holding port 3000 → `lsof -ti tcp:3000 | xargs kill -9` before restart.
 - dnd-kit + inputs: stop propagation so the keyboard sensor doesn't hijack Enter.
+- **Never add an extra droppable inside a sortable list** (learned 2026-07-24, nesting
+  v1). The moment `over` becomes something that isn't in the SortableContext's items,
+  the strategy's make-space gap collapses and every card snaps back — so the target
+  jumps out from under the cursor and re-entering it oscillates. Decide sub-zones of a
+  card from the POINTER position within `over.rect` instead (Board's `NEST_ZONE`), and
+  draw them as `pointer-events-none` overlays.
+- A panel with `overflow-y-auto` clips a dragged child; put the `DndContext` around the
+  panel and render `DragOverlay` outside the scroll box so the card can visibly leave.
