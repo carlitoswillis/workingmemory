@@ -115,6 +115,24 @@ main DB (operator bearer token only, since it now holds every account),
 direction. A daily launchd job pulls a verified backup to my Mac — the cloud is
 the working copy, not the only copy.
 
+To pull a backup by hand (both vars live in `~/.wm-backup.env`, chmod 600):
+
+```sh
+env $(cat ~/.wm-backup.env) ./scripts/pull-backup.sh
+```
+
+Add `RESTORE_LOCAL=1` to also replace the local main DB (`data/owner/wm.db`)
+with the verified snapshot — it saves the old file to
+`backups/local-pre-restore/<stamp>/` first, and refuses to run while the dev
+server has the DB open:
+
+```sh
+env $(cat ~/.wm-backup.env) RESTORE_LOCAL=1 ./scripts/pull-backup.sh
+```
+
+The daily launchd job must never set `RESTORE_LOCAL` — it would silently
+overwrite local changes every morning.
+
 ## Stack
 
 - **Next.js 14 (App Router) + React 18 + TypeScript** — server components + actions
