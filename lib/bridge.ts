@@ -21,17 +21,17 @@ export function brainBearerOk(req: NextRequest): boolean {
 
 export type OwnerBoard = { ownerId: string; boardId: string; boardName: string | null };
 
-// The owner is the first-created account (user #1 by migration order);
-// OWNER_USERNAME overrides. Their "active board" is the one they most recently
+// The owner is the account NAMED "owner" (OWNER_USERNAME overrides) — pinned
+// by name, not inferred; first-created is only the last-resort fallback for a
+// DB with no such account. Their "active board" is the one they most recently
 // wrote to — the same heuristic the brain app's context reader uses — falling
 // back to the oldest board they created (a brand-new, still-empty board).
 export function resolveOwnerBoard(db: Database.Database): OwnerBoard | null {
-  const username = process.env.OWNER_USERNAME;
-  const owner = (
-    username
-      ? db.prepare("select id from users where username = ?").get(username)
-      : db.prepare("select id from users order by created_at limit 1").get()
-  ) as { id: string } | undefined;
+  const username = process.env.OWNER_USERNAME ?? "owner";
+  const owner = ((db.prepare("select id from users where username = ?").get(username) ??
+    db.prepare("select id from users order by created_at limit 1").get()) as
+    | { id: string }
+    | undefined);
   if (!owner) return null;
 
   const board =
