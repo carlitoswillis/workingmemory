@@ -18,7 +18,7 @@ import {
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
@@ -55,7 +55,16 @@ type Move = { id: string; list: string; position: number };
 // The gap a release would drop into: above `beforeId`, or below the column's last card.
 type DropAt = { list: string; beforeId: string | null };
 
-const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6";
+// One horizontal rail of fixed-width columns — scroll/swipe sideways instead of the
+// old responsive grid. Negative margins cancel the page padding so the rail runs edge
+// to edge; overscroll containment keeps a rail fling from triggering browser back.
+const RAIL =
+  "flex items-start gap-4 overflow-x-auto overscroll-x-contain pb-4 " +
+  "-mx-6 px-6 sm:-mx-10 sm:px-10 scroll-pl-6 sm:scroll-pl-10 " +
+  "[&>*]:w-[86vw] [&>*]:shrink-0 [&>*]:snap-start sm:[&>*]:w-[300px]";
+// Snap column-by-column on phones only; free scrolling on desktop. Dropped while a
+// card is in the air so dnd-kit's edge auto-scroll isn't fighting the snap points.
+const RAIL_SNAP = "snap-x snap-mandatory sm:snap-none";
 
 // N evenly-spaced position values to drop a block of cards between two neighbors.
 function spacedPositions(prev: number | undefined, next: number | undefined, n: number): number[] {
@@ -914,7 +923,7 @@ export default function Board({
       />
 
       {snapshot ? (
-        <div className={`memory-mode ${GRID}`}>
+        <div className={`memory-mode ${RAIL} ${RAIL_SNAP}`}>
           <SnapshotNoteColumn
             body={snapshot.find((i) => i.list === NOTE_LIST && !i.parent_id)?.details ?? ""}
           />
@@ -941,8 +950,8 @@ export default function Board({
             setDrop(null);
           }}
         >
-          <SortableContext items={listOrder} strategy={rectSortingStrategy}>
-            <div className={GRID}>
+          <SortableContext items={listOrder} strategy={horizontalListSortingStrategy}>
+            <div className={`${RAIL} ${activeId ? "" : RAIL_SNAP}`}>
               <NoteColumn note={note} />
               {orderedLists.map((list) => (
                 <SortableColumn
