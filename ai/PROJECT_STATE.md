@@ -170,9 +170,12 @@ a real structure without losing its looseness.
 - **2026-08-01 — Board is a horizontal rail** (owner: "i kinda hate this view… should be
   more like a scroll left and right type of situation"). The responsive grid
   (1/2/6-col by breakpoint — columns got crushed at desktop, stacked on phone) is now
-  one sideways-scrolling row (`RAIL` in `Board.tsx`): 300px columns on ≥sm, 86vw with
-  column-by-column snap on phones (next column peeks), edge-to-edge via negative
-  margins, `overscroll-x-contain` so a fling doesn't trigger browser back. Snap is
+  one sideways-scrolling row (`RAIL` in `Board.tsx`): on ≥sm columns flex to share the
+  width like the old grid (184px floor ≈ the old 6-track width at 1280px, 320px cap;
+  the rail only scrolls when more columns exist than fit — owner revision after
+  trying fixed 300px), 86vw with column-by-column snap on phones (next column peeks),
+  edge-to-edge via negative margins, `overscroll-x-contain` so a fling doesn't
+  trigger browser back. Snap is
   dropped while a card is in the air so dnd-kit's edge auto-scroll isn't fighting it;
   column reorder strategy switched rect→horizontal. Snapshot view rides the same rail.
   Verified: tsc, 11 suites, prod build (~127kB held). Drag-to-offscreen-column +
