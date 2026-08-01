@@ -55,13 +55,17 @@ type Move = { id: string; list: string; position: number };
 // The gap a release would drop into: above `beforeId`, or below the column's last card.
 type DropAt = { list: string; beforeId: string | null };
 
-// One horizontal rail of fixed-width columns — scroll/swipe sideways instead of the
-// old responsive grid. Negative margins cancel the page padding so the rail runs edge
-// to edge; overscroll containment keeps a rail fling from triggering browser back.
+// One horizontal rail of columns — scroll/swipe sideways instead of the old
+// responsive grid. Phones: near-full-width columns, the next one peeking in.
+// Desktop: columns share the screen like the old grid (grow to fill), but never
+// crush below the basis — extra columns overflow into the sideways scroll.
+// Negative margins cancel the page padding so the rail runs edge to edge;
+// overscroll containment keeps a rail fling from triggering browser back.
 const RAIL =
   "flex items-start gap-4 overflow-x-auto overscroll-x-contain pb-4 " +
   "-mx-6 px-6 sm:-mx-10 sm:px-10 scroll-pl-6 sm:scroll-pl-10 " +
-  "[&>*]:w-[86vw] [&>*]:shrink-0 [&>*]:snap-start sm:[&>*]:w-[300px]";
+  "[&>*]:w-[86vw] [&>*]:shrink-0 [&>*]:snap-start " +
+  "sm:[&>*]:flex-[1_0_184px] sm:[&>*]:max-w-[320px]";
 // Snap column-by-column on phones only; free scrolling on desktop. Dropped while a
 // card is in the air so dnd-kit's edge auto-scroll isn't fighting the snap points.
 const RAIL_SNAP = "snap-x snap-mandatory sm:snap-none";
