@@ -150,26 +150,36 @@ export async function toggleDoneAction(boardId: string | null, id: string, done:
   revalidateBoard(bid);
 }
 
-export async function archiveItemAction(boardId: string | null, id: string) {
+// Archive/restore, one card or a block of them. The plural form is what the board's
+// multi-select archive and its undo run through: one transaction and ONE revalidation,
+// so ten cards leaving the board is one re-render rather than ten. The DB trigger logs
+// each flip to history either way (see lib/schema.ts).
+function setArchived(boardId: string | null, ids: string[], archived: 0 | 1) {
+  if (ids.length === 0) return;
   const { db, userId, boardId: bid } = getBoardContext(boardId);
-  db.prepare("update items set archived = 1, touched_by = ? where id = ? and board_id is ?").run(
-    userId,
-    id,
-    bid,
+  const stmt = db.prepare(
+    "update items set archived = ?, touched_by = ? where id = ? and board_id is ?",
   );
+  db.transaction(() => {
+    for (const id of ids) stmt.run(archived, userId, id, bid);
+  })();
   revalidateBoard(bid);
 }
 
-// Restore an archived item back onto the board (archived 1 -> 0). The DB trigger
-// logs the restore to history (see lib/schema.ts).
+export async function archiveItemAction(boardId: string | null, id: string) {
+  setArchived(boardId, [id], 1);
+}
+
 export async function unarchiveItemAction(boardId: string | null, id: string) {
-  const { db, userId, boardId: bid } = getBoardContext(boardId);
-  db.prepare("update items set archived = 0, touched_by = ? where id = ? and board_id is ?").run(
-    userId,
-    id,
-    bid,
-  );
-  revalidateBoard(bid);
+  setArchived(boardId, [id], 0);
+}
+
+export async function archiveItemsAction(boardId: string | null, ids: string[]) {
+  setArchived(boardId, ids, 1);
+}
+
+export async function unarchiveItemsAction(boardId: string | null, ids: string[]) {
+  setArchived(boardId, ids, 0);
 }
 
 // Archived items for the Archive view (browse + restore). Loaded on demand when the

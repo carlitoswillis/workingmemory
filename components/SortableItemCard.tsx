@@ -27,6 +27,7 @@ export default function SortableItemCard(props: {
   dropEdge?: "top" | "bottom";
   onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  onArchive?: (item: Item) => void;
 }) {
   const { nestTarget, dropEdge, ...cardProps } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =

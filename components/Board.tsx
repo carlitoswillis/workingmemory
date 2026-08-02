@@ -29,6 +29,7 @@ import { effectiveDone } from "@/lib/recurrence";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
   addItemAction,
+  archiveItemsAction,
   addListAction,
   deleteListAction,
   getItemAction,
@@ -39,6 +40,7 @@ import {
   reorderListsAction,
   setParentAction,
   timelineDataAction,
+  unarchiveItemsAction,
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
 import AddColumn from "./AddColumn";
@@ -378,6 +380,45 @@ export default function Board({
     setItemsByList(g);
   }
 
+  // Archive from the board: the card's hover button, the selection bar, or "a".
+  // Archiving a card that's part of a multi-selection takes the whole selection, the
+  // same rule dragging one of them already follows. Optimistic (they leave the board
+  // at once) and undoable — which is what lets the desktop affordance be a single
+  // click, where the phone gesture has to be a deliberate long swipe.
+  function archiveCards(ids: string[]) {
+    const c = itemsRef.current;
+    const gone = Object.values(c)
+      .flat()
+      .filter((i) => ids.includes(i.id));
+    if (gone.length === 0) return;
+
+    const next: Grouped = {};
+    for (const k of Object.keys(c)) next[k] = c[k].filter((i) => !ids.includes(i.id));
+    itemsRef.current = next;
+    setItemsByList(next);
+    clearSelection();
+    startTransition(() => archiveItemsAction(boardId, ids));
+
+    pushUndo(
+      gone.length > 1 ? `Archived ${gone.length} cards` : `Archived “${gone[0].text}”`,
+      () => {
+        const cur = itemsRef.current;
+        const back: Grouped = { ...cur };
+        for (const it of gone) {
+          back[it.list] = [...(back[it.list] ?? []), it].sort((a, b) => a.position - b.position);
+        }
+        itemsRef.current = back;
+        setItemsByList(back);
+        unarchiveItemsAction(boardId, ids);
+      },
+    );
+  }
+
+  // What the card's own button archives: the selection if this card is in it, else itself.
+  function archiveFromCard(item: Item) {
+    archiveCards(selection.has(item.id) && selection.size > 1 ? [...selection] : [item.id]);
+  }
+
   function performUndo() {
     const step = undoStack.current.pop();
     setUndoHint(null);
@@ -502,6 +543,13 @@ export default function Board({
       return;
     }
     if (e.key === "Escape") clearSelection();
+    // "a" archives what's selected — the keyboard twin of the selection bar's button.
+    // Only with a selection, so a stray keypress on an idle board does nothing.
+    if (snapshot === null && selection.size > 0 && e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      archiveCards([...selection]);
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
       e.preventDefault();
       performUndo();
@@ -975,6 +1023,7 @@ export default function Board({
                   canDelete={orderedLists.length > 1}
                   onSelect={handleSelect}
                   onOpenCard={openCardFromBoard}
+                  onArchive={archiveFromCard}
                   onAdd={addCard}
                   onRename={renameColumn}
                   onDelete={deleteColumn}
@@ -1012,7 +1061,7 @@ export default function Board({
       {/* Nobody guesses "hold to nest" — say it, but only while a card is in the air.
           Once armed it names the card, so a mis-hold is obvious before you let go. */}
       {!snapshot && activeItem && (
-        <div className="fixed bottom-5 left-1/2 z-40 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 py-2 text-xs shadow-2xl">
+        <div className="fixed bottom-20 left-1/2 z-40 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 py-2 text-xs shadow-2xl sm:bottom-5">
           {nestTargetId ? (
             <span className="text-[var(--text-mid)]">
               Release to put it inside{" "}
@@ -1041,6 +1090,12 @@ export default function Board({
             drag any one to move them together
           </span>
           <button
+            onClick={() => archiveCards([...selection])}
+            className="rounded-full px-3 py-1 text-xs text-[var(--text-mid)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--past)]"
+          >
+            Archive · a
+          </button>
+          <button
             onClick={clearSelection}
             className="rounded-full px-3 py-1 text-xs text-[var(--text-mid)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
           >
@@ -1050,7 +1105,7 @@ export default function Board({
       )}
 
       {!snapshot && selection.size === 0 && undoHint && (
-        <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
+        <div className="fixed bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl sm:bottom-5">
           <span className="text-sm text-[var(--text-mid)]">{undoHint}</span>
           <button
             onClick={performUndo}
@@ -1062,7 +1117,7 @@ export default function Board({
       )}
 
       {notice && (
-        <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
+        <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl sm:bottom-5">
           <span className="text-sm text-[var(--text-mid)]">{notice}</span>
           <button
             onClick={() => setNotice(null)}
