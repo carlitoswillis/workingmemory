@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 // Swipe a card left to archive it — PHONES ONLY (< sm), where the columns stack and
 // nothing else wants a horizontal drag. On the desktop rail a sideways drag belongs
@@ -24,6 +24,36 @@ const SLOP = 10;
 const CLAIM_MS = 150;
 // Only one card sits open at a time: opening broadcasts, everyone else closes.
 const OPEN_EVENT = "wm:swipe-open";
+const GLIDE = "transform 0.22s cubic-bezier(0.2,0.7,0.2,1)";
+
+// What moves is the card, not the words on it (owner: "the card should appear to
+// swipe but the text should stay still"). The frame slides; anything wrapped in
+// <SwipeStill> takes the exact opposite translation, so it holds its place on
+// screen while the card travels out from under it. The card clips its own
+// overflow, so the still content is revealed away by the passing right edge
+// instead of spilling over the Archive button.
+const SwipeCtx = createContext({ x: 0, gliding: true });
+
+export function SwipeStill({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const { x, gliding } = useContext(SwipeCtx);
+  return (
+    <div
+      className={className}
+      style={{
+        transform: x ? `translateX(${-x}px)` : undefined,
+        transition: gliding ? GLIDE : undefined,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function SwipeToArchive({
   id,
@@ -115,6 +145,8 @@ export default function SwipeToArchive({
     onArchive();
   }
 
+  const still = useMemo(() => ({ x: offset, gliding }), [offset, gliding]);
+
   return (
     <div ref={wrapRef} className="relative overflow-hidden rounded-lg">
       <div
@@ -162,10 +194,10 @@ export default function SwipeToArchive({
         className={`relative touch-pan-y sm:touch-auto ${archiving ? "opacity-0" : ""}`}
         style={{
           transform: offset ? `translateX(${offset}px)` : undefined,
-          transition: gliding ? "transform 0.22s cubic-bezier(0.2,0.7,0.2,1), opacity 0.22s ease" : undefined,
+          transition: gliding ? `${GLIDE}, opacity 0.22s ease` : undefined,
         }}
       >
-        {children}
+        <SwipeCtx.Provider value={still}>{children}</SwipeCtx.Provider>
       </div>
     </div>
   );

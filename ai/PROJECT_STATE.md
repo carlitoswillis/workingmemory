@@ -194,6 +194,15 @@ a real structure without losing its looseness.
   and it rests open over a 108px Archive button you still have to tap. Nothing is
   archived by the swipe itself. Armed state colours to `--past` — archiving is
   sending a card to the past.
+  **The words don't travel with the card** (owner, same day: "i don't like that the
+  text gets dragged left too — the card should appear to swipe but the text should
+  stay still"). The frame slides; `<SwipeStill>` (a context off `SwipeToArchive`)
+  gives the content row the exact opposite translation with the same easing, so the
+  checkbox, title and badges hold their place on screen while the card travels out
+  from under them. The card clips its own overflow under `sm`, so the still content
+  is revealed away by the passing right edge rather than spilling over the Archive
+  button — trailing badges disappear behind it and come back on close. Reads like a
+  pane sliding off a fixed line of text.
   The dnd-kit coexistence is the load-bearing part: Board's TouchSensor arms after
   150ms and aborts if the finger moves >8px in that window, so the swipe claims a
   gesture only when it clears 10px within 150ms. A quick flick is the swipe's, a

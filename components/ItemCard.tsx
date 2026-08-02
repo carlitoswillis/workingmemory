@@ -7,7 +7,7 @@ import { archiveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/a
 import { describeRecurrence, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "./board-context";
-import SwipeToArchive from "./SwipeToArchive";
+import SwipeToArchive, { SwipeStill } from "./SwipeToArchive";
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
 function recencyAmount(updatedAt: string): number {
@@ -76,15 +76,18 @@ export default function ItemCard({
       id={item.id}
       onArchive={() => startTransition(() => archiveItemAction(boardId, item.id))}
     >
+      {/* Clipped under sm so a swipe cuts the (still) content against the card's own
+          travelling edges instead of spilling it onto the Archive button. Only where
+          the swipe exists — the desktop card keeps its overflow, and its focus rings. */}
       <div
-        className={`card-in group rounded-lg border bg-[var(--surface)] transition-colors duration-150 ${
+        className={`card-in group overflow-hidden rounded-lg sm:overflow-visible border bg-[var(--surface)] transition-colors duration-150 ${
           selected
             ? "border-[var(--now)] bg-[var(--surface-2)] ring-1 ring-[var(--now)]"
             : "border-[var(--veil-soft)] hover:border-[var(--veil)] hover:bg-[var(--surface-2)]"
         } ${muted ? "opacity-40" : ""}`}
         style={{ borderLeft: `2px solid ${edge}` }}
       >
-        <div className="flex items-start gap-2 py-1.5 pl-2 pr-2">
+        <SwipeStill className="flex items-start gap-2 py-1.5 pl-2 pr-2">
           <button
             aria-label={doneLocal ? "Mark not done" : "Mark done"}
             onClick={toggleDone}
@@ -155,7 +158,7 @@ export default function ItemCard({
               aria-hidden
             />
           )}
-        </div>
+        </SwipeStill>
       </div>
     </SwipeToArchive>
   );
