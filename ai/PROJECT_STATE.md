@@ -167,6 +167,27 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-08-02 — Swipe left on a card to archive it** (phones only, `SwipeToArchive.tsx`
+  wrapped around `ItemCard`, so live cards, done cards and sub-cards all get it).
+  Owner set the bar: "the swipe should be extreme so we don't accidentally delete
+  stuff — maybe swipe past halfway and reveal an archive button under." So it's two
+  deliberate acts: pull the card past **half its own width** (shorter springs back)
+  and it rests open over a 108px Archive button you still have to tap. Nothing is
+  archived by the swipe itself. Armed state colours to `--past` — archiving is
+  sending a card to the past.
+  The dnd-kit coexistence is the load-bearing part: Board's TouchSensor arms after
+  150ms and aborts if the finger moves >8px in that window, so the swipe claims a
+  gesture only when it clears 10px within 150ms. A quick flick is the swipe's, a
+  press-then-move is the drag's, never both. `touch-pan-y` (under `sm` only) keeps
+  vertical scrolling with the page while taking the horizontal axis from the browser;
+  a capture-phase click guard stops the swipe's trailing tap from opening the panel.
+  Off at ≥sm — a sideways drag there belongs to the column rail — where the panel's
+  Archive button is still the way in. One card open at a time via a window event.
+  Verified on an emulated phone (390px, real touch events): 60px springs back, 230px
+  rests at −108, tap-to-close doesn't open the panel, vertical flick scrolls instead,
+  press-hold-drag still reorders, slow horizontal drag doesn't swipe, 1024px doesn't
+  swipe at all, and the Archive tap takes the card off the board. tsc, 11 suites,
+  prod build (127→128kB).
 - **2026-08-01 — Board is a horizontal rail, desktop only** (owner: "i kinda hate this
   view… should be more like a scroll left and right type of situation"). The responsive
   grid (1/2/6-col by breakpoint — columns got crushed at desktop) is now one

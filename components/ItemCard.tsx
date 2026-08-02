@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
-import { setDailyDoneAction, toggleDoneAction } from "@/app/actions";
+import { archiveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/actions";
 import { describeRecurrence, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "./board-context";
+import SwipeToArchive from "./SwipeToArchive";
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
 function recencyAmount(updatedAt: string): number {
@@ -71,86 +72,91 @@ export default function ItemCard({
   const edge = `rgb(${lerp(35, 176, amt)}, ${lerp(43, 138, amt)}, ${lerp(69, 92, amt)})`;
 
   return (
-    <div
-      className={`card-in group rounded-lg border bg-[var(--surface)] transition-colors duration-150 ${
-        selected
-          ? "border-[var(--now)] bg-[var(--surface-2)] ring-1 ring-[var(--now)]"
-          : "border-[var(--veil-soft)] hover:border-[var(--veil)] hover:bg-[var(--surface-2)]"
-      } ${muted ? "opacity-40" : ""}`}
-      style={{ borderLeft: `2px solid ${edge}` }}
+    <SwipeToArchive
+      id={item.id}
+      onArchive={() => startTransition(() => archiveItemAction(boardId, item.id))}
     >
-      <div className="flex items-start gap-2 py-1.5 pl-2 pr-2">
-        <button
-          aria-label={doneLocal ? "Mark not done" : "Mark done"}
-          onClick={toggleDone}
-          onKeyDown={(e) => e.stopPropagation()}
-          className={`mt-[3px] grid h-[15px] w-[15px] shrink-0 place-items-center rounded-full border transition-colors ${
-            doneLocal
-              ? "border-[var(--done)] bg-[var(--done)]"
-              : "border-[var(--text-lo)] hover:border-[var(--now)]"
-          }`}
-        >
-          {doneLocal && (
-            <svg viewBox="0 0 12 12" className="check-pop h-2 w-2 text-[var(--bg-0)]">
-              <path
-                d="M2.5 6.3l2.1 2.1 4.9-4.9"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+      <div
+        className={`card-in group rounded-lg border bg-[var(--surface)] transition-colors duration-150 ${
+          selected
+            ? "border-[var(--now)] bg-[var(--surface-2)] ring-1 ring-[var(--now)]"
+            : "border-[var(--veil-soft)] hover:border-[var(--veil)] hover:bg-[var(--surface-2)]"
+        } ${muted ? "opacity-40" : ""}`}
+        style={{ borderLeft: `2px solid ${edge}` }}
+      >
+        <div className="flex items-start gap-2 py-1.5 pl-2 pr-2">
+          <button
+            aria-label={doneLocal ? "Mark not done" : "Mark done"}
+            onClick={toggleDone}
+            onKeyDown={(e) => e.stopPropagation()}
+            className={`mt-[3px] grid h-[15px] w-[15px] shrink-0 place-items-center rounded-full border transition-colors ${
+              doneLocal
+                ? "border-[var(--done)] bg-[var(--done)]"
+                : "border-[var(--text-lo)] hover:border-[var(--now)]"
+            }`}
+          >
+            {doneLocal && (
+              <svg viewBox="0 0 12 12" className="check-pop h-2 w-2 text-[var(--bg-0)]">
+                <path
+                  d="M2.5 6.3l2.1 2.1 4.9-4.9"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </button>
+
+          <button
+            onClick={(e) => {
+              // ⌘/Ctrl-click toggles selection, Shift-click extends a range; a plain
+              // click still opens the card. (Mac ⌘ or Windows/Linux Ctrl.)
+              if (onSelect && (e.metaKey || e.ctrlKey)) onSelect(item, "toggle");
+              else if (onSelect && e.shiftKey) onSelect(item, "range");
+              else onOpenCard(item);
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            className={`min-w-0 flex-1 break-words text-left text-[13.5px] leading-snug ${
+              doneLocal ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"
+            }`}
+          >
+            {item.text}
+          </button>
+
+          {subTotal > 0 && (
+            <span
+              className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"
+              title={`${subDone} of ${subTotal} sub-cards done`}
+            >
+              ↳ {subDone}/{subTotal}
+            </span>
           )}
-        </button>
-
-        <button
-          onClick={(e) => {
-            // ⌘/Ctrl-click toggles selection, Shift-click extends a range; a plain
-            // click still opens the card. (Mac ⌘ or Windows/Linux Ctrl.)
-            if (onSelect && (e.metaKey || e.ctrlKey)) onSelect(item, "toggle");
-            else if (onSelect && e.shiftKey) onSelect(item, "range");
-            else onOpenCard(item);
-          }}
-          onKeyDown={(e) => e.stopPropagation()}
-          className={`min-w-0 flex-1 break-words text-left text-[13.5px] leading-snug ${
-            doneLocal ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"
-          }`}
-        >
-          {item.text}
-        </button>
-
-        {subTotal > 0 && (
-          <span
-            className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"
-            title={`${subDone} of ${subTotal} sub-cards done`}
-          >
-            ↳ {subDone}/{subTotal}
-          </span>
-        )}
-        {repeats && (
-          <span
-            className="mt-[1px] shrink-0 text-[11px] leading-none tabular-nums text-[var(--text-lo)]"
-            title={
-              streak >= 2
-                ? `${describeRecurrence(rec)} — done ${streak} ${
-                    rec.kind === "daily" ? "days" : "weeks"
-                  } running`
-                : describeRecurrence(rec)
-            }
-            aria-hidden
-          >
-            ↻{streak >= 2 && <span className="ml-0.5 text-[10px]">{streak}</span>}
-          </span>
-        )}
-        {hasDetails && (
-          <span
-            className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: "var(--past)" }}
-            aria-hidden
-          />
-        )}
+          {repeats && (
+            <span
+              className="mt-[1px] shrink-0 text-[11px] leading-none tabular-nums text-[var(--text-lo)]"
+              title={
+                streak >= 2
+                  ? `${describeRecurrence(rec)} — done ${streak} ${
+                      rec.kind === "daily" ? "days" : "weeks"
+                    } running`
+                  : describeRecurrence(rec)
+              }
+              aria-hidden
+            >
+              ↻{streak >= 2 && <span className="ml-0.5 text-[10px]">{streak}</span>}
+            </span>
+          )}
+          {hasDetails && (
+            <span
+              className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ background: "var(--past)" }}
+              aria-hidden
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </SwipeToArchive>
   );
 }

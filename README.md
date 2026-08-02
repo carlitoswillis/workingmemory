@@ -51,6 +51,8 @@ Some one-liners for what that buys you:
   without deleting anything (a daily task is only "done" if done *today*).
 - **Multi-select drag, undo, cross-list drag** — ⌘-click to select several cards
   and move them as a block; ⌘Z takes it back.
+- **Swipe left to archive (phones)** — drag a card past half its own width and it
+  rests open over an Archive button; nothing leaves the board until you tap it.
 - **Demo mode** — `DEMO_MODE=1` gives every visitor an isolated, rate-limited,
   auto-expiring board seeded with fabricated-but-consistent history.
 
