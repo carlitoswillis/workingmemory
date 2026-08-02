@@ -18,7 +18,7 @@ import {
 import {
   SortableContext,
   arrayMove,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
@@ -55,20 +55,17 @@ type Move = { id: string; list: string; position: number };
 // The gap a release would drop into: above `beforeId`, or below the column's last card.
 type DropAt = { list: string; beforeId: string | null };
 
-// One horizontal rail of columns — scroll/swipe sideways instead of the old
-// responsive grid. Phones: near-full-width columns, the next one peeking in.
-// Desktop: columns share the screen like the old grid (grow to fill), but never
-// crush below the basis — extra columns overflow into the sideways scroll.
-// Negative margins cancel the page padding so the rail runs edge to edge;
-// overscroll containment keeps a rail fling from triggering browser back.
+// Phones stack: one full-width column after another down the page, so reading a
+// board is a normal vertical scroll (sideways swiping hid columns off-screen).
+// From ≥sm it's the horizontal rail: columns share the screen like the old grid
+// (grow to fill) but never crush below the basis — extra columns overflow into a
+// sideways scroll. Negative margins cancel the page padding so the rail runs edge
+// to edge; overscroll containment keeps a rail fling from triggering browser back.
 const RAIL =
-  "flex items-start gap-4 overflow-x-auto overscroll-x-contain pb-4 " +
-  "-mx-6 px-6 sm:-mx-10 sm:px-10 scroll-pl-6 sm:scroll-pl-10 " +
-  "[&>*]:w-[86vw] [&>*]:shrink-0 [&>*]:snap-start " +
+  "flex flex-col gap-4 " +
+  "sm:flex-row sm:items-start sm:overflow-x-auto sm:overscroll-x-contain sm:pb-4 " +
+  "sm:-mx-10 sm:px-10 " +
   "sm:[&>*]:flex-[1_0_184px] sm:[&>*]:max-w-[320px]";
-// Snap column-by-column on phones only; free scrolling on desktop. Dropped while a
-// card is in the air so dnd-kit's edge auto-scroll isn't fighting the snap points.
-const RAIL_SNAP = "snap-x snap-mandatory sm:snap-none";
 
 // N evenly-spaced position values to drop a block of cards between two neighbors.
 function spacedPositions(prev: number | undefined, next: number | undefined, n: number): number[] {
@@ -927,7 +924,7 @@ export default function Board({
       />
 
       {snapshot ? (
-        <div className={`memory-mode ${RAIL} ${RAIL_SNAP}`}>
+        <div className={`memory-mode ${RAIL}`}>
           <SnapshotNoteColumn
             body={snapshot.find((i) => i.list === NOTE_LIST && !i.parent_id)?.details ?? ""}
           />
@@ -954,8 +951,10 @@ export default function Board({
             setDrop(null);
           }}
         >
-          <SortableContext items={listOrder} strategy={horizontalListSortingStrategy}>
-            <div className={`${RAIL} ${activeId ? "" : RAIL_SNAP}`}>
+          {/* rect, not horizontal: the columns run down the page on phones and
+              across it from ≥sm, and rect handles both arrangements. */}
+          <SortableContext items={listOrder} strategy={rectSortingStrategy}>
+            <div className={RAIL}>
               <NoteColumn note={note} />
               {orderedLists.map((list) => (
                 <SortableColumn
