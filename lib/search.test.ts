@@ -1,12 +1,11 @@
 // Run: node lib/search.test.ts   (plain node script, same convention as the others)
 //
 // Board search (lib/search.ts): term matching across title + details, ranking, and
-// the details snippet the overlay highlights.
+// the details snippet the overlay highlights. Cards and card content only — search
+// stopped reaching into the event log on 2026-08-02 (owner's call), so there is no
+// history matcher left to test here; a card's past lives in its panel's History list.
 
-import Database from "better-sqlite3";
-import { searchEvents, searchItems, searchTerms } from "./search.ts";
-import { searchHistory } from "./queries.ts";
-import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
+import { searchItems, searchTerms } from "./search.ts";
 import type { Item } from "./types.ts";
 
 let failures = 0;
@@ -88,57 +87,10 @@ ok(
 
 ok("limit is respected", searchItems([...items, ...items, ...items], "flight", 2).length, 2);
 
-// --- searching the HISTORY (the point of the app) ---------------------------
-// A real DB so the trigger-written events are the ones being searched.
-const db = new Database(":memory:");
-db.pragma("foreign_keys = ON");
-db.exec(CREATE_TABLES);
-migrateDb(db);
-db.exec(CREATE_TRIGGERS);
-const B = null;
-
-db.prepare("insert into items (id, text, list, board_id) values ('h1', 'Sort out the visa', 'today', null)").run();
-db.prepare("update items set text = 'Sort out the passport' where id = 'h1'").run();
-db.prepare("update items set details = 'consulate opens tuesdays' where id = 'h1'").run();
-db.prepare("insert into items (id, text, list, board_id) values ('h2', 'Buy milk', 'today', null)").run();
-db.prepare("update items set archived = 1 where id = 'h2'").run();
-
-const hist = (q: string) => searchEvents(searchHistory(db, B, searchTerms(q)), q);
-
-// Two distinct moments carry the old wording: the card's birth ("as first captured")
-// and the rename that replaced it ("used to say"). Newest first.
-ok(
-  "finds wording that was edited away",
-  hist("visa").map((h) => h.event.type),
-  ["edited", "created"],
-);
-ok(
-  "…and says what it used to say",
-  hist("visa")[0].snippet.slice(hist("visa")[0].start, hist("visa")[0].start + 5),
-  "visa",
-);
-ok("…from the card it belongs to", hist("visa")[0].event.item_text, "Sort out the passport");
-ok("the old side is the one shown", hist("visa")[0].side, "old");
-ok("finds text written into details", hist("consulate").length, 1);
-ok("all terms must match one event", hist("visa consulate").length, 0);
-ok("no match is empty", hist("submarine").length, 0);
-ok(
-  "history reaches archived cards too",
-  hist("milk").map((h) => h.event.item_archived),
-  [1],
-);
-ok("a wildcard in the query is escaped, not honoured", hist("%").length, 0);
-ok("board scoping: another board sees none of it", searchHistory(db, "other", searchTerms("visa")).length, 0);
-
-// Only text/details edits are searchable — a list move carries column ids, not prose.
-db.prepare("update items set list = 'backlog' where id = 'h1'").run();
-ok("column moves aren't search results", hist("backlog").length, 0);
-
-// Per-card cap keeps one chatty card from filling the list.
-for (let i = 0; i < 5; i++) {
-  db.prepare("update items set text = ? where id = 'h1'").run(`renamed budget ${i}`);
-}
-ok("at most two hits per card", hist("budget").length, 2);
+// searchTerms is the shared tokenizer — the archive trip uses it to decide there's
+// nothing worth asking the server (app/actions.ts#searchArchivedAction).
+ok("terms are lowercased and split on whitespace", searchTerms("  Lisbon   Flight "), ["lisbon", "flight"]);
+ok("an empty query has no terms", searchTerms("   "), []);
 
 console.log(failures === 0 ? "\nall search tests passed" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -19,10 +19,9 @@ import {
   getHistory,
   getItem,
   getTimelineData,
-  searchHistory,
 } from "@/lib/queries";
-import { searchEvents, searchItems, searchTerms } from "@/lib/search";
-import type { HistoryHit, SearchHit } from "@/lib/search";
+import { searchItems, searchTerms } from "@/lib/search";
+import type { SearchHit } from "@/lib/search";
 import type { Item, ItemEvent } from "@/lib/types";
 
 // Mutations are plain CRUD against the request's board ({db, userId, boardId} from
@@ -304,22 +303,17 @@ export async function createNoteAction(boardId: string | null) {
   revalidateBoard(bid);
 }
 
-// The half of search that isn't already in the browser: ARCHIVED cards, and the
-// board's HISTORY (what a card used to say). The live board is searched client-side
-// with the same pure matchers (lib/search.ts) — this is the debounced server trip the
-// overlay makes alongside it. Ranking happens here so only the hits cross the wire.
-export async function deepSearchAction(
+// The half of search that isn't already in the browser: ARCHIVED cards. The live board
+// is searched client-side with the same pure matcher (lib/search.ts) — this is the
+// debounced server trip the overlay makes alongside it. Ranking happens here so only
+// the hits cross the wire.
+export async function searchArchivedAction(
   boardId: string | null,
   query: string,
-): Promise<{ archived: SearchHit[]; history: HistoryHit[] }> {
-  const terms = searchTerms(query);
-  if (terms.length === 0) return { archived: [], history: [] };
+): Promise<SearchHit[]> {
+  if (searchTerms(query).length === 0) return [];
   const { db, boardId: bid } = getBoardContext(boardId);
-  const archivedItems = getArchivedItems(db, bid);
-  return {
-    archived: searchItems(archivedItems, query, 10),
-    history: searchEvents(searchHistory(db, bid, terms), query, 15),
-  };
+  return searchItems(getArchivedItems(db, bid), query, 10);
 }
 
 export async function historyAction(boardId: string | null, id: string): Promise<ItemEvent[]> {

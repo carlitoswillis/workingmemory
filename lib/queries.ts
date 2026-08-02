@@ -3,7 +3,6 @@ import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
 // .ts extension so plain-node tests can import this module (see lib/users.ts).
 import { completedDays } from "./streaks.ts";
-import type { SearchEventRow } from "./search.ts";
 
 // Reads from a SQLite board (shared boards v1). Every function takes the request's
 // { db, boardId } from lib/db.ts#getBoardContext() explicitly — this module stays
@@ -109,32 +108,6 @@ export function getBoardHighWater(db: Database.Database, boardId: string | null)
     )
     .get(boardId) as { h: number };
   return row.h;
-}
-
-// Candidate history rows for search: text/details edits (including the 'created'
-// event, which carries the card's original wording) whose old or new value contains
-// every search term. Narrowed in SQL so a long-lived board doesn't ship its whole log
-// per keystroke; lib/search.ts#searchEvents then ranks what comes back. LIKE is
-// case-insensitive for ASCII in SQLite, and the wildcards in a user's query are
-// escaped so a stray % can't match everything.
-export function searchHistory(
-  db: Database.Database,
-  boardId: string | null,
-  terms: string[],
-  limit = 300,
-): SearchEventRow[] {
-  if (terms.length === 0) return [];
-  const like = terms.map(() => "(coalesce(e.old_value,'') || ' ' || coalesce(e.new_value,'')) like ? escape '\\'");
-  const args = terms.map((t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
-  return db
-    .prepare(
-      `select e.id, e.item_id, e.type, e.field, e.old_value, e.new_value, e.at,
-              i.text item_text, i.archived item_archived, i.list item_list
-       from item_events e join items i on i.id = e.item_id
-       where i.board_id is ? and e.field in ('text', 'details') and ${like.join(" and ")}
-       order by e.at desc, e.id desc limit ?`,
-    )
-    .all(boardId, ...args, limit) as SearchEventRow[];
 }
 
 export function getHistory(

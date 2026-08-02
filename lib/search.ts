@@ -1,8 +1,12 @@
 // Search over the board's cards (2026-07-23). Deliberately a PURE function over the
 // items the client already has — the whole board is shipped to the browser on every
-// render, so searching it needs no server round-trip, no index, and no new SQL. (The
-// separate backlog item "search across items + their history" is the bigger one: it
-// needs the event log, which is only loaded when the time machine opens.)
+// render, so searching it needs no server round-trip, no index, and no new SQL.
+//
+// CARDS ONLY, on purpose (owner, 2026-08-02: "I'd rather it just search cards and card
+// content like details"). Search used to also rank matches out of `item_events` — old
+// wording a card no longer has — and those event rows crowded the results. A card's
+// past is still all there, just where it belongs: the History list in its panel, and
+// the time machine.
 //
 // Matching: every whitespace-separated term must appear somewhere in the card (title
 // or details), case-insensitive substring — the forgiving behaviour you want when
@@ -17,31 +21,6 @@ export interface SearchHit {
   snippet: string; // the text to render: the title, or a window of the details
   start: number; // offset of the matched term within `snippet`
   length: number; // its length, so the UI can highlight exactly that run
-}
-
-// A history match: the card's own past, out of the append-only event log. This is
-// the thing the app is FOR — "what did that card used to say", "what did I write in
-// the note three weeks ago" — so search reaches into item_events (text + details
-// edits, incl. the 'created' event's original wording), not just the live board.
-export interface SearchEventRow {
-  id: number;
-  item_id: string;
-  type: string;
-  field: string | null;
-  old_value: string | null;
-  new_value: string | null;
-  at: string;
-  item_text: string; // the card's CURRENT title, so a hit is recognisable
-  item_archived: number;
-  item_list: string;
-}
-
-export interface HistoryHit {
-  event: SearchEventRow;
-  side: "old" | "new"; // which version of the text the match came from
-  snippet: string;
-  start: number;
-  length: number;
 }
 
 const SNIPPET_PAD = 44;
@@ -102,48 +81,4 @@ export function searchItems(items: Item[], query: string, limit = 20): SearchHit
 
   scored.sort((a, b) => a.rank - b.rank || b.touched - a.touched);
   return scored.slice(0, limit).map((s) => s.hit);
-}
-
-/**
- * Rank event rows (already narrowed by SQL — see lib/queries.ts#searchHistory) the
- * same way: every term must appear somewhere in the old or new value. Newest first,
- * and at most `perItem` hits from any one card so a chatty card can't crowd out the
- * rest. The OLD value wins the snippet when it matches — "what it used to say" is
- * the interesting half.
- */
-export function searchEvents(
-  rows: SearchEventRow[],
-  query: string,
-  limit = 20,
-  perItem = 2,
-): HistoryHit[] {
-  const terms = searchTerms(query);
-  if (terms.length === 0) return [];
-
-  const hits: HistoryHit[] = [];
-  const seen = new Map<string, number>();
-  const ordered = [...rows].sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime() || b.id - a.id,
-  );
-
-  for (const event of ordered) {
-    if (hits.length >= limit) break;
-    const oldV = event.old_value ?? "";
-    const newV = event.new_value ?? "";
-    const hay = `${oldV} ${newV}`.toLowerCase();
-    if (!terms.every((t) => hay.includes(t))) continue;
-    const count = seen.get(event.item_id) ?? 0;
-    if (count >= perItem) continue;
-
-    const first = terms[0];
-    const inOld = oldV.toLowerCase().indexOf(first);
-    const side: "old" | "new" = inOld >= 0 ? "old" : "new";
-    const source = side === "old" ? oldV : newV;
-    const at = side === "old" ? inOld : newV.toLowerCase().indexOf(first);
-    if (at < 0) continue;
-    const { snippet, start } = windowAround(source, at, first.length);
-    hits.push({ event, side, snippet, start, length: first.length });
-    seen.set(event.item_id, count + 1);
-  }
-  return hits;
 }

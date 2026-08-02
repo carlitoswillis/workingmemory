@@ -2,29 +2,25 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "@/lib/types";
-import { searchItems, type HistoryHit, type SearchHit } from "@/lib/search";
-import { deepSearchAction } from "@/app/actions";
+import { searchItems, type SearchHit } from "@/lib/search";
+import { searchArchivedAction } from "@/app/actions";
 import { useBoardId } from "./board-context";
 
 // Find anything on this board: "/" (or the Search button) opens it, type, ↑/↓ to walk
 // the results, Enter opens the card, Esc closes.
 //
-// Three layers, because the board is only the present tense:
+// CARDS ONLY (owner, 2026-08-02) — title and details, nothing else. It used to rank
+// hits out of the event log too ("what this card used to say"), and those rows crowded
+// out the cards you were actually looking for. A card's past is still one tap further
+// in: open it and its History list has every wording it's ever had.
+//
+// Two layers, because the board isn't everything you've kept:
 //   1. On the board — matched locally against the cards the browser already has, so
 //      it's instant and needs no server round-trip. Sub-cards included.
-//   2. Archived — cards you put away; opening one gives you its panel + Restore.
-//   3. In history — the append-only event log (lib/queries.ts#searchHistory): what a
-//      card USED to say, including wording you've since edited away. This is the part
-//      no other board app can do, and the reason search exists here at all.
-// 2 and 3 are one debounced server action (deepSearchAction); 1 re-runs per keystroke.
+//   2. Archived — cards you put away; opening one gives you its panel + Restore. One
+//      debounced server action (searchArchivedAction); layer 1 re-runs per keystroke.
 
-type Row =
-  | { kind: "board"; hit: SearchHit }
-  | { kind: "archived"; hit: SearchHit }
-  | { kind: "history"; hit: HistoryHit };
-
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+type Row = { kind: "board" | "archived"; hit: SearchHit };
 
 function Highlight({
   snippet,
@@ -64,8 +60,8 @@ export default function SearchOverlay({
   const boardId = useBoardId();
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
-  const [deep, setDeep] = useState<{ archived: SearchHit[]; history: HistoryHit[] } | null>(null);
-  const [deepLoading, setDeepLoading] = useState(false);
+  const [archived, setArchived] = useState<SearchHit[] | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -76,28 +72,28 @@ export default function SearchOverlay({
     if (open) {
       setQ("");
       setCursor(0);
-      setDeep(null);
+      setArchived(null);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
   useEffect(() => setCursor(0), [q]);
 
-  // The archive + history trip: debounced, and only once there's something worth
-  // asking about (a single letter would match half the board's history).
+  // The archive trip: debounced, and only once there's something worth asking about
+  // (a single letter would drag back half the archive).
   useEffect(() => {
     if (!open) return;
     const query = q.trim();
     if (query.length < 2) {
-      setDeep(null);
-      setDeepLoading(false);
+      setArchived(null);
+      setArchiveLoading(false);
       return;
     }
-    setDeepLoading(true);
+    setArchiveLoading(true);
     let alive = true;
     const t = setTimeout(() => {
-      deepSearchAction(boardId, query)
-        .then((res) => alive && setDeep(res))
-        .finally(() => alive && setDeepLoading(false));
+      searchArchivedAction(boardId, query)
+        .then((res) => alive && setArchived(res))
+        .finally(() => alive && setArchiveLoading(false));
     }, 250);
     return () => {
       alive = false;
@@ -108,10 +104,9 @@ export default function SearchOverlay({
   const rows: Row[] = useMemo(
     () => [
       ...boardHits.map((hit) => ({ kind: "board" as const, hit })),
-      ...(deep?.archived ?? []).map((hit) => ({ kind: "archived" as const, hit })),
-      ...(deep?.history ?? []).map((hit) => ({ kind: "history" as const, hit })),
+      ...(archived ?? []).map((hit) => ({ kind: "archived" as const, hit })),
     ],
-    [boardHits, deep],
+    [boardHits, archived],
   );
 
   useEffect(() => {
@@ -123,7 +118,7 @@ export default function SearchOverlay({
   if (!open) return null;
 
   function choose(row: Row) {
-    onPick(row.kind === "history" ? row.hit.event.item_id : row.hit.item.id);
+    onPick(row.hit.item.id);
     onClose();
   }
 
@@ -149,9 +144,7 @@ export default function SearchOverlay({
   const section = (i: number): string | null => {
     const kind = rows[i].kind;
     if (i > 0 && rows[i - 1].kind === kind) return null;
-    if (kind === "board") return "On the board";
-    if (kind === "archived") return "Archived";
-    return "In history";
+    return kind === "board" ? "On the board" : "Archived";
   };
 
   return (
@@ -178,7 +171,7 @@ export default function SearchOverlay({
               Search
             </span>
             <span className="text-[11px] text-[var(--text-lo)]">
-              board, archive + everything it used to say
+              cards on the board + in the archive
             </span>
           </div>
           <input
@@ -186,7 +179,7 @@ export default function SearchOverlay({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Find a card, or a thought you've since edited away…"
+            placeholder="Find a card by its title or details…"
             className="w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3.5 py-2.5 text-[15px] text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
           />
         </div>
@@ -198,17 +191,14 @@ export default function SearchOverlay({
           >
             {rows.length === 0 ? (
               <p className="px-2.5 py-2 font-display text-sm italic text-[var(--text-lo)]">
-                {deepLoading ? "Remembering…" : "Nothing on this board matches that."}
+                {archiveLoading ? "Looking…" : "No card matches that."}
               </p>
             ) : (
               <ul className="flex flex-col gap-0.5">
                 {rows.map((row, i) => {
                   const head = section(i);
                   const active = i === cursor;
-                  const key =
-                    row.kind === "history"
-                      ? `h-${row.hit.event.id}`
-                      : `${row.kind}-${row.hit.item.id}`;
+                  const key = `${row.kind}-${row.hit.item.id}`;
                   return (
                     <li key={key}>
                       {head && (
@@ -224,61 +214,31 @@ export default function SearchOverlay({
                           active ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
                         }`}
                       >
-                        {row.kind === "history" ? (
-                          <>
-                            <p className="break-words text-[13.5px] leading-snug text-[var(--text-hi)]">
-                              {row.hit.event.item_text}
-                            </p>
-                            <p className="mt-0.5 break-words font-display text-xs italic leading-snug text-[var(--text-lo)]">
-                              <Highlight {...row.hit} className="not-italic" />
-                            </p>
-                            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-lo)]">
-                              <span className="rounded-full border border-[var(--veil)] px-1.5 py-[1px]">
-                                {row.hit.side === "old"
-                                  ? row.hit.event.type === "created"
-                                    ? "as first captured"
-                                    : "used to say"
-                                  : row.hit.event.field === "details"
-                                    ? "written in details"
-                                    : "renamed to"}
-                              </span>
-                              <span>{fmtDay(row.hit.event.at)}</span>
-                              {row.hit.event.item_archived ? <span>· archived</span> : null}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <p
-                              className={`break-words text-[13.5px] leading-snug ${
-                                row.hit.item.done
-                                  ? "text-[var(--text-lo)] line-through"
-                                  : "text-[var(--text-hi)]"
-                              }`}
-                            >
-                              {row.hit.field === "text" ? (
-                                <Highlight {...row.hit} />
-                              ) : (
-                                row.hit.item.text
-                              )}
-                            </p>
-                            {row.hit.field === "details" && (
-                              <p className="mt-0.5 break-words font-display text-xs italic leading-snug text-[var(--text-lo)]">
-                                <Highlight {...row.hit} className="not-italic" />
-                              </p>
-                            )}
-                            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-lo)]">
-                              <span className="rounded-full border border-[var(--veil)] px-1.5 py-[1px]">
-                                {listLabels[row.hit.item.list] ?? row.hit.item.list}
-                              </span>
-                              {row.kind === "archived" && <span>archived</span>}
-                              {row.hit.item.parent_id && byId.get(row.hit.item.parent_id) && (
-                                <span className="truncate">
-                                  ↳ in “{byId.get(row.hit.item.parent_id)!.text}”
-                                </span>
-                              )}
-                            </p>
-                          </>
+                        <p
+                          className={`break-words text-[13.5px] leading-snug ${
+                            row.hit.item.done
+                              ? "text-[var(--text-lo)] line-through"
+                              : "text-[var(--text-hi)]"
+                          }`}
+                        >
+                          {row.hit.field === "text" ? <Highlight {...row.hit} /> : row.hit.item.text}
+                        </p>
+                        {row.hit.field === "details" && (
+                          <p className="mt-0.5 break-words font-display text-xs italic leading-snug text-[var(--text-lo)]">
+                            <Highlight {...row.hit} className="not-italic" />
+                          </p>
                         )}
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-lo)]">
+                          <span className="rounded-full border border-[var(--veil)] px-1.5 py-[1px]">
+                            {listLabels[row.hit.item.list] ?? row.hit.item.list}
+                          </span>
+                          {row.kind === "archived" && <span>archived</span>}
+                          {row.hit.item.parent_id && byId.get(row.hit.item.parent_id) && (
+                            <span className="truncate">
+                              ↳ in “{byId.get(row.hit.item.parent_id)!.text}”
+                            </span>
+                          )}
+                        </p>
                       </button>
                     </li>
                   );
@@ -296,7 +256,7 @@ export default function SearchOverlay({
           </span>
           {q.trim() && (
             <span className="tabular-nums">
-              {deepLoading ? "searching the past…" : rows.length > 0 ? `${rows.length} found` : ""}
+              {archiveLoading ? "checking the archive…" : rows.length > 0 ? `${rows.length} found` : ""}
             </span>
           )}
         </div>

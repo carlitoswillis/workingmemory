@@ -87,11 +87,13 @@ a real structure without losing its looseness.
       app-level field crypto is the likelier shape. Password-derived keys ⇒
       forgotten password = unrecoverable data (hence: recovery codes first).
       Needs its own plan.
-- [x] **Search across items + their history** — BUILT 2026-07-23 together with the
-      search overlay (text/details edits + the original capture wording, over
-      `item_events`). NOT covered: searching *structural* history (when a card was in
-      Waiting, who moved it) — that's a query over `moved` events, worth its own item
-      if you ever want it.
+- [x] **Search across items + their history** — BUILT 2026-07-23, then **history
+      search REMOVED 2026-08-02** at the owner's call ("I'd rather it just search cards
+      and card content like details"): matching event rows were crowding out the cards.
+      Search is cards only now — live board + archive, title + details. A card's past
+      is still one tap away in its panel's History list, and the time machine is
+      untouched. The matcher + SQL are in git (`searchEvents` / `searchHistory`,
+      removed in the 2026-08-02 commit) if it's ever wanted back as an opt-in filter.
 - [ ] **AI integration** (the real differentiator — point an LLM at the event
       stream): weekly review that writes itself; auto-triage of brain dumps; "ask
       your history". Plan: `ai/plans/2026-07-03-ai-weekly-review.md`. Owner call
@@ -167,6 +169,23 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-08-02 — Search is cards only** (owner: "the search is currently searching
+  events it seems… I'd rather it just search cards and card content like details").
+  The overlay's third section, **In history**, is gone: hits ranked out of
+  `item_events` were competing with the cards you were actually looking for. What's
+  left is the board (client-side, instant) + the archive (`searchArchivedAction`,
+  debounced 250ms from 2 chars), both through the one pure matcher over title +
+  details. Deleted with it: `searchEvents` (lib/search.ts), `searchHistory`
+  (lib/queries.ts) and its escaped-LIKE SQL, `HistoryHit`/`SearchEventRow`, and the
+  history half of the old `deepSearchAction`. NOTHING about the event log changed —
+  the triggers, the card panel's History list and the time machine are untouched; only
+  the search path stopped reading it. **Known gap this opens**: the daily note is
+  filtered out of the live section (it has no panel), and history search was the only
+  way its text turned up — so note content is now unsearchable. Making the note a
+  search target needs a decision about where picking one lands you; not built.
+  Verified: 11 suites (search tests lost the history block, gained searchTerms cover),
+  tsc, prod build; overlay driven in a browser — "shelf"/"cover grid"/"passport" return
+  the card and nothing else, an archived card still comes back under **Archived**.
 - **2026-08-02 — Swipe left on a card to archive it** (phones only, `SwipeToArchive.tsx`
   wrapped around `ItemCard`, so live cards, done cards and sub-cards all get it).
   Owner set the bar: "the swipe should be extreme so we don't accidentally delete
@@ -237,11 +256,10 @@ a real structure without losing its looseness.
     44px, so a long-press drag should be able to hit it — worth a check.
   - **Search**: "/" or the Search button (bottom right, next to Capture). Type part of
     a card's title or details; ↑↓ + Enter opens it. Sub-card hits say which card
-    they're in. Then check the two deeper sections (they appear after ~250ms, from 2
-    characters on): **Archived** — open one and the panel offers Restore instead of
-    Archive; **In history** — search a word you've since edited out of a card or out
-    of the daily note, and it should come back labelled "used to say" / "as first
-    captured" with the date. The Archive drawer also has its own filter box.
+    they're in. Then check **Archived** (appears after ~250ms, from 2 characters on) —
+    open one and the panel offers Restore instead of Archive. Cards only as of
+    2026-08-02; there is no history section any more. The Archive drawer also has its
+    own filter box.
   - **Blur commits a draft**: type in a column's capture box and click elsewhere — the
     card should be created, not lost. Same for the sub-card box, and for quick-capture
     when you click outside it (Esc still discards).
@@ -321,7 +339,9 @@ a real structure without losing its looseness.
     `item_events` in SQL (text/details edits + the 'created' wording, escaped LIKE per
     term, board-scoped through the items join) and `searchEvents` ranks it newest-first
     with a 2-hits-per-card cap, showing the OLD side ("used to say" / "as first
-    captured"). Picking any hit opens the card: Board keeps a small `found` list for
+    captured"). *[The history layer was removed 2026-08-02 — see the entry below; what
+    survives is the board layer plus a cards-only `searchArchivedAction`.]* Picking any
+    hit opens the card: Board keeps a small `found` list for
     rows that aren't on the live board, fetched via `getItemAction`, and the panel
     swaps Archive for **Restore** on an archived card. The Archive drawer also got a
     filter box using the same matcher. The daily note is excluded from the live
