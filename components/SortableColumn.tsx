@@ -19,6 +19,7 @@ export default function SortableColumn(props: {
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  onArchive: (item: Item) => void;
   onAdd: (listId: string, text: string) => void;
   onRename: (id: string, label: string) => void;
   onDelete: (id: string) => void;

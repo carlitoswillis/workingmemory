@@ -21,6 +21,7 @@ export default function Column({
   canDelete,
   onSelect,
   onOpenCard,
+  onArchive,
   onAdd,
   onRename,
   onDelete,
@@ -39,6 +40,7 @@ export default function Column({
   canDelete: boolean;
   onSelect: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  onArchive: (item: Item) => void;
   onAdd: (listId: string, text: string) => void;
   onRename: (id: string, label: string) => void;
   onDelete: (id: string) => void;
@@ -201,6 +203,7 @@ export default function Column({
                 }
                 onSelect={onSelect}
                 onOpenCard={onOpenCard}
+                onArchive={onArchive}
               />
             ))}
           </div>
@@ -231,6 +234,7 @@ export default function Column({
                 selected={selection.has(item.id)}
                 onSelect={onSelect}
                 onOpenCard={onOpenCard}
+                onArchive={onArchive}
               />
             ))}
           </div>

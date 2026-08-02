@@ -17,6 +17,15 @@ function recencyAmount(updatedAt: string): number {
 }
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
+// The card's buttons sit inside the sortable wrapper, whose dnd-kit listeners own
+// Space/Enter (start a keyboard drag) and the arrows (move it) — those still stop
+// here. Everything else has to keep going: React attaches at the root, so swallowing
+// every keydown also hid the board's own hotkeys ("a", "c", "/", ⌘Z) from the window
+// handler whenever a card had focus, which is exactly after you've clicked one.
+function stopDragKeys(e: React.KeyboardEvent) {
+  if (e.key === " " || e.key === "Enter" || e.key.startsWith("Arrow")) e.stopPropagation();
+}
+
 export default function ItemCard({
   item,
   childItems,
@@ -24,6 +33,7 @@ export default function ItemCard({
   muted = false,
   onSelect,
   onOpenCard,
+  onArchive,
 }: {
   item: Item;
   allLists: readonly ListDef[];
@@ -32,6 +42,10 @@ export default function ItemCard({
   muted?: boolean;
   onSelect?: (item: Item, mode: "toggle" | "range") => void;
   onOpenCard: (item: Item) => void;
+  // Board hands one down so archiving goes through its optimistic + undoable path
+  // (and takes the whole selection with it). Without one — sub-cards in the panel —
+  // the card archives itself.
+  onArchive?: (item: Item) => void;
 }) {
   const boardId = useBoardId();
   const rec = parseRecurrence(item.recurrence);
@@ -63,6 +77,11 @@ export default function ItemCard({
       )
     : 0;
 
+  function archive() {
+    if (onArchive) onArchive(item);
+    else startTransition(() => archiveItemAction(boardId, item.id));
+  }
+
   const hasDetails = item.details.trim().length > 0;
   const subTotal = childItems?.length ?? 0;
   const subDone = childItems?.filter((c) => effectiveDone(c)).length ?? 0;
@@ -72,13 +91,11 @@ export default function ItemCard({
   const edge = `rgb(${lerp(35, 176, amt)}, ${lerp(43, 138, amt)}, ${lerp(69, 92, amt)})`;
 
   return (
-    <SwipeToArchive
-      id={item.id}
-      onArchive={() => startTransition(() => archiveItemAction(boardId, item.id))}
-    >
+    <SwipeToArchive id={item.id} onArchive={archive}>
       {/* Clipped under sm so a swipe cuts the (still) content against the card's own
           travelling edges instead of spilling it onto the Archive button. Only where
-          the swipe exists — the desktop card keeps its overflow, and its focus rings. */}
+          the swipe exists — at ≥sm the card keeps its overflow, its focus rings, and
+          the hover Archive button below. */}
       <div
         className={`card-in group overflow-hidden rounded-lg sm:overflow-visible border bg-[var(--surface)] transition-colors duration-150 ${
           selected
@@ -91,7 +108,7 @@ export default function ItemCard({
           <button
             aria-label={doneLocal ? "Mark not done" : "Mark done"}
             onClick={toggleDone}
-            onKeyDown={(e) => e.stopPropagation()}
+            onKeyDown={stopDragKeys}
             className={`mt-[3px] grid h-[15px] w-[15px] shrink-0 place-items-center rounded-full border transition-colors ${
               doneLocal
                 ? "border-[var(--done)] bg-[var(--done)]"
@@ -120,7 +137,7 @@ export default function ItemCard({
               else if (onSelect && e.shiftKey) onSelect(item, "range");
               else onOpenCard(item);
             }}
-            onKeyDown={(e) => e.stopPropagation()}
+            onKeyDown={stopDragKeys}
             className={`min-w-0 flex-1 break-words text-left text-[13.5px] leading-snug ${
               doneLocal ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"
             }`}
@@ -158,6 +175,31 @@ export default function ItemCard({
               aria-hidden
             />
           )}
+          {/* The desktop half of "put this away": phones swipe, pointers hover. Hidden
+              under sm so a phone card stays clean (and un-mis-tappable) — from sm up
+              `.card-actions` shows it always on touch, on hover/focus where there's a
+              real pointer. Safe to click by accident: Board's handler is undoable. */}
+          <button
+            aria-label="Archive this card"
+            title="Archive · a"
+            onClick={(e) => {
+              e.stopPropagation();
+              archive();
+            }}
+            onKeyDown={stopDragKeys}
+            className="card-actions mt-[1px] hidden shrink-0 rounded p-[3px] text-[var(--text-lo)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--past)] sm:block"
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
+              <path
+                d="M1.8 3.4h12.4v2.4H1.8zM3 5.8h10V13H3zM6.2 8.6h3.6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         </SwipeStill>
       </div>
     </SwipeToArchive>

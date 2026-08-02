@@ -169,6 +169,39 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-08-02 — Archive from the board, and undo it** (owner: "the desktop view is
+  less intuitive for the swipe thing… maybe a right click? give better idea if u have
+  it. also maybe we allow multi select? for dragging and archiving?"). Three ways in,
+  no context menu — a custom right-click menu would hijack the browser's own and hide
+  the action behind a gesture nobody photographs, so instead:
+  1. **Card hover button** (≥sm only — phones have the swipe). It uses `.card-actions`,
+     the convention that had been sitting unused in globals.css since the beginning:
+     always visible on touch, revealed on hover/focus where there's a real pointer.
+  2. **Selection bar** — the bar that already appears on a multi-select ("3 selected ·
+     drag any one to move them together") gained **Archive · a**. Multi-select drag
+     was already built (⌘/Ctrl-click, Shift-click for a range); this makes the same
+     selection archivable.
+  3. **"a"** archives the selection, the keyboard twin of that button.
+  Archiving a card that's part of a selection takes the whole selection — the rule
+  dragging one of them already followed.
+  **The safety story flips on desktop**: the phone swipe is deliberately hard to do by
+  accident, but a hover button is one click, so `archiveCards` is optimistic AND
+  undoable — ⌘Z or the Undo pill puts the cards back (`archiveItemsAction` /
+  `unarchiveItemsAction`, one transaction and ONE revalidation for the whole block).
+  The swipe now routes through the same handler, so phones got undo too.
+  Two things had to be fixed for this to work:
+  - Card buttons swallowed EVERY keydown (`stopPropagation`) to keep Space/Enter/arrows
+    away from dnd-kit's keyboard drag. React attaches at the root, so that also hid the
+    board's own hotkeys from the window handler whenever a card had focus — i.e. right
+    after clicking one. Narrowed to the drag keys; "/", "c", "a" and ⌘Z now survive.
+  - The centred pills (undo, drag hint, notice) sat at `bottom-5` exactly under the
+    Search/Capture cluster on a phone — the Undo button was literally unclickable
+    there. They ride at `bottom-20` under `sm`.
+  Verified in a browser at 1440px and 390px: hover opacity 0→1, one-click archive +
+  undo restores byte-identical board state, 3-card select → bar → "Archived 3 cards" →
+  undo restores, "a" does the same, "/" still opens search after a card click, keyboard
+  drag (Space/arrows) still reorders, phone swipe→archive→undo works and the hover
+  button stays `display:none` under sm. tsc, 11 suites, prod build (128kB).
 - **2026-08-02 — Search is cards only** (owner: "the search is currently searching
   events it seems… I'd rather it just search cards and card content like details").
   The overlay's third section, **In history**, is gone: hits ranked out of
