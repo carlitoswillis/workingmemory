@@ -266,6 +266,22 @@ a real structure without losing its looseness.
   phones and across it on desktop. Snapshot view rides the same layout.
   Verified: tsc, 11 suites, prod build (~127kB held); phone (390px) and desktop
   (1440px) screenshotted — no horizontal page overflow on the phone stack.
+  **The rail moved off handhelds entirely on 2026-08-03** (owner, still seeing
+  sideways scrolling a day after the phone stack shipped: "instead of horizontal
+  scrolling, stack them vertically as they were before (kinda)"). The stack only ever
+  went up to `sm`, so anything 640–1023px — a phone in landscape, a tablet, a narrow
+  window — still landed on the rail and still swiped. `RAIL` is the old responsive
+  grid again below `lg`: `grid-cols-1` on phones, `sm:grid-cols-2` that wraps, and
+  the flex rail waits for `lg`. Nothing scrolls sideways until the desktop board it
+  was designed for. Snapshot view rides the same layout, and the reorder strategy is
+  still `rect` (it handles one column, two, or a row).
+  Left alone deliberately: swipe-to-archive stays a `< sm` gesture. From 640px up the
+  hover/tap Archive button is already there, so those widths lose nothing — and the
+  `max-width: 639px` matchMedia in `SwipeToArchive` is now the only place the old
+  boundary survives, on purpose.
+  Verified: tsc, 11 suites, prod build (128kB); layout read off the live DOM at
+  320/390/430/639 (grid, 1 col) · 640/744/820/1023 (grid, 2 cols) ·
+  1024/1280/1440 (flex rail) — page overflow 0 at every one of them.
 - **2026-07-24 — nesting drag, v2** (owner feedback on the shipped v1: "dragging into
   another card to nest is realllyyy difficult… because dragging currently shifts cards
   around", and dragging a sub-card off the panel should put it back on the board).

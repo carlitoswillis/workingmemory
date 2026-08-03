@@ -57,17 +57,22 @@ type Move = { id: string; list: string; position: number };
 // The gap a release would drop into: above `beforeId`, or below the column's last card.
 type DropAt = { list: string; beforeId: string | null };
 
-// Phones stack: one full-width column after another down the page, so reading a
-// board is a normal vertical scroll (sideways swiping hid columns off-screen).
-// From ≥sm it's the horizontal rail: columns share the screen like the old grid
-// (grow to fill) but never crush below the basis — extra columns overflow into a
-// sideways scroll. Negative margins cancel the page padding so the rail runs edge
-// to edge; overscroll containment keeps a rail fling from triggering browser back.
+// NOTHING SCROLLS SIDEWAYS UNTIL DESKTOP. The old responsive grid is back for every
+// handheld width — one full-width column after another down the page on phones, two
+// that wrap from ≥sm — so reading a board is an ordinary vertical scroll and no
+// column hides off-screen. A landscape phone or a tablet used to land on the rail at
+// 640px and start swiping again; the rail now waits for ≥lg.
+// From ≥lg it's the horizontal rail the desktop board was built for: columns share
+// the screen like the old grid (grow to fill) but never crush below the basis —
+// extra columns overflow into a sideways scroll. Negative margins cancel the page
+// padding so the rail runs edge to edge; overscroll containment keeps a rail fling
+// from triggering browser back. (`lg:flex` beats `grid`; the grid-cols-* above it
+// simply stop applying once the box is a flex row.)
 const RAIL =
-  "flex flex-col gap-4 " +
-  "sm:flex-row sm:items-start sm:overflow-x-auto sm:overscroll-x-contain sm:pb-4 " +
-  "sm:-mx-10 sm:px-10 " +
-  "sm:[&>*]:flex-[1_0_184px] sm:[&>*]:max-w-[320px]";
+  "grid grid-cols-1 gap-4 sm:grid-cols-2 " +
+  "lg:flex lg:flex-row lg:items-start lg:overflow-x-auto lg:overscroll-x-contain lg:pb-4 " +
+  "lg:-mx-10 lg:px-10 " +
+  "lg:[&>*]:flex-[1_0_184px] lg:[&>*]:max-w-[320px]";
 
 // N evenly-spaced position values to drop a block of cards between two neighbors.
 function spacedPositions(prev: number | undefined, next: number | undefined, n: number): number[] {
@@ -999,8 +1004,8 @@ export default function Board({
             setDrop(null);
           }}
         >
-          {/* rect, not horizontal: the columns run down the page on phones and
-              across it from ≥sm, and rect handles both arrangements. */}
+          {/* rect, not horizontal: the columns run down the page on handhelds (one
+              or two per row) and across it from ≥lg — rect handles every one. */}
           <SortableContext items={listOrder} strategy={rectSortingStrategy}>
             <div className={RAIL}>
               <NoteColumn note={note} />
