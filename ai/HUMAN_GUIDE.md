@@ -12,7 +12,7 @@ The AI is a probabilistic reasoning engine. It is excellent at writing code but 
 ## 2. Initial Setup
 Based on your local configuration:
 1.  **Start Ollama**: Ensure your runtime is active (`ollama list`).
-2.  **Model**: You are using `qwen2.5-coder:14b` (or 32b).
+2.  **Model**: You are using `qwen3.5:9b` (or 27b).
 3.  **Aider Ready**: Ensure Aider is installed and configured to point to your local Ollama endpoint (`export OLLAMA_API_BASE=http://127.0.0.1:11434`).
 
 ---
@@ -37,7 +37,7 @@ This gathers your rules (`AGENTS.md`), your focus (`CURRENT_STATE.md`), and a su
 Start Aider and feed it the bundle:
 ```bash
 # Start Aider with your local model
-aider --model ollama/qwen2.5-coder:14b
+aider --model ollama/qwen3.5:9b
 
 # Inside Aider:
 > "Read .ai/context/current_bundle.md. Implement the first task in .ai/TASKS.md. Follow the rules in AGENTS.md strictly."
