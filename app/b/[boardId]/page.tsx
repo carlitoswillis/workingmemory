@@ -9,7 +9,15 @@ import { getRequestUserId, DEMO_MODE } from "@/lib/db";
 // silently dropping them onto a demo board.
 export const dynamic = "force-dynamic";
 
-export default function BoardPage({ params }: { params: { boardId: string } }) {
+export default function BoardPage({
+  params,
+  searchParams,
+}: {
+  params: { boardId: string };
+  // ?card=<id> opens straight onto one card — how a doorway's "view original"
+  // link reaches the archived source card on the other side of a conversion.
+  searchParams?: { card?: string };
+}) {
   if (DEMO_MODE && !getRequestUserId()) notFound();
-  return <BoardScreen boardId={params.boardId} />;
+  return <BoardScreen boardId={params.boardId} openCardId={searchParams?.card} />;
 }

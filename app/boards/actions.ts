@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getBoardContext, getMainDb, getRequestUserId } from "@/lib/db";
+import { setLinkedBoard } from "@/lib/doorways";
 import { pokeBoard } from "@/lib/realtime";
 import {
   createBoard,
@@ -35,6 +36,35 @@ export async function createBoardAction(name: string) {
   const res = createBoard(getMainDb(), userId, name);
   if ("error" in res) return res.error;
   redirect(`/b/${res.id}`);
+}
+
+// "New board from this card" (card ↔ board doorways): make a board named after the
+// card, then point the card at it. No redirect — the card just becomes a doorway
+// into an empty board you can move into at your leisure. The per-user board cap is
+// enforced by createBoard; the creator is its owner, so the link can't be refused.
+export async function createBoardFromCardAction(
+  boardId: string | null,
+  id: string,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  if (!userId) return "Sign in to make a board.";
+  const card = db
+    .prepare("select text from items where id = ? and board_id is ?")
+    .get(id, bid) as { text: string } | undefined;
+  if (!card) return "That card is no longer on this board.";
+
+  const created = createBoard(db, userId, card.text);
+  if ("error" in created) return created.error;
+  const linked = setLinkedBoard(db, bid, {
+    id,
+    linkedBoardId: created.id,
+    actorId: userId,
+  });
+  if ("error" in linked) return linked.error;
+
+  revalidatePath("/", "layout");
+  pokeBoard(bid);
+  return null;
 }
 
 export async function renameBoardAction(boardId: string, name: string): Promise<string | null> {

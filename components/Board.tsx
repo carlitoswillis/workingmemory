@@ -44,7 +44,12 @@ import {
 } from "@/app/actions";
 import SortableColumn from "./SortableColumn";
 import AddColumn from "./AddColumn";
-import { BoardIdProvider } from "./board-context";
+import {
+  BoardIdProvider,
+  DoorwaysProvider,
+  type BoardOption,
+  type DoorwayInfo,
+} from "./board-context";
 import CardPanel from "./CardPanel";
 import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
@@ -131,12 +136,21 @@ export default function Board({
   listLabels,
   actors,
   items,
+  doorways,
+  myBoards,
+  openCardId: initialCardId,
 }: {
   boardId: string | null;
   lists: readonly ListDef[];
   listLabels: Record<string, string>;
   actors: Record<string, string>; // actor_id -> username, for history attribution
   items: Item[];
+  // Card ↔ board doorways: linked board id -> name + live open count, resolved
+  // server-side ONLY for boards this viewer belongs to (absent = neutral chip),
+  // and the boards the viewer can point a card at.
+  doorways: Record<string, DoorwayInfo>;
+  myBoards: BoardOption[];
+  openCardId?: string; // ?card=<id>: open this card's panel on arrival
 }) {
   // Cards search dug up that aren't on the live board (archived ones, or the card
   // behind a history hit). Kept alongside `items` purely so the panel can open them;
@@ -232,6 +246,16 @@ export default function Board({
     }
     navigateTo(id);
   }
+
+  // Arriving with ?card=<id> (a doorway's "view original" link, which usually points
+  // at an ARCHIVED card on this board): open its panel once, then leave the user in
+  // charge. openById already fetches anything that isn't on the live board.
+  const arrivedRef = useRef(false);
+  useEffect(() => {
+    if (!initialCardId || arrivedRef.current) return;
+    arrivedRef.current = true;
+    openById(initialCardId);
+  }, [initialCardId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Time machine. The full (small, single-user) event log is shipped to the client once,
   // so the scrubber reconstructs any past moment locally with no per-tick round-trip.
@@ -448,6 +472,8 @@ export default function Board({
       recurrence: "none",
       completed_on: null,
       parent_id: null,
+      linked_board_id: null,
+      converted_from: null,
       position: Date.now(),
       archived: false,
       created_at: nowIso,
@@ -965,6 +991,7 @@ export default function Board({
 
   return (
     <BoardIdProvider value={boardId}>
+      <DoorwaysProvider doorways={doorways} myBoards={myBoards}>
       <TimeMachineBar
         markers={markers}
         minMs={minMs}
@@ -1212,6 +1239,7 @@ export default function Board({
           onClose={() => setOpenSnapId(null)}
         />
       )}
+      </DoorwaysProvider>
     </BoardIdProvider>
   );
 }
