@@ -253,9 +253,10 @@ a real structure without losing its looseness.
   view… should be more like a scroll left and right type of situation"). The responsive
   grid (1/2/6-col by breakpoint — columns got crushed at desktop) is now one
   sideways-scrolling row (`RAIL` in `Board.tsx`) from ≥sm: columns flex to share the
-  width like the old grid (184px floor ≈ the old 6-track width at 1280px, 320px cap;
-  the rail only scrolls when more columns exist than fit — owner revision after
-  trying fixed 300px), edge-to-edge via negative margins, `overscroll-x-contain` so a
+  width like the old grid (260px floor, 320px cap; the rail only scrolls when more
+  columns exist than fit — owner revision after trying fixed 300px, then a 184px
+  floor ≈ the old 6-track width that re-crushed columns, raised 2026-08-30),
+  edge-to-edge via negative margins, `overscroll-x-contain` so a
   fling doesn't trigger browser back.
   **Phones went back to the vertical stack on 2026-08-02** (owner, after living with
   the 86vw swipe rail): below `sm` the columns are full-width and run down the page,

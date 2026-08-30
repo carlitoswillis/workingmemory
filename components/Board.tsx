@@ -72,7 +72,7 @@ const RAIL =
   "grid grid-cols-1 gap-4 sm:grid-cols-2 " +
   "lg:flex lg:flex-row lg:items-start lg:overflow-x-auto lg:overscroll-x-contain lg:pb-4 " +
   "lg:-mx-10 lg:px-10 " +
-  "lg:[&>*]:flex-[1_0_184px] lg:[&>*]:max-w-[320px]";
+  "lg:[&>*]:flex-[1_0_260px] lg:[&>*]:max-w-[320px]";
 
 // N evenly-spaced position values to drop a block of cards between two neighbors.
 function spacedPositions(prev: number | undefined, next: number | undefined, n: number): number[] {
