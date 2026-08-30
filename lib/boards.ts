@@ -188,6 +188,10 @@ export function deleteBoard(
   }
 
   db.transaction(() => {
+    // Doorway cards on OTHER boards that opened into this one lose their link, so no
+    // doorway ever dangles. Works whether or not foreign_keys is on, and the
+    // items_log_linked_board_v2 trigger journals the unlink on each of those cards.
+    db.prepare("update items set linked_board_id = null where linked_board_id = ?").run(boardId);
     // Delete columns (lists)
     db.prepare("delete from lists where board_id = ?").run(boardId);
     // Delete items (this will cascade delete item_events because item_events has a
