@@ -156,6 +156,7 @@ addItem("m3", "Solaris", "today", "bMovies");
 addItem("m1a", "…the sequel", "today", "bMovies", "m1"); // a sub-card doesn't count
 db.prepare("update items set done = 1 where id = 'm2'").run(); // done doesn't count
 db.prepare("update items set archived = 1 where id = 'm3'").run(); // archived doesn't count
+addItem("mnote", "Daily note", "note", "bMovies"); // the journal isn't a card
 ok("the count is open top-level cards only", countOpenCards(db, "bMovies"), 1);
 
 // --- who sees a name and a count (G4) -------------------------------------------

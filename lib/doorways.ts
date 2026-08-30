@@ -119,13 +119,20 @@ export function setLinkedBoard(
 // How many open cards are waiting behind a doorway: TOP-LEVEL cards that aren't
 // done and aren't archived — the number you'd feel walking in. Computed at read
 // time from the live DB; never stored, never synced.
+//
+// The daily note is excluded. It's a row in `items` with list='note', but it has
+// never been a board card anywhere else in the app (Board's groupItems skips it,
+// deleteList's card count skips it), and counting it would say "3 open" of a board
+// showing two cards and a journal.
 export function countOpenCards(db: Database.Database, boardId: string): number {
   return (
     db
       .prepare(
-        "select count(*) c from items where board_id = ? and archived = 0 and done = 0 and parent_id is null",
+        `select count(*) c from items
+         where board_id = ? and archived = 0 and done = 0 and parent_id is null
+           and list <> ?`,
       )
-      .get(boardId) as { c: number }
+      .get(boardId, NOTE_LIST) as { c: number }
   ).c;
 }
 
