@@ -7,7 +7,7 @@ import Landing from "./Landing";
 // demo board lives at /demo — and is only created if they actually go there).
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default function Home({ searchParams }: { searchParams?: { card?: string } }) {
   if (isDemoRequest()) return <Landing />;
-  return <BoardScreen />;
+  return <BoardScreen openCardId={searchParams?.card} />;
 }

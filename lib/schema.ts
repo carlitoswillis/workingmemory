@@ -62,6 +62,13 @@ create table if not exists items (
   user_id      text references users(id),          -- CREATOR now (scope is board_id)
   board_id     text references boards(id),          -- the scope; null on local/demo
   touched_by   text references users(id),           -- last actor; triggers copy to actor_id
+  -- Card ↔ board doorways (2026-08-30). A card stays an ordinary card on its home
+  -- board and OPENS INTO another board: pointer, not portal. Null = a plain card.
+  linked_board_id text references boards(id),
+  -- Provenance across a promote/demote seam: the id of the card this one was
+  -- recreated from (lib/doorways.ts). Deliberately NOT a foreign key — the source
+  -- lives on the OTHER board, and deleteBoard must stay able to delete its rows.
+  converted_from  text,
   created_at   text not null default (${ISO_NOW}),
   updated_at   text not null default (${ISO_NOW})
 );
@@ -183,6 +190,21 @@ begin
   values (new.id, 'moved', 'parent', old.parent_id, new.parent_id, new.touched_by, ${ISO_NOW});
 end;
 
+-- Doorways: a card that OPENS INTO a board (card ↔ board doorways, 2026-08-30).
+-- The link is card content, so it's journaled like any other edit — type 'edited',
+-- field 'linked_board', values are board ids (null = no doorway). History reads
+-- "Linked to board …" / "Unlinked from a board" (describe() in CardPanel).
+-- reconstructItemAt deliberately does NOT learn the field: a past snapshot renders
+-- the card plain (the chip + count are live-only), but the EVENT still shows up in
+-- the card's History list. A NEW trigger name, so create-if-not-exists picks it up
+-- on every existing DB with no drops (the items_log_parent_v2 precedent above).
+create trigger if not exists items_log_linked_board_v2 after update of linked_board_id on items
+when new.linked_board_id is not old.linked_board_id
+begin
+  insert into item_events (item_id, type, field, old_value, new_value, actor_id, at)
+  values (new.id, 'edited', 'linked_board', old.linked_board_id, new.linked_board_id, new.touched_by, ${ISO_NOW});
+end;
+
 -- done/archived are stored 0/1 but logged as 'true'/'false' text, matching the
 -- imported Postgres history (lib/timetravel.ts asBool() handles either form).
 create trigger if not exists items_log_done_v2 after update of done on items
@@ -262,6 +284,16 @@ export function migrateDb(db: Database.Database) {
   db.exec("create index if not exists items_board_idx on items(board_id, archived)");
   if (!hasCol("item_events", "actor_id")) {
     db.exec("alter table item_events add column actor_id text references users(id)");
+  }
+
+  // card ↔ board doorways (2026-08-30): the link, and the promote/demote seam's
+  // provenance pointer. Both nullable, so every existing DB/backup/import is
+  // untouched — an old file just has no doorways.
+  if (!hasCol("items", "linked_board_id")) {
+    db.exec("alter table items add column linked_board_id text references boards(id)");
+  }
+  if (!hasCol("items", "converted_from")) {
+    db.exec("alter table items add column converted_from text");
   }
 
   // The `lists` table shipped 2026-07-07 keyed (id, user_id); shared boards re-key it

@@ -10,6 +10,13 @@ import {
   reorderLists,
 } from "@/lib/columns";
 import { DEMO_MODE, getBoardContext } from "@/lib/db";
+import {
+  demoteToCard,
+  getProvenance,
+  promoteSubtree,
+  setLinkedBoard,
+  type Provenance,
+} from "@/lib/doorways";
 import { setParent } from "@/lib/nesting";
 import { formatRecurrence, parseRecurrence } from "@/lib/recurrence";
 import { pokeBoard } from "@/lib/realtime";
@@ -137,6 +144,66 @@ export async function setParentAction(
   if ("error" in res) return res.error;
   if (res.moved > 0) revalidateBoard(bid);
   return null;
+}
+
+// ---- Card ↔ board doorways -----------------------------------------------------
+// A card opens into a board (pointer, not portal — see lib/doorways.ts). Setting or
+// clearing the link is an ordinary card edit: one update, journaled by the
+// items_log_linked_board_v2 trigger. Membership of the TARGET is what permits it,
+// and a refusal comes back as a string for the panel to show.
+
+export async function setLinkedBoardAction(
+  boardId: string | null,
+  id: string,
+  linkedBoardId: string | null,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  const res = setLinkedBoard(db, bid, { id, linkedBoardId, actorId: userId });
+  if ("error" in res) return res.error;
+  if (res.changed) revalidateBoard(bid);
+  return null;
+}
+
+// Promote this card's sub-cards onto the board it opens: archived here, recreated
+// there, one transaction. Both boards are poked — the cards left one and arrived on
+// the other, and anyone looking at either should see it.
+export async function promoteSubtreeAction(
+  boardId: string | null,
+  id: string,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  const res = promoteSubtree(db, bid, { id, actorId: userId });
+  if ("error" in res) return res.error;
+  revalidateBoard(bid);
+  pokeBoard(res.targetBoardId);
+  return null;
+}
+
+// "Convert back to a regular card" — promotion's inverse. The linked board's cards
+// come back as sub-cards and the link clears; the emptied board stays alive.
+export async function demoteToCardAction(
+  boardId: string | null,
+  id: string,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  const res = demoteToCard(db, bid, { id, actorId: userId });
+  if ("error" in res) return res.error;
+  revalidateBoard(bid);
+  pokeBoard(res.sourceBoardId);
+  return null;
+}
+
+// Follow a card's `converted_from` pointer back to the card it continues from, so
+// the panel's History can offer "view original". Null when the viewer isn't on the
+// board the original lives on (or it's since been deleted).
+export async function provenanceAction(
+  boardId: string | null,
+  id: string,
+): Promise<Provenance | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  const card = getItem(db, bid, id);
+  if (!card?.converted_from) return null;
+  return getProvenance(db, userId, card.converted_from);
 }
 
 export async function toggleDoneAction(boardId: string | null, id: string, done: boolean) {

@@ -3,6 +3,7 @@ import { ensureLists, getLists, getListLabels } from "@/lib/columns";
 import { getBoardContext, getMainDb, isDemoRequest } from "@/lib/db";
 import { getUsername } from "@/lib/users";
 import { getUserBoards, getBoardName, getBoardMembers, getMemberUsernames } from "@/lib/boards";
+import { getDoorwayMeta } from "@/lib/doorways";
 import Board from "@/components/Board";
 import ArchiveView from "@/components/ArchiveView";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -13,7 +14,15 @@ import BoardSwitcher from "@/components/BoardSwitcher";
 // other board the user is a member of. `boardId` comes from the /b/ route; omit it
 // for "/". getBoardContext verifies membership (404s a non-member) and resolves the
 // scope; everything below is scoped to that board.
-export default function BoardScreen({ boardId }: { boardId?: string }) {
+export default function BoardScreen({
+  boardId,
+  openCardId,
+}: {
+  boardId?: string;
+  // ?card=<id> — how "view original" reaches an archived card on ANOTHER board
+  // across a promote/demote seam. The panel opens on it once, on arrival.
+  openCardId?: string;
+}) {
   const { db, userId, boardId: bid } = getBoardContext(boardId);
   // Seed the five default columns on a board's first render (idempotent), then read
   // the live columns + a label map (incl. deleted columns) for history/archive views.
@@ -32,6 +41,14 @@ export default function BoardScreen({ boardId }: { boardId?: string }) {
   const members = userId && bid ? getBoardMembers(main!, bid) : [];
   const myRole = members.find((m) => m.userId === userId)?.role ?? null;
   const actors = userId && bid ? getMemberUsernames(main!, bid) : {};
+
+  // Doorways: for each distinct board a card on this page opens into, resolve its
+  // name + live open count — but ONLY for boards this viewer is a member of. Cards
+  // pointing anywhere else come back absent from the map, and render as a neutral
+  // "Linked board" chip that says nothing and goes nowhere. One query per distinct
+  // linked board; a board has few doorways. Local + demo have no boards at all.
+  const linkedIds = [...new Set(items.map((i) => i.linked_board_id).filter(Boolean))] as string[];
+  const doorways = main && userId ? getDoorwayMeta(main, userId, linkedIds) : {};
 
   return (
     <main className="mx-auto max-w-[1640px] px-6 py-10 sm:px-10">
@@ -116,6 +133,9 @@ export default function BoardScreen({ boardId }: { boardId?: string }) {
         listLabels={listLabels}
         actors={actors}
         items={items}
+        doorways={doorways}
+        myBoards={boards.map((b) => ({ id: b.id, name: b.name }))}
+        openCardId={openCardId}
       />
     </main>
   );

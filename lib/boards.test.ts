@@ -161,8 +161,24 @@ insItem.run("item_to_delete", "will be deleted", "today", 1, user1, u1Board2, us
 // Invite user2 to second board
 inviteMember(deleteDb, u1Board2, "user2");
 
+// A doorway card on the FIRST board that opens into the second (card ↔ board
+// doorways): deleting the second must leave no dangling link behind.
+insItem.run("doorway", "opens the second board", "today", 2, user1, u1Board1, user1);
+deleteDb
+  .prepare("update items set linked_board_id = ? where id = 'doorway'")
+  .run(u1Board2);
+
 ok("non-owner cannot delete board", "error" in deleteBoard(deleteDb, u1Board2, user2), true);
 ok("owner can delete board when they have another board", "ok" in deleteBoard(deleteDb, u1Board2, user1), true);
+ok(
+  "a doorway into the deleted board is unlinked, never dangling",
+  (
+    deleteDb
+      .prepare("select linked_board_id l from items where id = 'doorway'")
+      .get() as { l: string | null }
+  ).l,
+  null,
+);
 ok("deleted board is no longer queryable for user", getMembership(deleteDb, u1Board2, user1), null);
 ok("invited user no longer belongs to deleted board", getMembership(deleteDb, u1Board2, user2), null);
 ok("deleted board items are cleaned up", getItems(deleteDb, u1Board2), []);
