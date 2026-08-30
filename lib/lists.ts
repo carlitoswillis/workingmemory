@@ -24,6 +24,20 @@ export const DEFAULT_LISTS: ListDef[] = [
 // renamed, deleted, or reordered.
 export const NOTE_LIST = "note";
 
+// The sentinel list of the AI weekly review (items.list='review'). Same shape as
+// the note: ONE pinned item per board whose body lives in `details`, so every
+// regeneration is journaled by the details trigger and the time machine becomes
+// the archive of past reviews. It is written only by POST /api/review (the
+// generator runs off-box — see scripts/weekly-review.mjs) and renders read-only.
+export const REVIEW_LIST = "review";
+
+// Lists that are NOT columns: they own a dedicated slot on the board and are
+// excluded from grouping, dragging, search, and column CRUD. One predicate so a
+// third sentinel never has to be chased through the codebase again.
+export function isSentinelList(id: string): boolean {
+  return id === NOTE_LIST || id === REVIEW_LIST;
+}
+
 // Guardrails for user-created columns.
 export const MAX_LIST_LABEL = 40;
 export const MAX_LISTS = 16; // beyond this the board grid stops being usable

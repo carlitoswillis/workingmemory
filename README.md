@@ -57,6 +57,9 @@ Some one-liners for what that buys you:
   Archive button; nothing leaves the board until you tap it.
 - **Demo mode** — `DEMO_MODE=1` gives every visitor an isolated, rate-limited,
   auto-expiring board seeded with fabricated-but-consistent history.
+- **A weekly review that writes itself** — an LLM reads the week out of
+  `item_events` and writes it up; it lands in a read-only slot beside the Note.
+  See below — the model runs on *your* machine, not the server.
 
 ## How nothing is ever lost
 
@@ -66,6 +69,40 @@ the database layer, so any client (this app, a script, future mobile) records
 history just by writing. Time travel is a pure function that replays events
 backward from now. See [`ai/ARCHITECTURE.md`](ai/ARCHITECTURE.md).
 
+## The weekly review (AI over the event stream)
+
+The append-only log is the point, so something should read it. Once a week a
+model summarizes the last 7 days — what you finished, what moved, what's been
+parked in Waiting since forever, which repeating tasks held their streak — and
+the result is saved as a pinned card whose body is journaled by the same
+triggers as everything else. **Past reviews live in the time machine**: no new
+table, and the reviews are themselves time-travelable.
+
+**The server has no API key and no model dependency.** Generation runs on your
+machine, against a backup snapshot opened read-only, through a CLI you already
+have:
+
+```bash
+# print the digest and the review, post nothing
+scripts/weekly-review.mjs --dry-run
+
+# generate and post it to the running app
+WM_URL=https://your-app WM_BRAIN_TOKEN=$BRAIN_TOKEN scripts/weekly-review.mjs
+```
+
+It reads the newest `backups/pull/<stamp>/wm.db` (what `scripts/pull-backup.sh`
+already leaves behind; `--db <path>` overrides), shells out to `claude -p`, and
+POSTs the markdown to `/api/review`. `REVIEW_MODEL=ollama:<model>` switches to a
+local Ollama model instead; `REVIEW_MODEL=<name>` picks a model for the Claude
+CLI. Nothing is posted if generation fails.
+
+**It is manual.** There is no cron entry, no scheduler and no daemon anywhere in
+this repo — you run it when you want a review.
+
+`POST /api/review` and `GET /api/review` are gated by `BRAIN_TOKEN`, the same
+scoped bearer as `/api/context` and `/api/items`; unset it and the endpoints
+don't exist.
+
 ## Run it locally
 
 Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.
@@ -74,7 +111,7 @@ Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.
 npm install
 npm run dev        # → http://localhost:3000, data lives in ./data/wm.db
 npm run dev:demo   # the hosted-demo experience (per-visitor ephemeral boards)
-npm test           # time-travel, demo-seed, auth, streaks, and accounts suites
+npm test           # time-travel, demo-seed, auth, streaks, accounts, digest suites
 ```
 
 ## Accounts (hosted)
@@ -148,7 +185,7 @@ overwrite local changes every morning.
 ## Status & roadmap
 
 Live log in [`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md). Next up: capture-from-
-anywhere (email → daily note via webhook), streaks for daily tasks, an archive
-view, and the big one — **AI over the event stream**.
+anywhere (email → daily note via webhook), auto-triage of brain dumps, and
+"ask your history" — free-form questions over a date-ranged digest.
 
 MIT © Carlitos Willis

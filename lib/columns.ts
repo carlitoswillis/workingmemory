@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 // .ts extension so plain-node tests can import this module (see lib/users.ts,
 // lib/columns.test.ts). tsc allows it (allowImportingTsExtensions); webpack
 // resolves the literal path.
-import { DEFAULT_LISTS, MAX_LIST_LABEL, MAX_LISTS, NOTE_LIST, type ListDef } from "./lists.ts";
+import {
+  DEFAULT_LISTS,
+  MAX_LIST_LABEL,
+  MAX_LISTS,
+  isSentinelList,
+  type ListDef,
+} from "./lists.ts";
 
 // Board columns as data (user-created). Pure functions over an explicit
 // { db, boardId } handle — no Next imports — so `node lib/columns.test.ts` runs
@@ -127,7 +133,7 @@ export function deleteList(
   boardId: string | null,
   id: string,
 ): { ok: true } | { error: string } {
-  if (id === NOTE_LIST) return { error: "The note isn't a column." };
+  if (isSentinelList(id)) return { error: "That isn't a column." };
   if (!listExists(db, boardId, id)) return { error: "That column no longer exists." };
   if (liveCount(db, boardId) <= 1) return { error: "Keep at least one column." };
   const cards = (

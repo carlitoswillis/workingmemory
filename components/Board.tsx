@@ -23,7 +23,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { Item, ItemEvent } from "@/lib/types";
 import type { ListId, ListDef } from "@/lib/lists";
-import { NOTE_LIST, MAX_LISTS } from "@/lib/lists";
+import { NOTE_LIST, REVIEW_LIST, MAX_LISTS, isSentinelList } from "@/lib/lists";
 import { anchorAt, cardAt } from "@/lib/dnd";
 import { effectiveDone } from "@/lib/recurrence";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
@@ -53,6 +53,7 @@ import {
 import CardPanel from "./CardPanel";
 import SnapshotCardPanel from "./SnapshotCardPanel";
 import NoteColumn from "./NoteColumn";
+import ReviewColumn from "./ReviewColumn";
 import TimeMachineBar from "./TimeMachineBar";
 import QuickCapture from "./QuickCapture";
 import SearchOverlay from "./SearchOverlay";
@@ -112,7 +113,7 @@ function groupItems(items: Item[], lists: readonly ListDef[]): Grouped {
   for (const l of lists) by[l.id] = [];
   for (const it of items) {
     if (it.parent_id) continue;
-    if (it.list === NOTE_LIST) continue; // the note has its own column
+    if (isSentinelList(it.list)) continue; // the note + the weekly review own their slots
     (by[it.list] ??= []).push(it);
   }
   return by;
@@ -173,6 +174,10 @@ export default function Board({
 
   // The single active daily note (if any).
   const note = items.find((i) => i.list === NOTE_LIST && !i.archived && !i.parent_id) ?? null;
+
+  // The AI weekly review (if one has ever been generated). Read-only, written
+  // only by POST /api/review — see components/ReviewColumn.tsx.
+  const review = items.find((i) => i.list === REVIEW_LIST && !i.archived && !i.parent_id) ?? null;
 
   // Multi-select: a set of card ids. ⌘/Ctrl-click toggles, Shift-click extends a
   // range within a column. Dragging any selected card moves the whole set.
@@ -699,7 +704,7 @@ export default function Board({
   if (snapshot) {
     const known = new Set(orderedLists.map((l) => l.id));
     for (const s of snapshot) {
-      if (s.parent_id || s.list === NOTE_LIST || known.has(s.list)) continue;
+      if (s.parent_id || isSentinelList(s.list) || known.has(s.list)) continue;
       known.add(s.list);
       snapshotLists.push({ id: s.list, label: listLabels[s.list] ?? s.list, hint: "" });
     }
@@ -1008,6 +1013,9 @@ export default function Board({
           <SnapshotNoteColumn
             body={snapshot.find((i) => i.list === NOTE_LIST && !i.parent_id)?.details ?? ""}
           />
+          <SnapshotReviewColumn
+            body={snapshot.find((i) => i.list === REVIEW_LIST && !i.parent_id)?.details ?? ""}
+          />
           {snapshotLists.map((list) => (
             <SnapshotColumn
               key={list.id}
@@ -1036,6 +1044,7 @@ export default function Board({
           <SortableContext items={listOrder} strategy={rectSortingStrategy}>
             <div className={RAIL}>
               <NoteColumn note={note} />
+              <ReviewColumn review={review} />
               {orderedLists.map((list) => (
                 <SortableColumn
                   key={list.id}
@@ -1196,7 +1205,7 @@ export default function Board({
 
       <SearchOverlay
         open={searchOpen}
-        items={items.filter((i) => i.list !== NOTE_LIST)}
+        items={items.filter((i) => !isSentinelList(i.list))}
         listLabels={listLabels}
         onPick={openById}
         onClose={() => setSearchOpen(false)}
@@ -1263,6 +1272,28 @@ function SnapshotNoteColumn({ body }: { body: string }) {
       ) : (
         <p className="px-1.5 font-display text-xs italic text-[var(--text-lo)]">— blank then —</p>
       )}
+    </section>
+  );
+}
+
+// The weekly review as of a past moment — the same journal trick as the note: the
+// review's body is `details`, so time-travel reconstructs the review that stood
+// then. Renders nothing when no review existed yet at that moment.
+function SnapshotReviewColumn({ body }: { body: string }) {
+  if (!body.trim()) return null;
+  return (
+    <section
+      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3 lg:!max-w-[300px]"
+      style={{ borderLeft: "2px solid var(--past)" }}
+    >
+      <div className="mb-3 px-1.5 pt-1">
+        <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-mid)]">
+          Weekly review
+        </h2>
+      </div>
+      <p className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-1 text-[13px] leading-relaxed text-[var(--text-mid)]">
+        {body}
+      </p>
     </section>
   );
 }
