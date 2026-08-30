@@ -26,11 +26,14 @@
     <integer>15</integer>
   </dict>
 
-  <!-- pull-backup.sh needs node (homebrew) for the integrity check. -->
+  <!-- pull-backup.sh needs node for the integrity check — and it must be the
+       SAME node the repo's better-sqlite3 was compiled against (the shell's
+       ~/.local/bin/node, v22), not homebrew's newer one, or the native module
+       fails with ERR_DLOPEN_FAILED and the snapshot goes unverified. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <string>/Users/carlitoswillis/.local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
   </dict>
 
   <key>StandardOutPath</key>
