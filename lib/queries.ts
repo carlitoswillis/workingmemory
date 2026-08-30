@@ -29,6 +29,8 @@ function rowToItem(r: ItemRow): Item {
     recurrence: r.recurrence,
     completed_on: r.completed_on ?? null,
     parent_id: r.parent_id ?? null,
+    linked_board_id: r.linked_board_id ?? null,
+    converted_from: r.converted_from ?? null,
     position: r.position,
     archived: !!r.archived,
     created_at: r.created_at,

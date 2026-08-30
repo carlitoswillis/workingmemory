@@ -16,6 +16,15 @@ export interface Item {
   // column. Streak display = streakFor() over these, client-side (browser TZ).
   completed_days?: string[];
   parent_id: string | null; // a sub-card's parent item; null = top-level board card
+  // Card ↔ board doorways: the board this card OPENS INTO (null = a plain card).
+  // Pointer, not portal — the card never mirrors that board's items. The board's
+  // name + open count are resolved live, server-side, and only for viewers who are
+  // members of it (lib/doorways.ts#getDoorwayMeta).
+  linked_board_id: string | null;
+  // Set when this card was recreated across a promote/demote seam: the id of the
+  // card it continues from (on the other board, archived there). Drives the
+  // "Continued from …" line in the panel's History.
+  converted_from: string | null;
   position: number;
   archived: boolean;
   created_at: string;
