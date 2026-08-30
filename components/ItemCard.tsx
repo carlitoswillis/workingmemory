@@ -6,7 +6,7 @@ import type { ListDef } from "@/lib/lists";
 import { archiveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/actions";
 import { describeRecurrence, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
-import { useBoardId } from "./board-context";
+import { useBoardId, useDoorways } from "./board-context";
 import SwipeToArchive, { SwipeStill } from "./SwipeToArchive";
 
 // Recency → 0..1 (1 = touched just now). Halves roughly every ~4 days.
@@ -24,6 +24,31 @@ const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 // handler whenever a card had focus, which is exactly after you've clicked one.
 function stopDragKeys(e: React.KeyboardEvent) {
   if (e.key === " " || e.key === "Enter" || e.key.startsWith("Arrow")) e.stopPropagation();
+}
+
+// The doorway mark: a way through, drawn rather than spelled — an arrow stepping
+// into an open frame. Monochrome stroke, same vocabulary as the archive glyph.
+function DoorGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3 w-3 shrink-0" aria-hidden>
+      <path
+        d="M9.5 2.5H13.2V13.5H9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2.8 8h6.2M6.6 5.6L9 8l-2.4 2.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export default function ItemCard({
@@ -48,6 +73,12 @@ export default function ItemCard({
   onArchive?: (item: Item) => void;
 }) {
   const boardId = useBoardId();
+  // A doorway card: it opens into a board. If that board resolved for this viewer
+  // (they're a member) the chip names it and counts what's open behind it, and
+  // tapping walks in. If it didn't, the chip stays neutral and inert — no name, no
+  // count, no navigation — so a shared board never leaks a board you're not on.
+  const { doorways } = useDoorways();
+  const doorway = item.linked_board_id ? doorways[item.linked_board_id] ?? null : null;
   const rec = parseRecurrence(item.recurrence);
   const repeats = rec.kind !== "none";
   const [doneLocal, setDoneLocal] = useState(effectiveDone(item));
@@ -145,6 +176,30 @@ export default function ItemCard({
             {item.text}
           </button>
 
+          {item.linked_board_id &&
+            (doorway ? (
+              <a
+                href={`/b/${item.linked_board_id}`}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={stopDragKeys}
+                title={`Opens “${doorway.name}” — ${doorway.open} open ${
+                  doorway.open === 1 ? "card" : "cards"
+                }`}
+                className="mt-[1px] flex max-w-[10rem] shrink-0 items-center gap-1 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none text-[var(--text-lo)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)]"
+              >
+                <DoorGlyph />
+                <span className="truncate">{doorway.name}</span>
+                <span className="tabular-nums text-[var(--text-lo)]">· {doorway.open}</span>
+              </a>
+            ) : (
+              <span
+                title="This card opens a board you're not on"
+                className="mt-[1px] flex shrink-0 items-center gap-1 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none text-[var(--text-lo)]"
+              >
+                <DoorGlyph />
+                Linked board
+              </span>
+            ))}
           {subTotal > 0 && (
             <span
               className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"

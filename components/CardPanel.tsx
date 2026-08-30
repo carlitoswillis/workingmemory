@@ -20,16 +20,22 @@ import type { ListDef } from "@/lib/lists";
 import {
   addChildAction,
   archiveItemAction,
+  demoteToCardAction,
   editDetailsAction,
   editItemAction,
   historyAction,
+  promoteSubtreeAction,
+  provenanceAction,
   reorderItemAction,
   unarchiveItemAction,
   setDailyDoneAction,
+  setLinkedBoardAction,
   setParentAction,
   setRecurrenceAction,
   toggleDoneAction,
 } from "@/app/actions";
+import { createBoardFromCardAction } from "@/app/boards/actions";
+import type { Provenance } from "@/lib/doorways";
 import {
   WEEKDAYS,
   addDays,
@@ -43,7 +49,7 @@ import {
 import { daysWithLiveCheck, prevDay, streakFor } from "@/lib/streaks";
 import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
-import { useBoardId } from "./board-context";
+import { useBoardId, useDoorways } from "./board-context";
 
 // Code-split the markdown renderer (react-markdown + remark-gfm, ~43kB): it's only
 // needed once a card panel is open, so keep it out of the initial board bundle.
@@ -56,11 +62,22 @@ function describe(
   e: ItemEvent,
   labelOf: (id: string) => string,
   titleOf: (id: string) => string,
+  boardOf: (id: string) => string | null,
 ): string {
   switch (e.type) {
     case "created":
       return `Captured: “${e.new_value}”`;
     case "edited":
+      // A doorway going up or coming down. Board names resolve only for boards this
+      // viewer is on; anything else stays deliberately unnamed.
+      if (e.field === "linked_board") {
+        if (e.new_value) {
+          const name = boardOf(e.new_value);
+          return name ? `Linked to board “${name}”` : "Linked to a board";
+        }
+        const was = boardOf(e.old_value ?? "");
+        return was ? `Unlinked from board “${was}”` : "Unlinked from a board";
+      }
       return e.field === "details" ? "Edited details" : "Reworded";
     case "moved":
       // Two kinds of move: between columns, and in/out of another card (field 'parent').
@@ -118,6 +135,17 @@ export default function CardPanel({
   const labelOf = (id: string) => listLabels[id] ?? id;
   const titleOf = (id: string) => allItems.find((i) => i.id === id)?.text ?? "a card";
   const boardId = useBoardId();
+  // Doorways: which boards this viewer can point the card at, and the live meta for
+  // the one it already opens (absent = a board they're not on — stays unnamed).
+  const { doorways, myBoards } = useDoorways();
+  const boardOf = (id: string) =>
+    doorways[id]?.name ?? myBoards.find((b) => b.id === id)?.name ?? null;
+  const linkedTo = item.linked_board_id;
+  const linkedMeta = linkedTo ? doorways[linkedTo] ?? null : null;
+  const [doorError, setDoorError] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
+  // "Continued from a card on <board>" — the far side of a promote/demote seam.
+  const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details);
   // Optimistic list value so the dropdown reflects the pick instantly; Board moves the
@@ -316,6 +344,36 @@ export default function CardPanel({
       alive = false;
     };
   }, [boardId, item.id, item.updated_at]);
+
+  // Follow this card's converted_from pointer, if it has one. Resolved server-side
+  // (the original lives on the OTHER board) and null for a viewer who isn't on it.
+  useEffect(() => {
+    setProvenance(null);
+    if (!item.converted_from) return;
+    let alive = true;
+    provenanceAction(boardId, item.id).then((p) => alive && setProvenance(p));
+    return () => {
+      alive = false;
+    };
+  }, [boardId, item.id, item.converted_from]);
+
+  useEffect(() => setDoorError(null), [item.id]);
+
+  // ---- the doorway verbs -------------------------------------------------------
+  // Each one is a round trip that can be refused (membership, a vanished board, an
+  // empty sub-tree); the reason lands under the picker rather than in a toast.
+  function runDoorway(work: () => Promise<string | null>) {
+    setDoorError(null);
+    setConverting(true);
+    startTransition(async () => {
+      const err = await work();
+      setConverting(false);
+      if (err) setDoorError(err);
+    });
+  }
+  function chooseLinkedBoard(value: string) {
+    runDoorway(() => setLinkedBoardAction(boardId, item.id, value || null));
+  }
 
   function saveTitle() {
     const t = title.trim();
@@ -642,6 +700,107 @@ export default function CardPanel({
           </div>
         )}
 
+        {/* Opens board — the doorway. The card stays an ordinary card here and
+            opens INTO another board; it never mirrors that board's items. Only
+            rendered where boards exist at all (hosted + signed in), so local and
+            demo boards never see it. */}
+        {item.list !== "note" && myBoards.length > 0 && (
+          <div className="mt-3">
+            <div className="flex items-center gap-2">
+              <label
+                className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]"
+                htmlFor="wm-opens"
+              >
+                Opens
+              </label>
+              <select
+                id="wm-opens"
+                value={linkedTo ?? ""}
+                disabled={converting}
+                onChange={(e) => chooseLinkedBoard(e.target.value)}
+                title="Make this card a doorway into one of your boards"
+                className={`min-w-0 flex-1 rounded-md border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-1 text-xs focus:border-[var(--now)] focus:outline-none ${
+                  linkedTo ? "text-[var(--now)]" : "text-[var(--text-mid)]"
+                }`}
+              >
+                <option value="">— no board —</option>
+                {/* A card can't open the board it's already on. */}
+                {myBoards
+                  .filter((b) => b.id !== boardId)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                {/* A board this viewer isn't on stays selectable-as-is but unnamed. */}
+                {linkedTo && !myBoards.some((b) => b.id === linkedTo) && (
+                  <option value={linkedTo}>a board you&apos;re not on</option>
+                )}
+              </select>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+              {linkedTo ? (
+                <>
+                  {linkedMeta && (
+                    <a
+                      href={`/b/${linkedTo}`}
+                      className="rounded-md border border-[var(--veil)] px-2.5 py-1 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)]"
+                    >
+                      Open “{linkedMeta.name}” ›
+                    </a>
+                  )}
+                  {childItems.length > 0 && (
+                    <button
+                      onClick={() =>
+                        runDoorway(() => promoteSubtreeAction(boardId, item.id))
+                      }
+                      disabled={converting}
+                      title="Archive these sub-cards here and recreate them on that board, nesting and all"
+                      className="rounded-md px-2 py-1 text-xs text-[var(--text-lo)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)] disabled:opacity-50"
+                    >
+                      Move sub-cards there
+                    </button>
+                  )}
+                  <button
+                    onClick={() => runDoorway(() => demoteToCardAction(boardId, item.id))}
+                    disabled={converting}
+                    title="Bring that board's cards back as sub-cards of this one. The board itself is left alone."
+                    className="rounded-md px-2 py-1 text-xs text-[var(--text-lo)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)] disabled:opacity-50"
+                  >
+                    Convert back to card
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() =>
+                    runDoorway(() => createBoardFromCardAction(boardId, item.id))
+                  }
+                  disabled={converting}
+                  className="rounded-md border border-[var(--veil)] px-2.5 py-1 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)] disabled:opacity-50"
+                >
+                  New board from this card
+                </button>
+              )}
+            </div>
+
+            {linkedMeta && (
+              <p className="mt-1.5 px-1 text-[11px] text-[var(--text-lo)]">
+                <span className="tabular-nums text-[var(--text-mid)]">{linkedMeta.open}</span>{" "}
+                open {linkedMeta.open === 1 ? "card" : "cards"} behind this door.
+              </p>
+            )}
+            {linkedTo && !linkedMeta && (
+              <p className="mt-1.5 px-1 text-[11px] text-[var(--text-lo)]">
+                This card opens a board you&apos;re not on.
+              </p>
+            )}
+            {doorError && (
+              <p className="mt-1.5 px-1 text-[11px] text-[var(--now)]">{doorError}</p>
+            )}
+          </div>
+        )}
+
         {/* Repeat: never / every day / a weekday. A weekly card checked off STAYS
             done until its weekday comes round again — the reset is derived from
             completed_on, so nothing has to run at midnight (lib/recurrence.ts). */}
@@ -725,6 +884,27 @@ export default function CardPanel({
         {/* History */}
         <div className="mt-6 border-t border-[var(--veil-soft)] pt-5">
           <p className="mb-4 font-display text-[11px] italic text-[var(--past)]">a memory of this thought</p>
+
+          {/* The far side of a promote/demote seam. This card's own history starts
+              at the conversion; the original is archived on the other board with
+              its full pre-conversion trail intact, and this is the way there. */}
+          {provenance && (
+            <p className="mb-4 rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2 text-[11px] leading-relaxed text-[var(--text-lo)]">
+              Continued from a card
+              {provenance.boardName ? ` on ${provenance.boardName}` : ""} —{" "}
+              <a
+                href={
+                  provenance.boardId
+                    ? `/b/${provenance.boardId}?card=${provenance.itemId}`
+                    : `/?card=${provenance.itemId}`
+                }
+                className="text-[var(--text-mid)] underline transition-colors hover:text-[var(--now)]"
+              >
+                view original
+              </a>
+            </p>
+          )}
+
           {events === null ? (
             <p className="font-display text-sm italic text-[var(--text-lo)]">Remembering…</p>
           ) : (
@@ -738,8 +918,12 @@ export default function CardPanel({
                       background: i === events.length - 1 ? "var(--now)" : "var(--surface)",
                     }}
                   />
-                  <p className="text-sm text-[var(--text-hi)]">{describe(e, labelOf, titleOf)}</p>
-                  {e.type === "edited" && (
+                  <p className="text-sm text-[var(--text-hi)]">
+                    {describe(e, labelOf, titleOf, boardOf)}
+                  </p>
+                  {/* The before/after strip is for text and details. A doorway event's
+                      values are board ids — the line above already says it in words. */}
+                  {e.type === "edited" && e.field !== "linked_board" && (
                     <p className="mt-1 font-display text-xs italic leading-snug text-[var(--text-lo)]">
                       <span className="line-through">{e.old_value}</span>{" "}
                       <span className="text-[var(--text-mid)]">→ {e.new_value}</span>
