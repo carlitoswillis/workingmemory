@@ -5,8 +5,9 @@ with shared boards + custom columns) · **Revised 2026-08-30** (owner calls, twi
 WM thing that assistant + brain consume via API — and the hosted WM app itself stays
 **AI-free**: it's a free-tier Render app with no key, so generation runs on the owner's
 Mac via the Claude-CLI/local-model stack the data-heavy apps already use; see §8b, which
-supersedes §1/§3's in-app generation) · Status: PROPOSED — awaiting owner sign-off before
-any code._
+supersedes §1/§3's in-app generation) · Status: BUILT 2026-08-30 per §8b — owner
+green-lit all five gates at the recommended defaults; merged to main, awaiting owner
+eyeball + first real generation (needs the deploy for the POST leg)._
 
 The backlog's "real differentiator": point an LLM at `item_events` and generate the
 weekly review that writes itself. This is where the append-only history stops being a

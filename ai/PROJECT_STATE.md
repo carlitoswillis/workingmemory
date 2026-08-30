@@ -94,9 +94,9 @@ a real structure without losing its looseness.
       is still one tap away in its panel's History list, and the time machine is
       untouched. The matcher + SQL are in git (`searchEvents` / `searchHistory`,
       removed in the 2026-08-02 commit) if it's ever wanted back as an opt-in filter.
-- [ ] **AI integration** (the real differentiator — point an LLM at the event
-      stream): weekly review that writes itself; auto-triage of brain dumps; "ask
-      your history". Plan: `ai/plans/2026-07-03-ai-weekly-review.md`. Owner call
+- [x] **AI integration, phase 1: the weekly review** — BUILT 2026-08-30 (see
+      Completed log); auto-triage of brain dumps and "ask your history" remain
+      future phases. Plan: `ai/plans/2026-07-03-ai-weekly-review.md`. Owner call
       2026-07-03: build the native Anthropic adapter only (keep the tiny provider
       interface so model-agnostic stays a 40-line add later). `item_events` is the
       substrate and the moat. **Plan revised 2026-07-07** — reconciled with shared
@@ -127,7 +127,8 @@ a real structure without losing its looseness.
       can front it. Auth: shared secret + /login-style rate limit. The old
       IMAP-pull sketch is in this file's git history (pre-2026-07-03).
 
-- [ ] **Card ↔ board doorways** (owner idea 2026-08-30; PROPOSED — no build until
+- [x] **Card ↔ board doorways** — BUILT 2026-08-30, all six gates at recommended
+      defaults (see Completed log); awaiting owner eyeball. (owner idea 2026-08-30;
       owner confirms shape): a card can link to a board (`items.linked_board_id`) —
       it remains an ordinary card on its home board (own done/column/history, a
       live open-count rendered at read time) and opens the linked board on tap.
@@ -401,6 +402,25 @@ a real structure without losing its looseness.
 
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-08-30 — Card ↔ board doorways + the AI weekly review pipeline.** Both plans
+  green-lit by the owner at recommended defaults and built in parallel worktrees;
+  verified together post-merge with tsc, 13 node suites, and a prod build.
+  - *Doorways* — `items.linked_board_id` + `converted_from` (hasCol migrations), the
+    `items_log_linked_board_v2` trigger, pure `lib/doorways.ts` (link/unlink, live
+    open-count, promote and demote as inverse single-transaction subtree walks),
+    chip + panel verbs, "Continued from…" provenance, `deleteBoard` unlink. Past
+    snapshots render plain cards; the count is live-only.
+  - *Weekly review* — hosted app stays AI-free: pure `lib/ai/digest.ts`,
+    `scripts/weekly-review.mjs` on the Mac (claude -p, `REVIEW_MODEL=ollama:*`
+    fallback, `--dry-run`), `POST`+`GET /api/review` behind `brainBearerOk`, review
+    sentinel journaled by the details trigger, read-only slot beside the Note,
+    `isSentinelList()` so a third sentinel is one edit. Manual-only; no scheduling.
+  - *Merge stitch* — the doorway count and demotion now skip every sentinel, so a
+    linked board's review can't inflate its count or come home as a sub-card.
+  - NOT yet deployed: nothing pushed; the POST leg of the pipeline needs the Render
+    deploy. Owner eyeball wanted on: chip-inside-draggable drag feel, `?card=`
+    archived-panel arrival, review slot as non-drop-target, time-machine scrub of
+    the review.
 - **2026-07-23 — Cards inside cards (nesting), board search, blur-commits-a-draft,
   weekly recurring cards.** Four backlog items in one batch; all verified with tsc,
   11 node suites (3 new), and a prod build (board 125kB First Load, from 118kB).

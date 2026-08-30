@@ -1,6 +1,7 @@
 # Card ↔ board doorways — plan, 2026-08-30
 
-_Status: PROPOSED — awaiting owner sign-off before any code._
+_Status: BUILT 2026-08-30 — owner green-lit all six gates at the recommended
+defaults ("lets go on both"); merged to main, awaiting owner eyeball in the UI._
 
 Backlog item: "Card ↔ board doorways" (owner idea 2026-08-30). A card stays an
 ordinary card on its home board — its own done/column/history, drag, archive —
