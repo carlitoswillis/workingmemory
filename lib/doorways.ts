@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 // .ts extensions so plain-node tests can import these modules (see lib/nesting.ts).
-import { NOTE_LIST } from "./lists.ts";
+import { NOTE_LIST, REVIEW_LIST, isSentinelList } from "./lists.ts";
 import { ensureLists, getLists, listExists } from "./columns.ts";
 import { getBoardName, getMembership } from "./boards.ts";
 
@@ -97,6 +97,7 @@ export function setLinkedBoard(
   const card = getCard(db, boardId, id);
   if (!card) return { error: "That card is no longer on this board." };
   if (card.list === NOTE_LIST) return { error: "The daily note can't open a board." };
+  if (isSentinelList(card.list)) return { error: "This card can't open a board." };
 
   if (linkedBoardId !== null) {
     if (boardId !== null && linkedBoardId === boardId) {
@@ -120,19 +121,19 @@ export function setLinkedBoard(
 // done and aren't archived — the number you'd feel walking in. Computed at read
 // time from the live DB; never stored, never synced.
 //
-// The daily note is excluded. It's a row in `items` with list='note', but it has
-// never been a board card anywhere else in the app (Board's groupItems skips it,
-// deleteList's card count skips it), and counting it would say "3 open" of a board
-// showing two cards and a journal.
+// Sentinel lists (the daily note, the weekly review) are excluded. They're rows in
+// `items`, but they have never been board cards anywhere else in the app (Board's
+// groupItems skips them, deleteList's card count skips them), and counting them
+// would say "3 open" of a board showing two cards and a journal.
 export function countOpenCards(db: Database.Database, boardId: string): number {
   return (
     db
       .prepare(
         `select count(*) c from items
          where board_id = ? and archived = 0 and done = 0 and parent_id is null
-           and list <> ?`,
+           and list not in (?, ?)`,
       )
-      .get(boardId, NOTE_LIST) as { c: number }
+      .get(boardId, NOTE_LIST, REVIEW_LIST) as { c: number }
   ).c;
 }
 
@@ -374,10 +375,10 @@ export function demoteToCard(
   const roots = db
     .prepare(
       `select ${SUBTREE_COLS} from items
-       where board_id is ? and parent_id is null and archived = 0 and list <> ?
+       where board_id is ? and parent_id is null and archived = 0 and list not in (?, ?)
        order by position asc, created_at asc`,
     )
-    .all(source, NOTE_LIST) as SubtreeRow[];
+    .all(source, NOTE_LIST, REVIEW_LIST) as SubtreeRow[];
   const descendants = roots.flatMap((r) => liveSubtree(db, source, r.id));
   const start = maxPosition(db, boardId, "parent_id is ?", id);
 

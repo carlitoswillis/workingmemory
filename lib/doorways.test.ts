@@ -157,6 +157,7 @@ addItem("m1a", "…the sequel", "today", "bMovies", "m1"); // a sub-card doesn't
 db.prepare("update items set done = 1 where id = 'm2'").run(); // done doesn't count
 db.prepare("update items set archived = 1 where id = 'm3'").run(); // archived doesn't count
 addItem("mnote", "Daily note", "note", "bMovies"); // the journal isn't a card
+addItem("mrev", "Weekly review", "review", "bMovies"); // neither is the review
 ok("the count is open top-level cards only", countOpenCards(db, "bMovies"), 1);
 
 // --- who sees a name and a count (G4) -------------------------------------------
@@ -326,15 +327,20 @@ ok(
   { ok: true, moved: 0, sourceBoardId: "bCode" },
 );
 
-// The linked board's daily note can't become a sub-card (nesting's own rule).
+// The linked board's sentinels can't become sub-cards (nesting's own rule).
 addItem("cnote", "Daily note", "note", "bCode");
+addItem("crev", "Weekly review", "review", "bCode");
 addItem("ctask", "Refactor", "today", "bCode");
 setLinkedBoard(db, "bHome", { id: "proj", linkedBoardId: "bCode", actorId: "u1" });
 ok(
-  "demotion leaves the linked board's note behind",
+  "demotion leaves the linked board's note and review behind",
   demoteToCard(db, "bHome", { id: "proj", actorId: "u1" }),
   { ok: true, moved: 1, sourceBoardId: "bCode" },
 );
+ok("the review stays on its own board, unarchived", [row("crev").board_id, row("crev").archived], [
+  "bCode",
+  0,
+]);
 ok("the note stays on its own board, unarchived", [row("cnote").board_id, row("cnote").archived], [
   "bCode",
   0,
