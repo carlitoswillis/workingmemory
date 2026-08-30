@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 // .ts extension so plain-node tests can import this module (see lib/columns.ts).
-import { NOTE_LIST } from "./lists.ts";
+import { isSentinelList } from "./lists.ts";
 
 // Move cards INTO another card, and back OUT to the board (2026-07-23). Sub-cards
 // already existed — they could only be born inside a parent (addChildAction); this is
@@ -82,7 +82,7 @@ export function setParent(
   for (const id of unique) {
     const row = getRow(db, boardId, id);
     if (!row) return { error: "That card is no longer on this board." };
-    if (row.list === NOTE_LIST) return { error: "The daily note can't go inside a card." };
+    if (isSentinelList(row.list)) return { error: "That can't go inside a card." };
     if (row.parent_id === parentId) continue; // already there — nothing to do
     rows.push(row);
   }
@@ -93,7 +93,7 @@ export function setParent(
     const parent = getRow(db, boardId, parentId);
     if (!parent) return { error: "That card is no longer on this board." };
     if (parent.archived) return { error: "That card is archived." };
-    if (parent.list === NOTE_LIST) return { error: "The daily note can't hold cards." };
+    if (isSentinelList(parent.list)) return { error: "That can't hold cards." };
     for (const row of rows) {
       if (isSelfOrDescendant(db, boardId, row.id, parentId)) {
         return { error: "A card can't go inside itself or one of its own sub-cards." };
