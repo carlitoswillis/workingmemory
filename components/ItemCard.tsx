@@ -188,8 +188,17 @@ export default function ItemCard({
                 className="mt-[1px] flex max-w-[10rem] shrink-0 items-center gap-1 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none text-[var(--text-lo)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)]"
               >
                 <DoorGlyph />
-                <span className="truncate">{doorway.name}</span>
-                <span className="tabular-nums text-[var(--text-lo)]">· {doorway.open}</span>
+                {/* A doorway is usually named after its board — repeating the name
+                    right after the card's own text just says everything twice. The
+                    chip carries the name only when it adds something. */}
+                {doorway.name.trim().toLowerCase() !== item.text.trim().toLowerCase() ? (
+                  <>
+                    <span className="truncate">{doorway.name}</span>
+                    <span className="tabular-nums text-[var(--text-lo)]">· {doorway.open}</span>
+                  </>
+                ) : (
+                  <span className="tabular-nums text-[var(--text-lo)]">{doorway.open}</span>
+                )}
               </a>
             ) : (
               <span
