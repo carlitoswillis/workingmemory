@@ -5,7 +5,7 @@ import type { ListDef } from "../lists";
 // imports this file directly).
 import { NOTE_LIST, REVIEW_LIST, isSentinelList } from "../lists.ts";
 import { parseRecurrence, describeRecurrence, effectiveDone } from "../recurrence.ts";
-import { streakFor } from "../streaks.ts";
+import { completedDays, streakFor } from "../streaks.ts";
 
 // The weekly-review digest: the board's event log for one window, rendered as
 // compact plaintext for an LLM to summarize (plan §2). PURE and deterministic —
@@ -108,9 +108,17 @@ export function buildWeeklyDigest(
     return Number.isFinite(at) && at >= fromMs && at < toMs;
   };
   // Chronological, id as the tiebreak — two events can share a millisecond.
+  // Sentinels are excluded: the review must not summarize itself, and the note
+  // is reported in its own section rather than counted as card activity.
   const windowEvents = data.events
-    .filter((e) => inWindow(e) && byId.get(e.item_id)?.list !== REVIEW_LIST)
+    .filter((e) => {
+      const list = byId.get(e.item_id)?.list;
+      return inWindow(e) && !(list && isSentinelList(list));
+    })
     .sort((a, b) => ms(a.at) - ms(b.at) || a.id - b.id);
+  const noteEvents = note
+    ? data.events.filter((e) => e.item_id === note.id && inWindow(e)).sort((a, b) => a.id - b.id)
+    : [];
 
   const out: string[] = [];
   const push = (line = "") => out.push(line);
@@ -170,7 +178,7 @@ export function buildWeeklyDigest(
     else if (e.field === "text") tally.renamed++;
     else if (e.field === "details") tally.noted++;
   }
-  push(`ACTIVITY IN WINDOW (${windowEvents.length} logged changes)`);
+  push(`ACTIVITY IN WINDOW (${windowEvents.length} logged card changes)`);
   push(
     [
       `created ${tally.created}`,
@@ -190,7 +198,6 @@ export function buildWeeklyDigest(
   // ---- per-card timelines ---------------------------------------------------
   const perItem = new Map<string, ItemEvent[]>();
   for (const e of windowEvents) {
-    if (byId.get(e.item_id)?.list === NOTE_LIST) continue; // its own section below
     const arr = perItem.get(e.item_id);
     if (arr) arr.push(e);
     else perItem.set(e.item_id, [e]);
@@ -243,7 +250,16 @@ export function buildWeeklyDigest(
     push("REPEATING TASKS (check-offs are the streak record)");
     for (const i of repeating) {
       const rec = parseRecurrence(i.recurrence);
-      const days = new Set(i.completed_days ?? (i.completed_on ? [i.completed_on] : []));
+      // getItems() attaches completed_days; getTimelineData() (what the off-box
+      // generator reads) does not — so replay the check-off events ourselves when
+      // it's missing. Same function the board uses, so both agree on the streak.
+      const days =
+        i.completed_days != null
+          ? new Set(i.completed_days)
+          : completedDays(
+              data.events.filter((e) => e.item_id === i.id && e.field === "completed_on"),
+              i.completed_on,
+            );
       const hits = [...days].filter((d) => d >= dayOf(from) && d <= today).sort();
       const streak = streakFor(days, today, rec);
       push(
@@ -257,7 +273,7 @@ export function buildWeeklyDigest(
 
   // ---- the daily note -------------------------------------------------------
   if (note) {
-    const edits = windowEvents.filter((e) => e.item_id === note.id && e.field === "details");
+    const edits = noteEvents.filter((e) => e.field === "details");
     push("DAILY NOTE");
     push(
       edits.length

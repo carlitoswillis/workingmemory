@@ -139,11 +139,12 @@ has("names the board", shared, "board: Home");
 lacks("drops events before the window", shared, "Older name");
 lacks("upper bound is exclusive", shared, "File the taxes\" [Waiting");
 ok(
-  "counts only in-window events",
-  /ACTIVITY IN WINDOW \((\d+) logged changes\)/.exec(shared)?.[1],
-  // 5: a's move + a's completion + c's creation + d's check-off + the note edit.
-  // The review card's own edit and b's move (exactly at the exclusive end) drop out.
-  "5",
+  "counts only in-window card events",
+  /ACTIVITY IN WINDOW \((\d+) logged card changes\)/.exec(shared)?.[1],
+  // 4: a's move + a's completion + c's creation + d's check-off. Both sentinels
+  // drop out (the note has its own section, the review must not summarize
+  // itself), and so does b's move — it lands exactly on the exclusive end.
+  "4",
 );
 
 // --- column labels ----------------------------------------------------------
@@ -169,6 +170,25 @@ has("repeating tasks report the streak", shared, "current streak 3");
 has("untouched cards are surfaced", shared, "UNTOUCHED THROUGH THE WHOLE WINDOW");
 has("untouched cards carry their age", shared, '"File the taxes" in Waiting / Later');
 has("new captures are listed", shared, '- "Read the Ricard paper" → Today');
+
+// Without completed_days attached (what getTimelineData returns), the streak is
+// replayed from the completed_on events instead.
+const raw = buildWeeklyDigest(
+  {
+    items: items.map((i) => (i.id === "d" ? { ...i, completed_days: undefined } : i)),
+    events: [
+      ...events,
+      ev({ item_id: "d", type: "completed", field: "completed_on", new_value: "2026-08-27", at: "2026-08-27T07:00:00.000Z" }),
+      ev({ item_id: "d", type: "completed", field: "completed_on", new_value: "2026-08-28", at: "2026-08-28T07:00:00.000Z" }),
+    ],
+    columns: COLUMNS,
+    listLabels: LABELS,
+  },
+  FROM,
+  TO,
+  { today: "2026-08-29" },
+);
+has("streaks replay from events when completed_days is absent", raw, "current streak 3");
 
 // --- personal board (no members) -------------------------------------------
 const personal = buildWeeklyDigest(
