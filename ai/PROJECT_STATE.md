@@ -103,8 +103,15 @@ a real structure without losing its looseness.
       boards (review is per-`board_id`, digest reads custom columns, and
       `item_events.actor_id` lets a shared-board review attribute actions to members)
       and grounded on the current Claude API (`claude-opus-4-8`, Messages API,
-      `output_config.effort`, env-gated off). Awaiting green-light on the plan's §9
-      gates: SDK vs fetch, any-member vs owner-only, model default, review window.
+      `output_config.effort`, env-gated off). **Revised again 2026-08-30** (owner
+      call): hosted WM stays AI-free — free Render tier, no key, no LLM deps. A
+      Mac-side `scripts/weekly-review.mjs` builds the digest from the verified daily
+      backup snapshot, generates via Claude CLI (Ollama fallback), and POSTs the
+      markdown to a new BRAIN_TOKEN'd `POST /api/review` (sentinel card, journaled);
+      `GET /api/review` lets assistant + brain consume it (overlap audit of both
+      sibling repos 2026-08-30: complementary, WM owns board history). Awaiting
+      green-light on the plan's §9 gates: generator home, model path, window,
+      scheduling host, route scope.
 - [x] **Weekly-reset + weekday-specific recurring tasks** (e.g. "Wednesdays: no car,
       do laundry") — BUILT 2026-07-23 per the owner's ask: a card can repeat on a
       chosen weekday and STAYS done until that weekday comes round again. Awaiting
@@ -119,6 +126,26 @@ a real structure without losing its looseness.
       journals it → time-traveled for free). Send side: any email; iOS Shortcut
       can front it. Auth: shared secret + /login-style rate limit. The old
       IMAP-pull sketch is in this file's git history (pre-2026-07-03).
+
+- [ ] **Card ↔ board doorways** (owner idea 2026-08-30; PROPOSED — no build until
+      owner confirms shape): a card can link to a board (`items.linked_board_id`) —
+      it remains an ordinary card on its home board (own done/column/history, a
+      live open-count rendered at read time) and opens the linked board on tap.
+      Explicitly NOT mirrored sub-cards: items live in exactly one place (the
+      linked board); the card is a pointer, never a synced second view. Motivating
+      cases: Movies! (shared) deserves a doorway card on Personal so watch-list
+      cards stop re-invading the Personal backlog; "coding projects" (12 subs,
+      Autojob alone 17 sub-subs) wants promotion to a real board. Sharing falls
+      out free: a personal card can point at a shared board and vice versa —
+      membership lives on the board, the doorway is yours. V1 = link + count +
+      create-empty-board-from-card. **Promoting existing sub-cards is the hard
+      part**: `board_id` has no items_log trigger, so re-homing rows would
+      retroactively erase them from the old board's time machine (replay only sees
+      a board's current rows). Decide before building: add a board_id trigger +
+      replay support, vs. the gentler archive-on-old-board / recreate-on-new
+      (both timelines stay truthful; per-card history restarts).
+      **Plan written 2026-08-30**: `ai/plans/2026-08-30-card-board-doorways.md`
+      — awaiting owner answers on its §9 gates.
 
 ### Someday / maybe
 - [ ] **Postgres/multi-user escalation path** — largely superseded by

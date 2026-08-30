@@ -1,7 +1,11 @@
 # Plan: AI weekly review over the event stream
 
 _Created 2026-07-03 · **Revised 2026-07-07** (Anthropic-native per owner call; reconciled
-with shared boards + custom columns) · Status: PROPOSED — awaiting owner sign-off before
+with shared boards + custom columns) · **Revised 2026-08-30** (owner calls, twice: the review is a
+WM thing that assistant + brain consume via API — and the hosted WM app itself stays
+**AI-free**: it's a free-tier Render app with no key, so generation runs on the owner's
+Mac via the Claude-CLI/local-model stack the data-heavy apps already use; see §8b, which
+supersedes §1/§3's in-app generation) · Status: PROPOSED — awaiting owner sign-off before
 any code._
 
 The backlog's "real differentiator": point an LLM at `item_events` and generate the
@@ -20,6 +24,13 @@ Two owner/architecture updates fold in here:
    (scope = `board_id`), the digest reads **user-created columns** (not the old hardcoded
    list), and — the nice part — `item_events.actor_id` means a review of a shared board
    can say **who** did what ("you cleared 4 cards; @alex moved the taxes card to Waiting").
+3. **Generation moved off the server** (owner call 2026-08-30). WM has no AI integrated
+   and runs on Render's free tier; the owner's data-heavy apps (assistant, brain) do their
+   LLM work on the Mac — Claude CLI and Ollama, not a metered key in a hosted env. So v1
+   has **no in-app Generate button and no `ANTHROPIC_API_KEY` in WM at all**: a script on
+   the Mac builds the digest from the verified daily backup snapshot, generates via the
+   CLI, and POSTs the finished markdown to WM. §§1, 3, and 8 below describe the earlier
+   in-app variant and stay for the record; **§8b is the build shape.**
 
 ## What v1 does (and doesn't)
 
@@ -165,22 +176,69 @@ Waiting and daily-task streaks; on a shared board attribute actions to the named
    generation against a live key on a scratch board; confirm nothing saves on a forced error.
 6. Docs: PROJECT_STATE completed entry + README env line (`ANTHROPIC_API_KEY`, `AI_MODEL`).
 
+## 8b. Build shape (rewritten 2026-08-30) — generation on the Mac; WM stores + serves
+
+**WM never calls a model.** The flow is pull → generate locally → push, all from the
+owner's machine, on the rails that already exist:
+
+1. **Digest input = the daily backup.** `scripts/pull-backup.sh` already lands a
+   verified full snapshot in `backups/pull/<stamp>/wm.db` — `item_events`, column-label
+   history, `actor_id` and all. The generator runs the pull first (or takes today's
+   snapshot), so **no history-exposing endpoint is ever added to the hosted app**, and
+   the backups become load-bearing instead of write-only.
+2. **`scripts/weekly-review.mjs` (this repo — the digest logic lives next to the
+   schema it reads):** opens the snapshot read-only, builds the §2 digest
+   (`lib/ai/digest.ts` still gets written, pure and unit-tested — it just runs
+   locally), then generates via **`claude -p`** (CLI subscription, no per-token bill)
+   with an Ollama fallback (`REVIEW_MODEL=ollama:<model>`) — the assistant's exact
+   provider pattern. §1's SDK-vs-fetch question dissolves: the provider is a child
+   process, and WM's `package.json` gains zero LLM deps.
+3. **`POST /api/review`** — the one new hosted route: accepts markdown (`BRAIN_TOKEN`
+   via `brainBearerOk`, size-capped, owner's active board), writes the review sentinel
+   (`list='review'`), and the details trigger journals it — the time machine remains
+   the archive of every review. Unset token ⇒ the route doesn't exist (the
+   `/api/context` pattern).
+4. **`GET /api/review`** (same gate): `{ board, generatedAt, markdown }` from the
+   sentinel, so the assistant's brief can grow a "This week" row beside its Board
+   section and brain phase 4 (parked) can later read the review's text — neither ever
+   sees raw `item_events`. A separate route, not folded into `/api/context`, whose
+   ~2KB current-items contract is load-bearing for both consumers.
+5. **No MCP server in WM.** The brain already runs one (`brain/mcp/server.mjs`) and
+   the assistant has its own tool registry; each wraps the GET as a read-only
+   `wm_review` tool in its own repo. WM stays an HTTP app; MCP lives at the edges.
+6. **Scheduling stays on the Mac** — the assistant's `dailyAt()` + a `getDay() === 0`
+   Sunday gate (the `reflect.mjs` pattern) shelling the script, or a weekly launchd
+   plist beside the backup's. Scheduled, not always-on; nothing hosted ever schedules
+   anything.
+
+The rendering half of §4/§8 survives unchanged: the board shows the review in a slim
+`review` slot next to the Note, read-only markdown via `components/Markdown.tsx` — WM
+displays the intelligence; it just doesn't manufacture it.
+
 ## 9. Open questions for the owner (green-light gates)
 
-1. **SDK or fetch?** `@anthropic-ai/sdk` (recommended — typed errors/retries/streaming, one
-   dep) vs a ~40-line zero-dep `fetch` adapter (matches the repo's no-SDK ethos). Default: SDK.
-2. **Who can generate — any board member, or board owner only?** The bill accrues to one key
-   (yours). Default: any member, rate-limited; restrict to owner if cost worries you.
-3. **Model default `claude-opus-4-8`, env-overridable to `claude-haiku-4-5` for cost?**
-   (This is a cheap call either way; opus is the quality default.)
-4. **Window:** trailing 7 days from the button press (simplest) vs Monday-anchored weeks?
+_(Rewritten 2026-08-30 for the §8b shape — the old SDK/key/billing gates dissolved with
+in-app generation; they're in git history.)_
+
+1. **Generator home?** `scripts/weekly-review.mjs` in this repo (recommended — the
+   digest logic stays next to the schema and tests it reads; the assistant merely
+   schedules/shells it) vs a module inside the assistant. Default: this repo.
+2. **Model path:** `claude -p` via the CLI by default, `REVIEW_MODEL` env to point at
+   an Ollama model instead? Default: CLI, Ollama as the offline fallback.
+3. **Window:** trailing 7 days from the run (simplest) vs Monday-anchored weeks?
    Default: trailing 7 days.
+4. **Scheduling host:** assistant `dailyAt()` Sunday gate, a weekly launchd plist
+   beside the backup's, or manual-only for the first few weeks? Default: manual-only
+   first — feel the output before automating it.
+5. **Routes in v1:** ship `POST` + `GET /api/review` together (one small route file;
+   the brief can consume immediately) or POST-only first? Default: both together.
 
 ## 10. Later phases (backlog, not now)
 
-- **Scheduled generation** — a GitHub-Actions weekly cron → authed `POST /api/review` (still
-  no daemon). Or, if Managed Agents ever enters the picture, a scheduled deployment — but
-  that's a hosted dependency the owner has so far declined.
+- **Scheduled generation** — superseded by §8b (2026-08-30): the assistant's existing
+  `dailyAt()` scheduler (or a weekly launchd plist) runs the generator script on
+  Sundays. The old GitHub-Actions-cron and Managed-Agents sketches survive only in
+  this file's git history.
 - **Auto-triage** — suggest a column for each Brain Dump card (one structured-output call).
 - **"Ask your history"** — free-form Q&A over a date-ranged digest. This is where **prompt
   caching** earns its keep: cache the digest prefix once, ask many questions cheaply.
