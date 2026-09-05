@@ -109,22 +109,21 @@ function chunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 
-function png(size, opts) {
-  const rgba = render(size, opts);
+// Wrap a straight-alpha RGBA buffer as a PNG. Split from png() so the (very
+// non-square) iOS launch images below can reuse the container.
+function pngFrom(rgba, w, h) {
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 6; // colour type: RGBA
 
   // One filter byte (0 = None) per scanline.
-  const raw = Buffer.alloc(size * (size * 4 + 1));
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0;
-    Buffer.from(rgba.buffer, y * size * 4, size * 4).copy(
-      raw,
-      y * (size * 4 + 1) + 1,
-    );
+  const stride = w * 4;
+  const raw = Buffer.alloc(h * (stride + 1));
+  for (let y = 0; y < h; y++) {
+    raw[y * (stride + 1)] = 0;
+    Buffer.from(rgba.buffer, y * stride, stride).copy(raw, y * (stride + 1) + 1);
   }
 
   return Buffer.concat([
@@ -133,6 +132,44 @@ function png(size, opts) {
     chunk("IDAT", deflateSync(raw, { level: 9 })),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+function png(size, opts) {
+  return pngFrom(render(size, opts), size, size);
+}
+
+// ── iOS launch images ──────────────────────────────────────────────────────
+// A home-screen install shows one of these while it boots; with none declared,
+// iOS flashes WHITE at a dark app. Same three bars on the same Nocturne field,
+// centred at ~28% of the short edge. Emitted at device pixel sizes, named
+// icon-* so middleware.ts's static-asset exclusion already skips them.
+function splash(w, h) {
+  const buf = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    buf[i * 4] = BG[0];
+    buf[i * 4 + 1] = BG[1];
+    buf[i * 4 + 2] = BG[2];
+    buf[i * 4 + 3] = 255;
+  }
+
+  // Reuse the icon rasterizer by rendering the mark into its own square buffer
+  // and compositing that square into the middle of the field — the bars are
+  // opaque over a matching background, so a straight copy is exact.
+  const markPx = Math.round(Math.min(w, h) * 0.28);
+  const mark = render(markPx, { fieldRadius: 0 });
+  const ox = Math.round((w - markPx) / 2);
+  const oy = Math.round((h - markPx) / 2);
+  for (let y = 0; y < markPx; y++) {
+    for (let x = 0; x < markPx; x++) {
+      const s = (y * markPx + x) * 4;
+      const d = ((y + oy) * w + (x + ox)) * 4;
+      buf[d] = mark[s];
+      buf[d + 1] = mark[s + 1];
+      buf[d + 2] = mark[s + 2];
+      buf[d + 3] = 255;
+    }
+  }
+  return pngFrom(buf, w, h);
 }
 
 // ── ICO container (PNG-in-ICO, universally supported since IE11) ────────────
@@ -190,6 +227,12 @@ const out = [
   // Maskable: Android may crop to any shape, so the content sits inside the
   // safe zone (the centre 80%) on a full-bleed field.
   ["public/icon-maskable-512.png", png(512, { fieldRadius: 0, content: 0.72 })],
+
+  // iOS launch images for the two phone sizes the phone app is designed against
+  // (spec §7): 375×812 @3x and 430×932 @3x. Linked from app/layout.tsx's
+  // appleWebApp.startupImage with the matching device-width media queries.
+  ["public/icon-splash-1125x2436.png", splash(1125, 2436)],
+  ["public/icon-splash-1290x2796.png", splash(1290, 2796)],
 ];
 
 for (const [path, data] of out) {

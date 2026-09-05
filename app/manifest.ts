@@ -9,8 +9,15 @@ export default function manifest(): MetadataRoute.Manifest {
     // would clip "Working Memory" mid-word.
     short_name: "Memory",
     description: "What's on your mind — now, and everything it used to be.",
-    start_url: "/",
+    // `?src=pwa` so the launch that came from the home screen is legible in
+    // logs — and so the install never shares a start URL with an ordinary tab.
+    start_url: "/?src=pwa",
+    // Pinned explicitly: `id` is what keeps an install attached to this app
+    // across a start_url change, so the icon on the home screen survives.
+    id: "/",
+    scope: "/",
     display: "standalone",
+    orientation: "portrait",
     // Dark is the app's default regardless of device preference (only an
     // explicit "light" is ever stored — see THEME_INIT in app/layout.tsx), so
     // the splash and chrome match --bg-0.
