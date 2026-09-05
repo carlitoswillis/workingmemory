@@ -91,6 +91,11 @@ body {
   height: 100%;
 }
 
+/* The canvas behind everything wears the theme, so no gap can ever show white. */
+html {
+  background: var(--bg-0);
+}
+
 body {
   background: linear-gradient(180deg, var(--bg-1), var(--bg-0) 55%);
   background-attachment: fixed;
@@ -407,9 +412,11 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  /* dvh, never vh: 100vh is taller than the visible viewport while the URL bar
-     is up, which hides the tab bar behind it. */
-  height: 100dvh;
+  /* No explicit height: with all four edges pinned, the box IS the visible
+     viewport. An explicit 100dvh here overrode `bottom: 0` and, in an installed
+     iOS app, came up short of the screen — leaving a strip of page background
+     under the tab bar. The keyboard case is handled by the --vvh rule below. */
+  height: auto;
   overflow: hidden;
   background: var(--bg-1);
   color: var(--text-hi);
