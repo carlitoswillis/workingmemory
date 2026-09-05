@@ -119,6 +119,6 @@ export const config = {
   // The icons and the manifest are included: they're fetched on nearly every
   // cold load, and without this each one would mint a visitor cookie.
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|icon\\.svg|icon-[\\w-]+\\.png|apple-icon\\.png|manifest\\.webmanifest).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|icon\\.svg|icon-[\\w-]+\\.png|apple-icon\\.png|manifest\\.webmanifest|sw\\.js).*)",
   ],
 };

@@ -10,7 +10,9 @@
 // `claude -p` child process, or `ollama run` — so there is no new npm
 // dependency and nothing here ever touches the live DB.
 //
-// MANUAL ONLY. There is no scheduler, no cron entry, no daemon: you run it.
+// Scheduled since 2026-08-30 (owner call, superseding the original manual-only
+// rule): launchd runs this every Friday 16:00 via assistant/scripts/weekly-brief.sh
+// (com.carlitoswillis.weekly-brief). Still fine to run by hand any time.
 //
 //   WM_URL=https://<app> WM_BRAIN_TOKEN=<BRAIN_TOKEN> scripts/weekly-review.mjs
 //
