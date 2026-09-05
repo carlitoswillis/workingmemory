@@ -1,292 +1,91 @@
 # Working Memory
 
-**A board for what's on your mind — and a time machine for what used to be.**
+A board for what's on your mind — Today, Focus, Waiting, Backlog, Brain Dump — where
+every change is kept, so you can scrub back through the board's history and see it as
+it actually was. Live demo: **[workingmemory.onrender.com](https://workingmemory.onrender.com)**
+(no signup, a throwaway board seeded with a few weeks of history; the free tier takes
+about a minute to wake up).
 
 [![CI](https://github.com/carlitoswillis/workingmemory/actions/workflows/ci.yml/badge.svg)](https://github.com/carlitoswillis/workingmemory/actions/workflows/ci.yml)
 
-**Live demo: [workingmemory.onrender.com](https://workingmemory.onrender.com)** — no
-signup; you get your own throwaway board, pre-loaded with three weeks of history so
-the time machine has somewhere to go. (Free-tier hosting: first load after an idle
-spell takes ~a minute. It's warming up. Think of it as the app remembering.)
+![The desktop board with the time-travel scrubber engaged, showing the board as it stood on August 28](docs/media/desktop-timetravel.png)
 
-## Why this exists
+*The scrubber pulled back to a past moment — the board re-renders as it was, read-only.*
 
-For years I kept one perpetually rewritten note: today's priorities at the top,
-things I was waiting on, a brain-dump section at the bottom, recurring checklists
-wedged in between. It worked — right up until I asked it a question it couldn't
-answer: *what was I actually worried about three weeks ago?* The note only ever
-knew **now**. Every rewrite quietly destroyed the previous me.
+<p align="center">
+  <img src="docs/media/phone-now.png" width="45%" alt="The Now screen: today's cards and what's due, with a bottom tab bar">
+  <img src="docs/media/phone-card.png" width="45%" alt="A card sheet open over the Lists screen, showing sub-cards as ordinary rows">
+</p>
 
-Todo apps don't fix this. Trello, Notion, Linear — they're all excellent at
-*current state* and amnesiac about everything else. Done items vanish, edits
-overwrite, and the history of your attention — what occupied you, for how long,
-what got stuck — is the exhaust they throw away.
-
-Working Memory keeps the exhaust. It's a small kanban-ish board (Today · Focus ·
-Waiting/Later · Backlog · Brain Dump, plus a pinned daily note) where **every
-change to every card is recorded in an append-only event log**. The board shows
-now; the 🕰 time machine scrubs backward through every moment the board ever
-changed and re-renders it as it was — read-only, drill-down and all.
-
-Some one-liners for what that buys you:
-
-- **Your attention, queryable.** "What was on my mind before vacation?" is a
-  scrub, not an archaeology dig.
-- **The daily note is a journal you never had to keep.** You just rewrite one
-  note each morning; the time machine keeps every version.
-- **Done doesn't mean gone.** Completing, archiving, editing — nothing is
-  destructive, ever. The event log is immutable by construction.
-- **The moat is the log.** Eventually: AI over your event stream — a weekly
-  review that writes itself. The substrate is already being laid down.
+*The phone app: a Now feed you can tick through, and a card sheet for everything else.*
 
 ## What it does
 
-- **Thin, low-key cards** — one wrapping line (recency-tinted edge · checkbox ·
-  title). Click for a detail panel: notes, move, archive, sub-cards, full history.
-- **Time travel** — a scrubber whose ticks are the real moments the board
-  changed. Drag it and the board re-renders live; click into past cards, even
-  their sub-cards. The past is strictly read-only.
-- **Sub-cards** — cards within cards, arbitrary depth, each with its own history.
-- **Daily-refreshing tasks** — "repeat daily" cards reset at your local midnight
-  without deleting anything (a daily task is only "done" if done *today*).
-- **Multi-select drag, undo, cross-list drag** — ⌘-click to select several cards
-  and move them as a block; ⌘Z takes it back.
-- **Archive without opening the card** — hover a card and click the archive glyph, or
-  select several (⌘-click) and use the bar's **Archive · a**. Anything archived is one
-  ⌘Z away. On phones: swipe a card past half its width and it rests open over an
-  Archive button; nothing leaves the board until you tap it.
-- **Demo mode** — `DEMO_MODE=1` gives every visitor an isolated, rate-limited,
-  auto-expiring board seeded with fabricated-but-consistent history.
-- **A weekly review that writes itself** — an LLM reads the week out of
-  `item_events` and writes it up; it lands in a read-only slot beside the Note.
-  See below — the model runs on *your* machine, not the server.
+- Five lists — Today, Focus, Waiting / Later, Backlog, Brain Dump — plus a pinned daily
+  note. Columns can be renamed, added, reordered or removed.
+- Recurring cards that reset each day or on a chosen weekday, with a streak count.
+- Sub-cards at any depth, each with its own history; cards can also open into a whole board.
+- Time travel over an append-only event log: drag the scrubber and the board re-renders at
+  that moment. The ticks are the real moments something changed.
+- A weekly review written from that history — what you finished, what moved, what has been
+  parked in Waiting. It is generated by a script on your own machine; the server holds no
+  API key.
+- A phone app with one-tap completion, bottom sheets for card details, capture, search and
+  time travel, and Web Push once it is installed to the Home Screen.
+- Light and dark, following the system theme until you pick one.
+- Shared boards: invite another account by username; each side sees the other's changes
+  within about a second.
 
-## The phone app
+## How it's built
 
-Working Memory on a phone is **its own app**, not the board at 375px. Same data,
-same server actions, same Nocturne tokens; no shared layout. The desktop board
-keeps five columns and drag-and-drop; the phone gets one vertical feed, a paged
-Lists screen, and a bottom tab bar. Anything that needs a confirmation you can
-actually read — creating, renaming or sharing a board, deleting a column — stays
-on the desktop on purpose.
+- **Next.js 14 (App Router), React 18, TypeScript** — server components and server actions,
+  no separate API layer for the app itself.
+- **SQLite via better-sqlite3.** Triggers on `items` append to `item_events`, so every
+  change is journaled at the database layer rather than by app code, and time travel is a
+  replay of that log. See [`ai/ARCHITECTURE.md`](ai/ARCHITECTURE.md).
+- **Litestream to Backblaze B2** — continuous replication with restore-on-boot, so the host
+  needs no persistent disk and every deploy doubles as a restore drill.
+- **Render's free tier**, built from the `Dockerfile` per `render.yaml`; sessions are
+  stateless HMAC cookies, so there is no session store to keep.
+- **The phone app is its own shell** under `components/phone` — same data and same server
+  actions as the desktop board, no shared layout. Tests are plain node suites run by
+  `npm test`.
 
-Everything that isn't the feed is a **bottom sheet** (Vaul, which rides Radix
-Dialog, so the focus trap, Escape and the scroll lock are the primitive's, not
-ours):
-
-| Sheet | What it's for |
-|---|---|
-| Card | A 180px peek — title, sub-card count, a full-width Done — dragged up to details, sub-cards, recurrence and move-to |
-| Capture | One textarea, a list chooser defaulting to Brain Dump, Save above the keyboard |
-| Find | The same search the desktop has, in a full-height sheet |
-| Time travel | Its own mode screen: date at the top, the board as it was behind, a 44px scrubber in the thumb zone |
-| Review · Note · Boards · More | The daily note, the weekly review, the board switcher, settings |
-
-Two details worth knowing if you're working on it. The soft keyboard's height is
-measured from `window.visualViewport` and written onto `<html>` as `--kb`
-(`components/phone/useKeyboardInset.ts`); sheets pad by it, which is what keeps a
-Save button above the keys — `interactive-widget=resizes-content` would do the
-job on Chrome, but iOS needs the JS path. And every text input is 16px, because
-below that Safari zooms the whole page on focus.
-
-### Installing it on iOS
-
-The home-screen install is the real runtime: standalone chrome, safe areas, no
-Safari toolbars eating the bottom third. iOS gives web pages **no install
-button** — there is no `beforeinstallprompt` and no API — so it's done by hand:
-
-1. Open the app in Safari and tap **Share** (the square with the arrow).
-2. Scroll to **Add to Home Screen**, then **Add**.
-3. Open it from the home screen, not from Safari.
-
-More → the install card explains the same three steps in the app, and only
-appears in a browser tab (it's gated on `display-mode: standalone` plus
-`navigator.standalone`, so an installed app never shows it) until you dismiss it.
-
-## How nothing is ever lost
-
-History isn't an app feature that can be forgotten in some code path — it's
-**SQLite triggers**. Every insert/update on `items` appends to `item_events` at
-the database layer, so any client (this app, a script, future mobile) records
-history just by writing. Time travel is a pure function that replays events
-backward from now. See [`ai/ARCHITECTURE.md`](ai/ARCHITECTURE.md).
-
-## The weekly review (AI over the event stream)
-
-The append-only log is the point, so something should read it. Once a week a
-model summarizes the last 7 days — what you finished, what moved, what's been
-parked in Waiting since forever, which repeating tasks held their streak — and
-the result is saved as a pinned card whose body is journaled by the same
-triggers as everything else. **Past reviews live in the time machine**: no new
-table, and the reviews are themselves time-travelable.
-
-**The server has no API key and no model dependency.** Generation runs on your
-machine, against a backup snapshot opened read-only, through a CLI you already
-have:
-
-```bash
-# print the digest and the review, post nothing
-scripts/weekly-review.mjs --dry-run
-
-# generate and post it to the running app
-WM_URL=https://your-app WM_BRAIN_TOKEN=$BRAIN_TOKEN scripts/weekly-review.mjs
-```
-
-It reads the newest `backups/pull/<stamp>/wm.db` (what `scripts/pull-backup.sh`
-already leaves behind; `--db <path>` overrides), shells out to `claude -p`, and
-POSTs the markdown to `/api/review`. `REVIEW_MODEL=ollama:<model>` switches to a
-local Ollama model instead; `REVIEW_MODEL=<name>` picks a model for the Claude
-CLI. Nothing is posted if generation fails.
-
-**It is manual.** There is no cron entry, no scheduler and no daemon anywhere in
-this repo — you run it when you want a review.
-
-`POST /api/review` and `GET /api/review` are gated by `BRAIN_TOKEN`, the same
-scoped bearer as `/api/context` and `/api/items`; unset it and the endpoints
-don't exist.
-
-**Which board they mean.** All three share one resolver (`lib/bridge.ts`), and it
-is deterministic: the board pinned by **`WM_OWNER_BOARD_ID`** if that id belongs
-to the owner, else the owner's oldest *root* board carrying the canonical
-Today/Focus/Backlog columns — root meaning no card anywhere opens into it as a
-doorway, so a sub-board like a watch list is never mistaken for the task board —
-and only then, as a last resort, the board most recently written to.
-`GET /api/context` and `GET /api/review` both return `board: {id, name}` so a
-caller can check which one it got.
-
-## Run it locally
-
-Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.
+## Run it
 
 ```bash
 npm install
-npm run dev        # → http://localhost:3000, data lives in ./data/wm.db
-npm run dev:demo   # the hosted-demo experience (per-visitor ephemeral boards)
-npm test           # time-travel, demo-seed, auth, streaks, accounts, digest suites
+npm run dev        # http://localhost:3000, data in ./data/wm.db
+npm run dev:demo   # the hosted demo experience: a throwaway board per visitor
+npm run build
+npm test
 ```
 
-## Accounts (hosted)
+Local use needs no configuration. Everything else is optional and documented in
+`.env.local.example`: `DATA_DIR`, `DEMO_MODE`, `OWNER_SECRET`, `BRAIN_TOKEN`,
+`WM_OWNER_BOARD_ID`, `OWNER_USERNAME`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+`VAPID_SUBJECT`.
 
-The hosted instance has open signup: create a username + password at `/signup`
-and you get a persistent board of your own (the demo boards stay throwaway for
-anonymous visitors). All accounts live in one replicated SQLite file, scoped
-per-user in every query; sessions are stateless HMAC cookies. No email is
-collected — which also means **no password reset**, so write it down. Local
-mode (`npm run dev`) remains account-free.
+Three endpoints exist for a companion app on my own machine, all behind the same
+`BRAIN_TOKEN` bearer (unset it and they 404). `GET /api/context` returns the open cards on
+the owner's board as compact triage context. `POST /api/items` creates one card through the
+normal write path, so the triggers journal it like any other write. `POST /api/push/send`
+delivers a Web Push notification to the owner's subscribed devices.
 
-## Deploy your own (the $0 stack)
+## Design
 
-The hosted instance runs the `Dockerfile` on Render's free tier with **no
-persistent disk** — by design. [Litestream](https://litestream.io) continuously
-replicates the owner's DB to a Backblaze B2 bucket and restores it on every
-boot, so the disk is disposable and **every deploy is a restore drill**. Demo
-boards are deliberately not replicated (throwaway by design).
+The phone app's design is written down in two plans:
+[`ai/plans/2026-09-04-phone-app.md`](ai/plans/2026-09-04-phone-app.md) (screen map, the
+completion moment, touch rules, the iOS install checklist) and
+[`ai/plans/2026-09-04-phone-app-second-pass.md`](ai/plans/2026-09-04-phone-app-second-pass.md)
+(the tightening pass, with the type ladder and the decisions behind it).
 
-- `render.yaml` — free tier blueprint (what the live demo runs)
-- `fly.toml` — the ~$3/mo no-cold-start alternative
-- `litestream.yml` — Litestream retention config (baked into the image); keeps
-  the B2 bucket bounded so restores stay cheap
-- `ai/plans/2026-07-03-free-deploy-runbook.md` — the full runbook, including the
-  failures you'll hit if you deviate (schemeless replica URLs; slim images
-  shipping no CA certs) and the Class C incident write-up below
+The palette is called Nocturne: a near-black ground, one amber accent for *now* and a blue
+for the past, elevation as a luminance step and a hairline rather than a shadow.
 
-**One catch worth knowing on the free tier:** the diskless design means every
-cold start makes Litestream re-list the bucket and open a fresh generation. On a
-service that spins down every 15 idle minutes, that listing churn can blow past
-Backblaze's free **Class C** (`s3_list_objects`) allowance. The fix is to stop
-the cold starts — an external uptime ping (e.g. UptimeRobot → `/api/health`
-every 5 min) keeps the container warm so restore only runs on real deploys.
-`litestream.yml`'s explicit retention is the backstop. (Fly.io's persistent disk
-sidesteps the whole thing.) The daily Mac backup is *not* involved — it hits
-`/api/export`, never the bucket.
+The phone idea is one row at every depth — a sub-card is the same row as a top-level card,
+same height, same check target, no indent and no smaller type.
 
-Your data stays yours: `GET /api/export` streams a consistent snapshot of the
-main DB (operator bearer token only, since it now holds every account),
-`PUT /api/import` migrates one in (integrity-checked before swap), and
-`scripts/push-local-db.sh` / `scripts/pull-backup.sh` move the file either
-direction. A daily launchd job pulls a verified backup to my Mac — the cloud is
-the working copy, not the only copy.
+Current state, backlog and the ops notes worth knowing live in
+[`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md).
 
-To pull a backup by hand (both vars live in `~/.wm-backup.env`, chmod 600):
-
-```sh
-env $(cat ~/.wm-backup.env) ./scripts/pull-backup.sh
-```
-
-Add `RESTORE_LOCAL=1` to also replace the local main DB (`data/owner/wm.db`)
-with the verified snapshot — it saves the old file to
-`backups/local-pre-restore/<stamp>/` first, and refuses to run while the dev
-server has the DB open:
-
-```sh
-env $(cat ~/.wm-backup.env) RESTORE_LOCAL=1 ./scripts/pull-backup.sh
-```
-
-The daily launchd job must never set `RESTORE_LOCAL` — it would silently
-overwrite local changes every morning.
-
-## Push notifications
-
-Web Push for the phone app — iOS 16.4+ (**home-screen installs only**; Safari in
-a tab can't receive them) and Android. Off unless VAPID keys are set: with them
-unset the endpoints 404 and Settings honestly says "not set up".
-
-Generate a keypair once:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-Then set three env vars — locally in `.env.local`, on Render under
-**Environment** (mark the private key secret; it is deliberately *not* in
-`render.yaml`, since a blueprint value would be committed):
-
-| Var | What it is |
-| --- | --- |
-| `VAPID_PUBLIC_KEY` | Handed to the browser as `applicationServerKey` |
-| `VAPID_PRIVATE_KEY` | Signs the push; **secret** |
-| `VAPID_SUBJECT` | `mailto:` or `https://` contact, per RFC 8292 |
-
-Turn it on from the phone: **More → Settings → Notifications → Enable
-notifications**. That button is the only thing in the app that calls
-`Notification.requestPermission()` or registers the service worker
-(`public/sw.js` — push handling only, no offline cache). **Send test** proves the
-whole round trip. Subscriptions are one row per device in `push_subscriptions`,
-keyed by endpoint; a push service answering 404/410 prunes the row.
-
-### Sending one
-
-There is no scheduler in the app — the owner's Mac triggers every push. The send
-endpoint takes the **same bearer as `/api/context`** (`BRAIN_TOKEN`, see
-`lib/bridge.ts`), so the Mac-side assistant gains a verb, not a credential, and
-delivers to whichever account `resolveOwnerBoard()` calls the owner:
-
-```bash
-curl -X POST "$WM_URL/api/push/send" \
-  -H "Authorization: Bearer $WM_BRAIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Today","body":"3 due · Gym, Standup, Taxes"}'
-# → {"sent":1,"pruned":0}
-```
-
-`url` (a same-origin path — absolute URLs are refused) deep-links the tap; `tag`
-groups a notification so a re-send replaces rather than stacks. The two intended
-moments are a 07:30 "Today" and a 21:00 "Nightly log", both LaunchAgents on the
-Mac.
-
-## Stack
-
-- **Next.js 14 (App Router) + React 18 + TypeScript** — server components + actions
-- **better-sqlite3** — one file per board; history via triggers in `lib/schema.ts`
-- **Litestream + Backblaze B2** — streaming replication, restore-on-boot
-- **@dnd-kit** — accessible drag-and-drop (cards, columns, multi-select)
-- **Vaul** — the phone app's bottom sheets (a Radix Dialog underneath)
-- **Tailwind CSS + Fraunces / Space Grotesk** — the matte "Nocturne" look
-
-## Status & roadmap
-
-Live log in [`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md). Next up: capture-from-
-anywhere (email → daily note via webhook), auto-triage of brain dumps, and
-"ask your history" — free-form questions over a date-ranged digest.
-
-MIT © Carlitos Willis
