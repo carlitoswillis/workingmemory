@@ -283,22 +283,3 @@ export function applyReorder<T extends { id: string; position: number }>(
   reordered.splice(to, 0, moved);
   return reordered.map((item, index) => ({ ...item, position: slots[index] }));
 }
-
-// An empty list is an instruction, not a mood. Each column says the one thing you
-// could do about it, in a full sentence — never "— empty —".
-//
-// (Owned by package P1; P2's PhoneList.tsx is the consumer.)
-export function emptyCopyFor(listId: string): string {
-  switch (listId) {
-    case "focus":
-      return "Nothing in Focus right now.";
-    case "waiting":
-      return "Nothing waiting. Snooze a card here from its row menu.";
-    case "backlog":
-      return "Backlog's empty.";
-    case "braindump":
-      return "Nothing dumped yet. Tap Capture to drop a thought.";
-    default:
-      return "Nothing in this list yet.";
-  }
-}
