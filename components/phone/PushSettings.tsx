@@ -191,7 +191,7 @@ export default function PushSettings() {
     >
       <h2
         id="push-settings-heading"
-        className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--text-lo)]"
+        className="text-[13px] font-medium text-[var(--text-mid)]"
       >
         Notifications
       </h2>

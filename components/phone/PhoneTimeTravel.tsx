@@ -107,20 +107,23 @@ export default function PhoneTimeTravel() {
       <div className="wm-sheet__scroll">
         {!active ? (
           <p className="wm-ph-hint">
-            Drag the scrubber to rewind. The board redraws as it was at that moment —
-            reading only; nothing you see here can be changed.
+            Drag the scrubber to rewind. The board redraws as it was at that moment,
+            reading only, so nothing you see here can be changed.
           </p>
         ) : grouped.length === 0 ? (
           <p className="wm-ph-hint">The board was empty then.</p>
         ) : (
           grouped.map(([list, rows]) => (
-            <section key={list} style={{ marginTop: 14 }}>
-              <p className="wm-ph-caption">
-                {listLabels[list] ?? list} · <span className="wm-ph-num">{rows.length}</span>
+            <section key={list} style={{ marginTop: 18 }}>
+              <p className="wm-ph-sect" style={{ padding: 0, display: "flex", gap: 8 }}>
+                <span>{listLabels[list] ?? list}</span>
+                <span className="wm-ph-num" style={{ color: "var(--text-lo)" }}>
+                  {rows.length}
+                </span>
               </p>
-              <ul style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+              <ul style={{ marginTop: 6, marginLeft: -16, marginRight: -16 }}>
                 {rows.map((r) => (
-                  <li key={r.id} className="wm-ph-card wm-ph-past">
+                  <li key={r.id} className="wm-ph-past">
                     <p
                       className="wm-ph-body wm-ph-clamp2"
                       style={r.done ? { color: "var(--text-lo)" } : undefined}

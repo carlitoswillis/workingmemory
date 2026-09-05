@@ -4,14 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getItemAction, searchArchivedAction } from "@/app/actions";
 import { searchItems, type SearchHit } from "@/lib/search";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import { Sheet, fieldFocusProps, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
 // Find (§2 E). The SAME search this app has always had, in a sheet: the ranking, the
 // snippet windowing and the two layers are all lib/search.ts + searchArchivedAction,
-// imported, not reimplemented. What's phone-specific is the shape — a full-height
-// sheet, a 16px field, 56px result rows, and no ↑/↓/Enter affordances, because a
-// phone has no arrow keys to advertise.
+// imported, not reimplemented. What's phone-specific is the shape.
+//
+// Which, on this pass, is deliberately NOT a search UI. It is the ledger, filtered:
+// one borderless field on a hairline, then the same 56px rows the board is made of.
+// A match is a quiet `--now-tint` highlighter behind the words, not amber text —
+// amber is rationed, and colouring the matched substring makes a hit look like a
+// link rather than a card.
+//
+// The field is the sheet's FIRST element and lives OUTSIDE the scroller. That is the
+// fix for the reported bug: the results scroll under it, so nothing the keyboard does
+// can push the field you are typing in off the top of the screen.
 //
 //   1. On the board — matched locally against the cards the browser already has, so
 //      it's instant and needs no round-trip. Sub-cards included.
@@ -23,11 +31,22 @@ import { usePhoneBoardData } from "./phone-data";
 
 type Row = { kind: "board" | "archived"; hit: SearchHit };
 
+// The daily note and the weekly review live on sentinel lists, which have no column
+// on the board and so no label in `listLabels`. Name them rather than printing the
+// raw id under a hit.
+const SENTINEL_LABELS: Record<string, string> = { note: "Note", review: "Review" };
+
 function Highlight({ snippet, start, length }: SearchHit) {
   return (
     <>
       {snippet.slice(0, start)}
-      <mark style={{ background: "transparent", color: "var(--now)" }}>
+      <mark
+        style={{
+          background: "var(--now-tint)",
+          color: "var(--text-hi)",
+          borderRadius: "3px",
+        }}
+      >
         {snippet.slice(start, start + length)}
       </mark>
       {snippet.slice(start + length)}
@@ -96,10 +115,13 @@ export default function PhoneSearch() {
       open={shown}
       onOpenChange={(o) => !o && close()}
       label="Search cards"
-      heightSvh={96}
+      // No `heightSvh`: the box is the size of its results, capped at the live visual
+      // viewport. Two hits should not open a 96svh box with a screen of nothing.
+      className="wm-sheet--search wm-sheet--ledger"
       onOpenComplete={() => inputRef.current?.focus()}
     >
-      <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 8 }}>
+      {/* First element, outside the scroller, pinned on its own hairline. */}
+      <div className="wm-sheet__head" style={{ alignItems: "center", gap: 4 }}>
         <input
           ref={inputRef}
           className="wm-ph-field"
@@ -109,34 +131,62 @@ export default function PhoneSearch() {
           placeholder="Find a card by its title or details…"
           aria-label="Find a card by its title or details"
           enterKeyHint="search"
+          {...fieldFocusProps()}
         />
+        {q && (
+          <button
+            type="button"
+            className="wm-ph-tap"
+            aria-label="Clear search"
+            onClick={() => {
+              setQ("");
+              inputRef.current?.focus();
+            }}
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden focusable="false">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="wm-sheet__scroll">
         {!q.trim() ? (
-          <p className="wm-ph-hint">Cards on the board, and in the archive.</p>
+          <p className="wm-ph-hint wm-ph-pad" style={{ paddingTop: 14 }}>
+            Cards on the board, and in the archive.
+          </p>
         ) : rows.length === 0 ? (
-          <p className="wm-ph-hint">{archiveLoading ? "Looking…" : "No card matches that."}</p>
+          <p className="wm-ph-hint wm-ph-pad" style={{ paddingTop: 14 }}>
+            {archiveLoading ? "Looking…" : "No card matches that."}
+          </p>
         ) : (
           <ul>
             {rows.map((row, i) => {
               const head = section(i);
+              const listLabel =
+                listLabels[row.hit.item.list] ??
+                SENTINEL_LABELS[row.hit.item.list] ??
+                row.hit.item.list;
+              const isArchived = row.kind === "archived";
               return (
                 <li key={`${row.kind}-${row.hit.item.id}`}>
-                  {head && (
-                    <p
-                      className="wm-ph-caption"
-                      style={{
-                        margin: "12px 0 4px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.14em",
-                      }}
-                    >
-                      {head}
-                    </p>
-                  )}
-                  <button type="button" className="wm-ph-row" onClick={() => pick(row)}>
-                    <span style={{ flex: 1, minWidth: 0 }}>
+                  {head && <p className="wm-ph-sect">{head}</p>}
+                  <button
+                    type="button"
+                    className="wm-ph-row wm-ph-row--ledger"
+                    // The row's text is three spans of fragments; read as one
+                    // sentence it runs on, so the name is stated explicitly and the
+                    // spans are hidden from the tree.
+                    aria-label={`${row.hit.item.text}, in ${listLabel}${isArchived ? ", archived" : ""}`}
+                    onClick={() => pick(row)}
+                  >
+                    <span aria-hidden style={{ flex: 1, minWidth: 0 }}>
                       <span
                         className="wm-ph-body wm-ph-clamp2"
                         style={row.hit.item.done ? { color: "var(--text-lo)" } : undefined}
@@ -156,8 +206,8 @@ export default function PhoneSearch() {
                         </span>
                       )}
                       <span className="wm-ph-caption" style={{ display: "block", marginTop: 2 }}>
-                        {listLabels[row.hit.item.list] ?? row.hit.item.list}
-                        {row.kind === "archived" && " · archived"}
+                        {listLabel}
+                        {isArchived && ", archived"}
                       </span>
                     </span>
                   </button>

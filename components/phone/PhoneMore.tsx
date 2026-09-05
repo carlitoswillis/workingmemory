@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { usePhoneUI, type PhoneSheet } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import { Chevron, Sheet, useSheetOpen } from "./Sheet";
 import {
   readInstallState,
   rememberInstallDismissed,
@@ -42,7 +42,13 @@ export default function PhoneMore() {
   useEffect(() => setOfferInstall(shouldOfferInstall(readInstallState())), []);
 
   return (
-    <Sheet open={shown} onOpenChange={(o) => !o && close()} label="More" heightSvh={72}>
+    <Sheet
+      open={shown}
+      onOpenChange={(o) => !o && close()}
+      label="More"
+      heightSvh={72}
+      className="wm-sheet--ledger"
+    >
       <div className="wm-sheet__head">
         <p className="wm-ph-title" style={{ flex: 1 }}>
           More
@@ -56,9 +62,11 @@ export default function PhoneMore() {
               <button
                 type="button"
                 className="wm-ph-row"
+                // Two spans read as one run-on name; state it, and hide the spans.
+                aria-label={`${r.label}. ${r.hint}`}
                 onClick={() => open({ kind: r.kind } as PhoneSheet)}
               >
-                <span style={{ flex: 1, minWidth: 0 }}>
+                <span aria-hidden style={{ flex: 1, minWidth: 0 }}>
                   <span className="wm-ph-body" style={{ display: "block" }}>
                     {r.label}
                   </span>
@@ -66,25 +74,25 @@ export default function PhoneMore() {
                     {r.hint}
                   </span>
                 </span>
-                <span aria-hidden style={{ color: "var(--text-lo)" }}>
-                  ›
+                <span aria-hidden style={{ color: "var(--text-lo)", display: "flex" }}>
+                  <Chevron />
                 </span>
               </button>
             </li>
           ))}
         </ul>
 
-        <p className="wm-ph-caption" style={{ marginTop: 18 }}>
-          Settings
-        </p>
+        <p className="wm-ph-sect">Settings</p>
 
         {/* Notifications. Owned by the Web Push package; renders nothing until it
             lands. Whatever it renders, the permission request happens inside a click
             handler and nowhere else. */}
-        <PushSettings />
+        <div className="wm-ph-pad">
+          <PushSettings />
+        </div>
 
         {offerInstall && (
-          <div className="wm-ph-card" style={{ marginTop: 10 }}>
+          <div className="wm-ph-card" style={{ margin: "10px 16px 0" }}>
             <p className="wm-ph-title">Put this on your home screen</p>
             <p className="wm-ph-hint" style={{ marginTop: 6 }}>
               Installed, it opens without Safari&apos;s bars, keeps its own place in
@@ -95,7 +103,7 @@ export default function PhoneMore() {
               style={{ marginTop: 8, paddingLeft: 18, listStyle: "decimal" }}
             >
               <li>
-                Tap <strong style={{ color: "var(--text-mid)" }}>Share</strong> — the
+                Tap <strong style={{ color: "var(--text-mid)" }}>Share</strong>, the
                 square with an arrow out of it, in Safari&apos;s bottom bar.
               </li>
               <li>
@@ -109,7 +117,7 @@ export default function PhoneMore() {
             </ol>
             <p className="wm-ph-caption" style={{ marginTop: 8 }}>
               iOS gives web apps no install button, so this is genuinely the whole
-              procedure — there is nothing here to press.
+              procedure. There is nothing here to press.
             </p>
             <button
               type="button"

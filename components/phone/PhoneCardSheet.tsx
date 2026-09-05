@@ -14,19 +14,43 @@ import {
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
+import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import {
+  Chevron,
+  Sheet,
+  fieldFocusProps,
+  onFieldBlur,
+  onFieldFocus,
+  useSheetOpen,
+} from "./Sheet";
 import { childrenOf, findItem, movableLists, usePhoneBoardData } from "./phone-data";
 import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
+
+// `dense` and `onOpen` are PhoneRow props owned by the rows package; this cast keeps
+// the file compiling against either revision of that file. A sub-card row is a row
+// with no swipe and no ⋯ — the actions belong to the card you opened, not to the one
+// you are glancing at inside it.
+type SubRowProps = {
+  item: Item;
+  today?: string;
+  dense?: boolean;
+  onOpen?: (id: string) => void;
+};
+const SubRow = PhoneRow as unknown as React.ComponentType<SubRowProps>;
 
 // Card detail, as a SHEET and never a route (spec §2 D). Routing to a page would
 // unmount the board and lose its scroll position, which is the opposite of what this
 // app is for; a sheet leaves the board sitting right behind it.
 //
 // Two states, from the snap points:
-//   peek (180px) — title, the sub-card count, and a full-width Done control, all in
-//     the thumb zone. This is the state you're in for the common case: you tapped a
-//     row to check what it says, you tick it, you flick it away.
+//   peek (180px, plus 56px per sub-card up to three) — title, meta, a full-width Done
+//     control, and the card's sub-cards as ORDINARY ROWS. This is the state you're in
+//     for the common case: you tapped a row to check what it says, you tick it (or
+//     tick one of the things inside it), you flick it away. Two taps to complete a
+//     sub-card from Now, two to open one; no indent, no ↳, no smaller type, because a
+//     sub-card is the same object as its parent and the app's whole subject is that
+//     cards nest.
 //   full (0.92)  — details, sub-cards, recurrence, move-to. The editor, when you
 //     actually want one.
 //
@@ -40,32 +64,38 @@ import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
 
 const DONE_LABEL = "Done";
 
-function CountRing({ n }: { n: number }) {
-  if (n === 0) return null;
-  return (
-    <span className="wm-ph-caption wm-ph-num" style={{ color: "var(--text-lo)" }}>
-      {n} sub-card{n === 1 ? "" : "s"}
-    </span>
-  );
-}
-
 export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   const { close, open } = usePhoneUI();
   const { open: shown, dismiss } = useSheetOpen();
   const { boardId, items, lists, listLabels, refresh } = usePhoneBoardData();
-  const [snap, setSnap] = useState<SnapPoint | null>(CARD_SNAP_POINTS[0]);
   const [, startTransition] = useTransition();
 
   const item = findItem(items, itemId);
   const kids = useMemo(() => (item ? childrenOf(items, item.id) : []), [items, item]);
   const columns = useMemo(() => movableLists(lists), [lists]);
-  const expanded = isExpanded(snap, CARD_SNAP_POINTS);
+
+  // The peek is sized to what it has to hold. 180px carries the title, the meta line
+  // and the full-width Done control; every sub-card past that is one ordinary 56px
+  // row. Three is the cap — past three the peek would be most of the screen, and the
+  // full state is the right place for a long list.
+  const snapPoints = useMemo<SnapPoint[]>(
+    () => [`${180 + 56 * Math.min(kids.length, 3)}px`, CARD_SNAP_POINTS[1]],
+    [kids.length],
+  );
+  // Held as a boolean rather than as a snap VALUE, because the peek's value changes
+  // with the sub-card count and a stale px string would read as "not expanded".
+  const [expanded, setExpanded] = useState(false);
+  const snap = expanded ? snapPoints[1] : snapPoints[0];
+  const setSnap = (p: SnapPoint | null) => setExpanded(isExpanded(p, snapPoints));
 
   // ---- history depth -------------------------------------------------------------
   // `stack` is the chain of cards this sheet has drilled through, bottom first. It's
   // a ref, not state, because the popstate handler must read the CURRENT chain and
   // popstate fires outside React's update cycle.
   const stack = useRef<string[]>([]);
+  // The same chain, as state, because the back affordance and the parent's name are
+  // rendered from it and a ref never re-renders.
+  const [chain, setChain] = useState<string[]>([itemId]);
   const openRef = useRef(open);
   const closeRef = useRef(close);
   openRef.current = open;
@@ -81,11 +111,13 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
       if (st.length === 0) return; // already unwinding on close
       if (depth <= 0) {
         stack.current = [];
+        setChain([]);
         closeRef.current();
         return;
       }
       if (depth < st.length) {
         stack.current = st.slice(0, depth);
+        setChain(stack.current);
         openRef.current({ kind: "card", itemId: stack.current[depth - 1] });
       }
     };
@@ -110,15 +142,17 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
     if (at >= 0) {
       const back = st.length - 1 - at;
       stack.current = st.slice(0, at + 1);
+      setChain(stack.current);
       if (back > 0) window.history.go(-back);
     } else {
       stack.current = [...st, itemId];
+      setChain(stack.current);
       window.history.pushState(
         { ...window.history.state, wmPhoneDepth: stack.current.length },
         "",
       );
     }
-    setSnap(CARD_SNAP_POINTS[0]); // a new card opens at the peek
+    setExpanded(false); // a new card opens at the peek
   }, [itemId]);
 
   // Two halves, because closing a sheet and giving its history entries back are
@@ -152,11 +186,13 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
     );
   }
 
+  const parent = chain.length > 1 ? findItem(items, chain[chain.length - 2]) : null;
+
   return (
     <Sheet
       open={shown}
       onOpenChange={onClosed}
-      snapPoints={CARD_SNAP_POINTS}
+      snapPoints={snapPoints}
       activeSnapPoint={snap}
       onSnapPointChange={setSnap}
       label={item.text}
@@ -169,7 +205,9 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
         listLabels={listLabels}
         boardId={boardId}
         expanded={expanded}
-        onExpand={() => setSnap(CARD_SNAP_POINTS[1])}
+        parentTitle={chain.length > 1 ? (parent?.text ?? "the card above") : null}
+        onBack={() => window.history.go(-1)}
+        onExpand={() => setExpanded(true)}
         onOpenChild={(id) => open({ kind: "card", itemId: id })}
         onChanged={refresh}
         onArchived={dismissSheet}
@@ -188,6 +226,8 @@ function CardBody({
   listLabels,
   boardId,
   expanded,
+  parentTitle,
+  onBack,
   onExpand,
   onOpenChild,
   onChanged,
@@ -200,6 +240,8 @@ function CardBody({
   listLabels: Record<string, string>;
   boardId: string | null;
   expanded: boolean;
+  parentTitle: string | null;
+  onBack(): void;
   onExpand(): void;
   onOpenChild(id: string): void;
   onChanged(): void;
@@ -248,6 +290,31 @@ function CardBody({
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details ?? "");
   useEffect(() => setTitle(item.text), [item.id, item.text]);
+
+  // In the full state the card's name IS the field — printing it in the head and
+  // again as the first thing in the body reads as a bug, and a fixed two-row box
+  // leaves a dead strip under a one-line title. So the head's title becomes the
+  // field when the sheet is expanded, and the field is exactly as tall as its text.
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title, expanded]);
+
+  function saveTitle() {
+    const t = title.trim();
+    if (!t || t === item.text) {
+      setTitle(item.text);
+      return;
+    }
+    run(() => {
+      editItemAction(boardId, item.id, t);
+      onChanged();
+    });
+  }
+
   useEffect(() => setDetails(item.details ?? ""), [item.id, item.details]);
 
   const [childText, setChildText] = useState("");
@@ -256,25 +323,63 @@ function CardBody({
 
   return (
     <>
-      {/* ── peek: everything here has to fit inside 180px ───────────────── */}
+      {/* ── peek: the card, its Done control, and the things inside it ───── */}
       <div className="wm-sheet__head">
+        {parentTitle && (
+          <button
+            type="button"
+            className="wm-ph-back"
+            aria-label={`Back to ${parentTitle}`}
+            onClick={onBack}
+          >
+            <Chevron dir="left" />
+          </button>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <p className="wm-ph-title wm-ph-clamp2">{item.text}</p>
+          {/* Depth is stated once, in words, and never by indenting a row. */}
+          {parentTitle && <p className="wm-ph-parent wm-ph-clamp2">{parentTitle}</p>}
+          {expanded ? (
+            <textarea
+              ref={titleRef}
+              rows={1}
+              className="wm-ph-field wm-ph-field--title"
+              aria-label="Card title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onFocus={onFieldFocus}
+              onBlur={() => {
+                onFieldBlur();
+                saveTitle();
+              }}
+            />
+          ) : (
+            <p className="wm-ph-title wm-ph-clamp2">{item.text}</p>
+          )}
           <p className="wm-ph-caption" style={{ marginTop: 3 }}>
             {listLabels[item.list] ?? item.list}
-            {kids.length > 0 && " · "}
-            <CountRing n={kids.length} />
+            {kids.length > 0 && (
+              <>
+                {", "}
+                <span className="wm-ph-num">{kids.length}</span> sub-card
+                {kids.length === 1 ? "" : "s"}
+              </>
+            )}
             {streak > 0 && (
               <>
-                {" · "}
+                {", "}
                 <span className="wm-ph-num">{streak}</span> in a row
               </>
             )}
           </p>
         </div>
         {!expanded && (
-          <button type="button" className="wm-ph-tap" onClick={onExpand} aria-label="Show card details">
-            <span aria-hidden>⌃</span>
+          <button
+            type="button"
+            className="wm-ph-tap"
+            onClick={onExpand}
+            aria-label="Show card details"
+          >
+            <Chevron dir="up" />
           </button>
         )}
       </div>
@@ -292,47 +397,36 @@ function CardBody({
         </button>
       </div>
 
+      {/* Sub-cards, in the peek, when the peek was grown to hold them. Byte for byte
+          the row from Now: 56px, a 44px check zone, the same completion behaviour,
+          the same typography — so completing one is two taps and opening one is two. */}
+      {!expanded && kids.length > 0 && kids.length <= 3 && (
+        <ul className="wm-ph-kids">
+          {kids.map((k) => (
+            <SubRow key={k.id} item={k} today={today} dense onOpen={onOpenChild} />
+          ))}
+        </ul>
+      )}
+
       {/* ── full: the editor ────────────────────────────────────────────── */}
       {expanded && (
         <div className="wm-sheet__scroll">
-          <label className="wm-ph-caption" htmlFor="wm-ph-card-title">
-            Title
-          </label>
-          <textarea
-            id="wm-ph-card-title"
-            className="wm-ph-field"
-            style={{ minHeight: 56, marginTop: 6 }}
-            rows={2}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              const t = title.trim();
-              if (!t || t === item.text) {
-                setTitle(item.text);
-                return;
-              }
-              run(() => {
-                editItemAction(boardId, item.id, t);
-                onChanged();
-              });
-            }}
-          />
-
-          <label
-            className="wm-ph-caption"
-            htmlFor="wm-ph-card-details"
-            style={{ display: "block", marginTop: 16 }}
-          >
-            Details
-          </label>
+          {/* No `Title` / `Details` captions, and no second copy of the title: the
+              card's name is the field in the head, and this is the only other thing
+              here. A label over a self-evident field is furniture. */}
           <textarea
             id="wm-ph-card-details"
             className="wm-ph-field"
-            style={{ marginTop: 6 }}
+            // Tall enough that a paragraph is not cut off by its own underline.
+            style={{ minHeight: 140 }}
             value={details}
-            placeholder="Anything worth remembering about this — markdown supported"
+            aria-label="Details"
+            placeholder="Anything worth remembering about this, markdown supported"
+            onFocus={onFieldFocus}
             onChange={(e) => setDetails(e.target.value)}
             onBlur={() => {
+              // Both: the layout-scroll pin is released, THEN the write goes out.
+              onFieldBlur();
               if (details === (item.details ?? "")) return;
               run(() => {
                 editDetailsAction(boardId, item.id, details);
@@ -341,31 +435,28 @@ function CardBody({
             }}
           />
 
-          {/* Sub-cards */}
-          <p className="wm-ph-caption" style={{ marginTop: 18 }}>
+          {/* Sub-cards. The same row as the parent, at every depth: no indent, no
+              arrow glyph, no smaller type. The negative margin lets the rows and
+              their hairlines reach the sheet's edges through the scroller's gutter. */}
+          <p className="wm-ph-sect" style={{ padding: "18px 0 6px" }}>
             Sub-cards
+            {kids.length > 0 && (
+              <span className="wm-ph-num" style={{ color: "var(--text-lo)" }}>
+                {" "}
+                {kids.length}
+              </span>
+            )}
           </p>
-          <ul style={{ marginTop: 6 }}>
+          <ul style={{ marginLeft: -16, marginRight: -16 }}>
             {kids.map((k) => (
-              <li key={k.id}>
-                <button type="button" className="wm-ph-row" onClick={() => onOpenChild(k.id)}>
-                  <span aria-hidden style={{ color: "var(--text-lo)" }}>
-                    ↳
-                  </span>
-                  <span className="wm-ph-body wm-ph-clamp2" style={{ flex: 1 }}>
-                    {k.text}
-                  </span>
-                </button>
-              </li>
+              <SubRow key={k.id} item={k} today={today} dense onOpen={onOpenChild} />
             ))}
             {kids.length === 0 && (
-              <li className="wm-ph-hint" style={{ padding: "6px 12px" }}>
-                Nothing inside this one yet.
-              </li>
+              <li className="wm-ph-hint wm-ph-pad">Nothing inside this one yet.</li>
             )}
           </ul>
           <form
-            style={{ display: "flex", gap: 8, marginTop: 8 }}
+            style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "flex-end" }}
             onSubmit={(e) => {
               e.preventDefault();
               const t = childText.trim();
@@ -383,14 +474,19 @@ function CardBody({
               onChange={(e) => setChildText(e.target.value)}
               placeholder="Add a sub-card…"
               aria-label="Add a sub-card"
+              {...fieldFocusProps()}
             />
-            <button type="submit" className="wm-ph-btn wm-ph-btn--auto" disabled={!childText.trim()}>
+            <button
+              type="submit"
+              className="wm-ph-btn wm-ph-btn--ghost wm-ph-btn--auto"
+              disabled={!childText.trim()}
+            >
               Add
             </button>
           </form>
 
           {/* Recurrence */}
-          <p className="wm-ph-caption" style={{ marginTop: 18 }}>
+          <p className="wm-ph-sect" style={{ padding: "18px 0 6px" }}>
             Repeats
           </p>
           <div className="wm-ph-chips" style={{ marginTop: 6 }} role="group" aria-label="Repeats">
@@ -418,7 +514,7 @@ function CardBody({
 
           {/* Move to — the phone's ONLY way to move a card. Hover-hold nesting is a
               desktop gesture and is deliberately absent here (§5). */}
-          <p className="wm-ph-caption" style={{ marginTop: 18 }}>
+          <p className="wm-ph-sect" style={{ padding: "18px 0 6px" }}>
             Move to
           </p>
           <div className="wm-ph-chips" style={{ marginTop: 6 }} role="group" aria-label="Move to">
@@ -456,8 +552,8 @@ function CardBody({
             Archive this card
           </button>
           <p className="wm-ph-hint" style={{ marginTop: 8 }}>
-            Archived cards keep their whole history — they come back from Archive on
-            the desktop board.
+            Archived cards keep their whole history, and come back from Archive on the
+            desktop board.
           </p>
         </div>
       )}

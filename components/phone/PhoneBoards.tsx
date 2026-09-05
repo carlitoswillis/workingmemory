@@ -1,7 +1,7 @@
 "use client";
 
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import { Chevron, Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
 // The board switcher (§2 F). A list, and nothing else.
@@ -21,7 +21,12 @@ export default function PhoneBoards() {
   const { boardId, boards, loading } = usePhoneBoardData();
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && close()} label="Your boards" heightSvh={45}>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && close()}
+      label="Your boards"
+      className="wm-sheet--ledger"
+    >
       <div className="wm-sheet__head">
         <p className="wm-ph-title" style={{ flex: 1 }}>
           Boards
@@ -30,7 +35,7 @@ export default function PhoneBoards() {
 
       <div className="wm-sheet__scroll">
         {boards.length === 0 ? (
-          <p className="wm-ph-hint">
+          <p className="wm-ph-hint wm-ph-pad">
             {loading ? "Loading…" : "This is your only board."}
           </p>
         ) : (
@@ -43,6 +48,9 @@ export default function PhoneBoards() {
                     className="wm-ph-row"
                     href={current ? "#" : `/b/${b.id}`}
                     aria-current={current ? "true" : undefined}
+                    aria-label={
+                      current ? `${b.name}, current board` : `${b.name}, switch to this board`
+                    }
                     onClick={(e) => {
                       if (current) {
                         e.preventDefault();
@@ -50,27 +58,25 @@ export default function PhoneBoards() {
                       }
                     }}
                   >
-                    <span
-                      aria-hidden
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 999,
-                        background: current ? "var(--now)" : "var(--veil)",
-                        flex: "none",
-                      }}
-                    />
-                    <span className="wm-ph-body wm-ph-clamp2" style={{ flex: 1 }}>
+                    <span aria-hidden className="wm-ph-body wm-ph-clamp2" style={{ flex: 1 }}>
                       {b.name}
                     </span>
-                    {current && <span className="wm-ph-caption">here</span>}
+                    {current ? (
+                      <span aria-hidden className="wm-ph-caption">
+                        here
+                      </span>
+                    ) : (
+                      <span aria-hidden style={{ color: "var(--text-lo)", display: "flex" }}>
+                        <Chevron />
+                      </span>
+                    )}
                   </a>
                 </li>
               );
             })}
           </ul>
         )}
-        <p className="wm-ph-hint" style={{ marginTop: 12 }}>
+        <p className="wm-ph-hint wm-ph-pad" style={{ marginTop: 12 }}>
           Creating, renaming and sharing boards live on the desktop board.
         </p>
       </div>

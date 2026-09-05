@@ -30,8 +30,9 @@ import type { SnapPoint } from "./sheetSnaps.ts";
 //   - `scrollLockTimeout={100}`: Vaul's own rule that a downward drag only closes the
 //     sheet from `scrollTop === 0`, re-armed 100ms after the inner scroller stops.
 //
-// Heights are in `svh`, never `vh` (§9). See the `/* phone sheets */` block in
-// app/globals.css for the box itself.
+// Heights are in `svh`, never `vh` (§9), and clamped to `--vvh` — the live visual
+// viewport height — so a sheet SHRINKS with the keyboard instead of being pushed off
+// the top of the screen. See the `/* phone sheets */` block in app/globals.css.
 
 export type SheetProps = {
   open: boolean;
@@ -165,6 +166,62 @@ export function Sheet({
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+  );
+}
+
+/**
+ * iOS Safari, on focusing a field inside a bottom sheet, scrolls the LAYOUT viewport
+ * to "reveal" it — which on a 100dvh shell means the whole app slides up and the
+ * field itself leaves the top of the screen while the visual viewport still shows the
+ * content below it. That is exactly the reported bug: "the search opens up the
+ * keyboard so the whole app is floated up, I can't see the entry box but can see some
+ * results."
+ *
+ * Safari cannot be told not to do it, so it is undone: one frame after focus, scroll
+ * the layout viewport back to 0, and pin it there for as long as the field is
+ * focused. The sheet itself then tracks the keyboard through `--vvh`, which is a
+ * resize over `--dur-kb` rather than a jump.
+ *
+ * Exported rather than baked into <Sheet> because the fields are the callers' own
+ * elements; every field in every sheet binds this pair.
+ */
+export function onFieldFocus() {
+  requestAnimationFrame(() => window.scrollTo(0, 0));
+  document.documentElement.style.overflow = "hidden";
+}
+
+export function onFieldBlur() {
+  document.documentElement.style.removeProperty("overflow");
+}
+
+/** Bind both at once: `<input {...fieldFocusProps()} />`. */
+export function fieldFocusProps(): {
+  onFocus: () => void;
+  onBlur: () => void;
+} {
+  return { onFocus: onFieldFocus, onBlur: onFieldBlur };
+}
+
+/**
+ * The app's one chevron. A `›` is a text glyph: it inherits the font's own weight,
+ * sits on the baseline rather than on the row's optical centre, and changes shape
+ * with the reader's font. Every leading and trailing arrow in the phone app is this
+ * path instead, at the same 1.6 stroke as the check ring.
+ */
+export function Chevron({ dir = "right" }: { dir?: "right" | "left" | "up" }) {
+  const rotate = dir === "left" ? 180 : dir === "up" ? -90 : 0;
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden focusable="false">
+      <path
+        d="M5.5 3.5L10.5 8l-5 4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        transform={rotate ? `rotate(${rotate} 8 8)` : undefined}
+      />
+    </svg>
   );
 }
 

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createNoteAction, editDetailsAction } from "@/app/actions";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import { Sheet, onFieldBlur, onFieldFocus, useSheetOpen } from "./Sheet";
 import { findNote, usePhoneBoardData } from "./phone-data";
 
 // The daily note, on the phone: a full-height editor in a sheet. Its own component
@@ -65,6 +65,10 @@ export default function PhoneNote() {
       }}
       label="Daily note"
       heightSvh={96}
+      // The note is a page, not a paragraph: its writing surface fills the sheet, so
+      // tapping anywhere below the last line puts the caret in it rather than landing
+      // on a dead half-screen.
+      className="wm-sheet--note"
       // An empty note is nothing but an editor, so open straight into it — the one
       // case where a sheet may take the keyboard without being asked.
       onOpenComplete={() => {
@@ -73,7 +77,7 @@ export default function PhoneNote() {
     >
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
         <p className="wm-ph-title">Note</p>
-        <p className="wm-ph-caption">Carries over · changes remembered</p>
+        <p className="wm-ph-caption">Carries over, changes remembered</p>
       </div>
 
       <div className="wm-sheet__scroll">
@@ -95,18 +99,20 @@ export default function PhoneNote() {
           <textarea
             ref={taRef}
             className="wm-ph-field"
-            style={{ minHeight: "45svh" }}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            onBlur={save}
-            placeholder="Today's note… — markdown supported (carries over; start a new one each day)"
+            onFocus={onFieldFocus}
+            onBlur={() => {
+              onFieldBlur();
+              save();
+            }}
+            placeholder="Today's note… Markdown supported, and it carries over to tomorrow."
             aria-label="Daily note"
           />
         ) : (
           <button
             type="button"
-            className="wm-ph-card"
-            style={{ display: "block", width: "100%", textAlign: "left", minHeight: "45svh" }}
+            className="wm-ph-read"
             onClick={() => setEditing(true)}
             aria-label="Edit the note"
           >
@@ -119,7 +125,7 @@ export default function PhoneNote() {
         <div className="wm-sheet__bar">
           <button
             type="button"
-            className="wm-ph-btn wm-ph-btn--auto"
+            className="wm-ph-btn wm-ph-btn--ghost wm-ph-btn--auto"
             onClick={() => (editing ? save() : setEditing(true))}
           >
             {editing ? "Preview" : "Edit"}
