@@ -26,7 +26,15 @@ export type RowPhase =
   | "gone" // collapse finished; the row belongs to its new section now
   | "error"; // the write failed; state reverted, message pinned on the row
 
-export type RowState = { checked: boolean; phase: RowPhase; error: string | null };
+// `animate` is the difference between a state a FINGER produced and one the server
+// pushed. Only the former earns the completion pop — a revalidation that happens to
+// agree with the checkbox must not replay a moment nobody asked for.
+export type RowState = {
+  checked: boolean;
+  phase: RowPhase;
+  error: string | null;
+  animate: boolean;
+};
 
 export type RowEvent =
   | { type: "toggle" } // the tap on the check zone (or a swipe-right)
@@ -37,7 +45,7 @@ export type RowEvent =
   | { type: "sync"; checked: boolean }; // fresh server truth arrived
 
 export function rowInitial(checked: boolean): RowState {
-  return { checked, phase: "idle", error: null };
+  return { checked, phase: "idle", error: null, animate: false };
 }
 
 export function rowNext(state: RowState, event: RowEvent): RowState {
@@ -46,24 +54,26 @@ export function rowNext(state: RowState, event: RowEvent): RowState {
       // Tapping again inside the undo window is an undo — the same intent as the
       // button, so it takes the same path rather than queueing a second write.
       if (state.phase === "undo") return rowNext(state, { type: "undo" });
-      return { checked: !state.checked, phase: "undo", error: null };
+      return { checked: !state.checked, phase: "undo", error: null, animate: true };
     case "undo":
       if (state.phase !== "undo") return state;
-      return { checked: !state.checked, phase: "idle", error: null };
+      return { checked: !state.checked, phase: "idle", error: null, animate: true };
     case "window-elapsed":
       return state.phase === "undo" ? { ...state, phase: "collapsing" } : state;
     case "collapsed":
-      return state.phase === "collapsing" ? { ...state, phase: "gone" } : state;
+      // The moment is over by the time the row has collapsed; drop the licence to
+      // animate so a later sync can settle without re-running anything.
+      return state.phase === "collapsing" ? { ...state, phase: "gone", animate: false } : state;
     case "failed":
       // Put the checkbox back where the server left it and pin the reason. The row
-      // is the failure surface; nothing floats.
-      return { checked: !state.checked, phase: "error", error: event.message };
+      // is the failure surface; nothing floats — and a reverted flip is not a moment.
+      return { checked: !state.checked, phase: "error", error: event.message, animate: false };
     case "sync":
       // Revalidation must not yank a row out from under a finger mid-window.
       if (state.phase === "undo" || state.phase === "collapsing") return state;
-      return state.checked === event.checked && !state.error
+      return state.checked === event.checked && !state.error && !state.animate
         ? state
-        : { checked: event.checked, phase: "idle", error: null };
+        : { checked: event.checked, phase: "idle", error: null, animate: false };
   }
 }
 
@@ -205,6 +215,23 @@ export function pagerLists<T extends { id: string }>(
   todayListId: string,
 ): T[] {
   return lists.filter((l) => l.id !== todayListId && !isSentinelList(l.id));
+}
+
+// An empty screen is an invitation to act, so each list says what IT is for rather
+// than sharing one "nothing here" line. One sentence, sentence case, no em dashes.
+export function emptyCopyFor(listId: string): string {
+  switch (listId) {
+    case "focus":
+      return "Nothing in Focus right now.";
+    case "waiting":
+      return "Nothing waiting. Snooze a card here from its row menu.";
+    case "backlog":
+      return "Backlog’s empty.";
+    case "braindump":
+      return "Nothing dumped yet. Tap Capture to drop a thought.";
+    default:
+      return "Nothing in this list yet.";
+  }
 }
 
 // Which page a horizontal scroll offset is sitting on. Used only to reconcile the

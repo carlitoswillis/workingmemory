@@ -71,6 +71,16 @@ export default function PhoneHome({
     [view, today, todayListId, held],
   );
 
+  // The counts are derived a SECOND time without `held`, because the header and the
+  // rows are answering different questions. `held` keeps a just-tapped row visible
+  // where the thumb left it for 900ms; the count is a receipt and has to agree with
+  // the tap in the same frame. Reading both off one pass is what made "Due today"
+  // sit on a stale number for the length of the undo window.
+  const counts = useMemo(
+    () => deriveNowSections(view, { today, todayListId }),
+    [view, today, todayListId],
+  );
+
   // A row that has settled back onto the server's answer no longer needs an override.
   const onCheckedChange = useCallback((id: string, checked: boolean) => {
     setOptimistic((prev) => (prev[id] === checked ? prev : { ...prev, [id]: checked }));
@@ -129,7 +139,7 @@ export default function PhoneHome({
 
   return (
     <div className="phone-scroll">
-      <Section title="Today" count={sections.today.length}>
+      <Section title="Today" count={counts.today.length}>
         {sections.today.length === 0 ? (
           <Empty>Nothing claimed for today.</Empty>
         ) : (
@@ -141,9 +151,9 @@ export default function PhoneHome({
         )}
       </Section>
 
-      <Section title="Due today" count={sections.due.length}>
+      <Section title="Due today" count={counts.due.length}>
         {sections.due.length === 0 ? (
-          <Empty>Every repeating card is done. That&rsquo;s the whole list.</Empty>
+          <Empty>Every repeating card is done for today.</Empty>
         ) : (
           <ul className="phone-rows">
             {sections.due.map((item) => (
@@ -162,7 +172,7 @@ export default function PhoneHome({
           onClick={() => setShowDone((v) => !v)}
         >
           <span className="phone-section__title">Done today</span>
-          <span className="phone-section__count tabular-nums">{sections.done.length}</span>
+          <span className="phone-section__count tabular-nums">{counts.done.length}</span>
           <span className={`phone-chevron${showDone ? " is-open" : ""}`} aria-hidden>
             <svg viewBox="0 0 16 16" width="14" height="14">
               <path
