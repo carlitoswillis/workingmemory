@@ -42,7 +42,40 @@ a real structure without losing its looseness.
   (Render blueprint), so every deploy doubles as a restore drill. CI: tsc,
   `npm test` (5 plain-node suites), next build.
 
+- **Phone app, package B (sheets + PWA) — landed 2026-09-04**, on a worktree
+  branch, alongside package A (shell / Now feed / Lists pager / row completion)
+  in a parallel worktree. B owns `components/phone/{Sheet,PhoneCardSheet,
+  PhoneCapture,PhoneSearch,PhoneBoards,PhoneTimeTravel,PhoneReview,PhoneNote,
+  PhoneMore}.tsx`, `useKeyboardInset`, the `/* phone sheets */` block in
+  globals.css, and the PWA metadata in `app/layout.tsx` + `app/manifest.ts`.
+  `PhoneShell.tsx` in B's tree is a STUB carrying only the §10 interface; the
+  merge takes A's. Web Push is a THIRD package and is not here — B renders a
+  `PushSettings` stub, so that merge is a file swap, not an edit.
+  Worth knowing before touching it:
+  - Vaul rides Radix Dialog, so the focus trap / Escape / scroll lock are the
+    primitive's. Radix does NOT set `aria-modal`, and returns focus to a
+    `Dialog.Trigger` these sheets don't have — both are handled explicitly in
+    `Sheet.tsx`, and both are load-bearing for keyboard/VoiceOver.
+  - `--kb` (the soft-keyboard height) is written onto `<html>` at RUNTIME by
+    `useKeyboardInset`, never declared in a stylesheet — that's what keeps two
+    packages' CSS blocks out of each other's way. Sheets pad by it.
+  - The card sheet mirrors its drill-down depth onto history under
+    `wmPhoneDepth`, preserving Board.tsx's `wmDepth` on every push. Board.tsx
+    itself is untouched.
+  - The sheets read the board through `<PhoneDataProvider>` when the shell has
+    it, and otherwise fetch it via `phoneBoardDataAction` — the one addition to
+    `app/actions.ts`, and the reason B works standing alone.
+  - Verified headless at 375×812 and 430×932 (68 assertions): peek exactly
+    180px with the Done control on screen, optimistic flip with no network,
+    every field ≥16px, no horizontal overflow, `viewport-fit=cover`.
+
 ## Awaiting owner
+- **Phone app on a real device.** Simulators don't reproduce safe areas, `svh`,
+  or the edge-swipe-back gesture, and the keyboard-inset path is iOS-specific by
+  design. Install it from the home screen and check: the capture Save bar sits
+  above the keyboard, the card peek's Done control is reachable with a thumb,
+  and an edge-swipe out of a sub-card lands on its parent rather than leaving
+  the app.
 - **Plans awaiting green-light** (planned, deliberately not built):
   - Self-serve password recovery via one-time recovery codes —
     `ai/plans/2026-07-04-password-self-serve.md`. Build before (or with) the
