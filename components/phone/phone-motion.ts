@@ -28,6 +28,9 @@ export type MotionTokens = {
   reorder: MotionToken;
   sheetOpen: MotionToken;
   sheetDrag: MotionToken;
+  // The one non-finger motion in the app, and it is earned: a sheet resizing to
+  // track the software keyboard. The alternative is the jump.
+  kbTrack: MotionToken;
   pageSnap: "native";
   milestone: MotionToken;
 };
@@ -39,6 +42,7 @@ const BASE: MotionTokens = {
   reorder: { duration: 220, ease: "cubic-bezier(.15,1,.3,1)" }, // sortable settle
   sheetOpen: { duration: 260, ease: "cubic-bezier(.32,.72,0,1)" },
   sheetDrag: { type: "spring", stiffness: 400, damping: 40 }, // gesture handoff
+  kbTrack: { duration: 160, ease: "cubic-bezier(.32,.72,0,1)" }, // sheet ↔ keyboard
   pageSnap: "native", // browser scroll-snap; never JS
   milestone: { duration: 400, ease: "ease-out" }, // 7/30/100 only
 };

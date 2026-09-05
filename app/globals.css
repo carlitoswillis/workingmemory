@@ -390,6 +390,9 @@ body {
 
 /* Touch feedback is the press itself — never a hover state. */
 [data-shell="phone"] .phone-row__body:active,
+[data-shell="phone"] .phone-check:active,
+[data-shell="phone"] .phone-row__undo:active,
+[data-shell="phone"] .phone-row__more:active,
 [data-shell="phone"] .phone-tab:active,
 [data-shell="phone"] .phone-seg__btn:active,
 [data-shell="phone"] .phone-section__toggle:active {
@@ -450,7 +453,7 @@ body {
   padding-bottom: 24px;
 }
 .phone-section {
-  padding: 0 0 10px;
+  padding: 6px 0 10px;
 }
 .phone-section__head,
 .phone-section__toggle {
@@ -487,11 +490,13 @@ body {
 .phone-chevron.is-open {
   transform: rotate(90deg);
 }
+/* An empty screen is an invitation to act, so it reads as the interface's own
+   voice: the product sans, upright, at meta size on the 16px label rule. The serif
+   belongs to the page title and to nothing else. */
 .phone-empty {
   padding: 4px max(16px, env(safe-area-inset-left)) 10px;
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-style: italic;
   font-size: var(--p-meta);
+  line-height: 1.45;
   color: var(--text-lo);
 }
 
@@ -530,7 +535,9 @@ body {
   display: flex;
   align-items: center;
   min-height: 56px;
-  padding-left: max(6px, env(safe-area-inset-left));
+  /* Two rules and no others: 16px is the label rule, and 16 + the 44px check
+     column puts every completable title on the 60px title rule. */
+  padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(6px, env(safe-area-inset-right));
   border-bottom: 1px solid var(--veil-soft);
   background: var(--bg-1);
@@ -542,6 +549,14 @@ body {
   background: var(--surface);
 }
 .phone-row.is-done .phone-row__title {
+  color: var(--text-lo);
+}
+/* Swiped, not yet gone: the same luminance step Done uses, because it is the same
+   900ms window and the same one-tap way back. */
+.phone-row.is-leaving {
+  background: var(--surface);
+}
+.phone-row.is-leaving .phone-row__title {
   color: var(--text-lo);
 }
 .phone-row.is-dragging {
@@ -567,19 +582,23 @@ body {
   place-items: center;
   width: 18px;
   height: 18px;
+  transition: color 140ms linear;
 }
 /* The tick draws itself in rather than appearing: stroke-dashoffset over the
    check spring's ~140ms, with a single 8% overshoot on the scale. */
+/* The tick draws itself in rather than appearing, and it starts 35% drawn so the
+   empty circle already hints at the stroke that is coming. */
 .phone-check__tick {
   stroke-dasharray: 14;
-  stroke-dashoffset: 14;
+  stroke-dashoffset: 9;
   transition: stroke-dashoffset 140ms cubic-bezier(0.2, 0, 0.2, 1);
-}
-.phone-check__ring {
-  transition: stroke 140ms linear;
 }
 .phone-check__glyph.is-on {
   color: var(--done);
+}
+/* The pop is the completion MOMENT, so it is spent only on a state a finger
+   produced — `is-pop` is set from RowState.animate, never from a revalidation. */
+.phone-check__glyph.is-pop {
   animation: phone-check-pop 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .phone-check__glyph.is-on .phone-check__tick {
@@ -597,18 +616,39 @@ body {
   }
 }
 
+/* Everything between the check zone and the ⋯ is this one button — no interior
+   dead strip a thumb can land in and have nothing happen. */
 .phone-row__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 6px 8px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+.phone-row__main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  min-height: 56px;
-  padding: 8px 6px;
-  background: none;
-  border: 0;
-  text-align: left;
+}
+/* Sub-card count, details mark, streak — a glance, never a competing column. */
+.phone-row__trail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phone-row__sub {
+  font-size: var(--p-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-lo);
 }
 /* Two lines, then clamp — never a single-line ellipsis. The row GROWS rather
    than clipping when the system text size does (WCAG 1.4.10). */
@@ -639,13 +679,11 @@ body {
   flex: 0 0 auto;
   width: 5px;
   height: 5px;
-  margin: 0 2px;
   border-radius: 9999px;
   background: var(--past);
 }
 .phone-row__streak {
   flex: 0 0 auto;
-  padding: 0 2px;
   font-size: var(--p-meta);
   font-variant-numeric: tabular-nums;
   color: var(--text-lo);

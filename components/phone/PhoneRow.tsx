@@ -42,6 +42,8 @@ export default function PhoneRow({
   collapseOnDone = false,
   snoozeListId = null,
   swipeEnabled = true,
+  dense = false,
+  onOpen,
   onCheckedChange,
   onHold,
   onSettled,
@@ -61,6 +63,13 @@ export default function PhoneRow({
   collapseOnDone?: boolean;
   snoozeListId?: string | null;
   swipeEnabled?: boolean;
+  // A sub-card inside a sheet is the SAME row — same height, same check zone, same
+  // type — but a sheet is not the place for a swipe or a row menu, so `dense` drops
+  // those two and nothing else. Never a smaller row, never an indent, never a ↳.
+  dense?: boolean;
+  // Where the body tap goes. Defaults to opening this card; the card sheet passes
+  // its own so a sub-card pushes onto the sheet's stack instead of replacing it.
+  onOpen?: (id: string) => void;
   onCheckedChange?: (id: string, checked: boolean) => void;
   onHold?: (id: string, held: boolean) => void;
   onSettled?: (id: string) => void;
@@ -178,7 +187,7 @@ export default function PhoneRow({
   const axisRef = useRef<"pending" | "x">("pending");
   const swipedRef = useRef(false);
 
-  const canSwipe = swipeEnabled && !dragging;
+  const canSwipe = swipeEnabled && !dragging && !dense;
 
   function onPointerDown(e: React.PointerEvent) {
     if (!canSwipe) return;
@@ -239,16 +248,42 @@ export default function PhoneRow({
       moveItemAction(boardId, item.id, snoozeListId).catch(() => {});
     });
   }
+  // Archive gets the SAME 900ms window completion gets: the row steps up a
+  // luminance stop, an inline Undo replaces the ⋯, and the write is only fired once
+  // the window closes. Reaching for a card you just swiped away should cost one tap,
+  // not a trip to search.
+  const [archivePending, setArchivePending] = useState(false);
+  const archiveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   function archive() {
     setRevealed(false);
-    startTransition(() => {
-      archiveItemAction(boardId, item.id).catch(() => {});
-    });
+    if (archiveTimer.current) clearTimeout(archiveTimer.current);
+    setArchivePending(true);
+    archiveTimer.current = setTimeout(() => {
+      archiveTimer.current = null;
+      setArchivePending(false);
+      startTransition(() => {
+        archiveItemAction(boardId, item.id).catch(() => {});
+      });
+    }, UNDO_MS);
+  }
+
+  function cancelArchive() {
+    if (archiveTimer.current) clearTimeout(archiveTimer.current);
+    archiveTimer.current = null;
+    setArchivePending(false);
   }
 
   const subTotal = childItems?.length ?? 0;
   const subDone = childItems?.filter((c) => effectiveDone(c, day)).length ?? 0;
   const collapsing = collapseOnDone && (state.phase === "collapsing" || state.phase === "gone");
+  const showUndo = state.phase === "undo" || archivePending;
+  // The whole row opens the card; only the check zone is carved out of it. The count
+  // is a trailing glance, so the words it stands for live in the accessible name.
+  const openLabel =
+    subTotal > 0
+      ? `Open ${item.text}, ${subDone} of ${subTotal} sub-cards done`
+      : `Open ${item.text}`;
 
   return (
     <li
@@ -260,7 +295,9 @@ export default function PhoneRow({
       <div className="phone-rowwrap__inner">
         <div className="phone-rowline">
           <div
-            className={`phone-row${state.checked ? " is-done" : ""}${dragging ? " is-dragging" : ""}`}
+            className={`phone-row${state.checked ? " is-done" : ""}${
+              archivePending ? " is-leaving" : ""
+            }${dragging ? " is-dragging" : ""}`}
             style={{
               transform: dx ? `translateX(${dx}px)` : undefined,
               transition: dx ? "none" : `transform ${msOf("check")}ms ${M.tapScale.ease}`,
@@ -279,7 +316,12 @@ export default function PhoneRow({
               onClick={toggle}
               className="phone-check"
             >
-              <span className={`phone-check__glyph${state.checked ? " is-on" : ""}`} aria-hidden>
+              <span
+                className={`phone-check__glyph${state.checked ? " is-on" : ""}${
+                  state.checked && state.animate ? " is-pop" : ""
+                }`}
+                aria-hidden
+              >
                 <svg viewBox="0 0 18 18" width="18" height="18">
                   <circle
                     className="phone-check__ring"
@@ -303,44 +345,57 @@ export default function PhoneRow({
               </span>
             </button>
 
+            {/* Everything between the check zone and the ⋯ is one button. The dot,
+                the sub-card count and the streak ride INSIDE it as a trailing group,
+                so the row has no dead strip a thumb can miss. */}
             <button
               type="button"
               className="phone-row__body"
-              onClick={() => ui.open({ kind: "card", itemId: item.id })}
+              onClick={() => (onOpen ? onOpen(item.id) : ui.open({ kind: "card", itemId: item.id }))}
               {...dragHandleProps}
+              aria-label={openLabel}
             >
-              <span className="phone-row__title">{item.text}</span>
-              {(subTotal > 0 || state.error) && (
-                <span className="phone-row__meta">
-                  {state.error ? (
+              <span className="phone-row__main">
+                <span className="phone-row__title">{item.text}</span>
+                {state.error && (
+                  <span className="phone-row__meta">
                     <span className="phone-row__error">{state.error}</span>
-                  ) : (
-                    <span className="tabular-nums">
-                      {subDone}/{subTotal} sub-cards
-                    </span>
-                  )}
-                </span>
-              )}
-            </button>
-
-            {state.phase === "undo" ? (
-              <button type="button" className="phone-row__undo" onClick={undo}>
-                Undo
-              </button>
-            ) : (
-              <>
+                  </span>
+                )}
+              </span>
+              <span className="phone-row__trail" aria-hidden>
+                {subTotal > 0 && (
+                  <span className="phone-row__sub tabular-nums">
+                    {subDone}/{subTotal}
+                  </span>
+                )}
                 {/* A card with details carries a dot, not a word — the same mark the
                     desktop card uses, and one that never competes with the title. */}
-                {item.details.trim() && <span className="phone-row__dot" aria-hidden />}
+                {item.details.trim() && <span className="phone-row__dot" />}
                 {repeats && streak > 0 && (
                   <span
                     className={`phone-row__streak${pulse ? " is-milestone" : ""}`}
                     style={{ ["--milestone" as string]: `${msOf("milestone")}ms` }}
-                    aria-hidden
                   >
                     {streak}
                   </span>
                 )}
+              </span>
+            </button>
+
+            {showUndo ? (
+              <button
+                type="button"
+                className="phone-row__undo"
+                aria-label={
+                  archivePending ? `Undo archiving ${item.text}` : `Undo, ${item.text}`
+                }
+                onClick={archivePending ? cancelArchive : undo}
+              >
+                Undo
+              </button>
+            ) : (
+              !dense && (
                 <button
                   type="button"
                   className="phone-row__more"
@@ -354,7 +409,7 @@ export default function PhoneRow({
                     <circle cx="14" cy="9" r="1.4" fill="currentColor" />
                   </svg>
                 </button>
-              </>
+              )
             )}
           </div>
         </div>

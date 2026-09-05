@@ -10,6 +10,7 @@
 import {
   applyReorder,
   deriveNowSections,
+  emptyCopyFor,
   isMilestone,
   lockAxis,
   localDayOf,
@@ -42,13 +43,19 @@ function ok(label: string, got: unknown, want: unknown) {
 // --- row state machine -------------------------------------------------------
 
 const idle = rowInitial(false);
-ok("starts idle at the server's value", idle, { checked: false, phase: "idle", error: null });
+ok("starts idle at the server's value", idle, {
+  checked: false,
+  phase: "idle",
+  error: null,
+  animate: false,
+});
 
 const tapped = rowNext(idle, { type: "toggle" });
 ok("a tap flips optimistically and opens the undo window", tapped, {
   checked: true,
   phase: "undo",
   error: null,
+  animate: true,
 });
 ok("the row stays in its original section during the window", rowHeldInPlace(tapped), true);
 
@@ -56,11 +63,13 @@ ok("undo inside the window puts it back, settled", rowNext(tapped, { type: "undo
   checked: false,
   phase: "idle",
   error: null,
+  animate: true,
 });
 ok("tapping the check again inside the window IS the undo", rowNext(tapped, { type: "toggle" }), {
   checked: false,
   phase: "idle",
   error: null,
+  animate: true,
 });
 ok("undo after the window has closed does nothing", rowNext(idle, { type: "undo" }), idle);
 
@@ -72,6 +81,7 @@ ok("collapse finished releases the row to its new section", gone, {
   checked: true,
   phase: "gone",
   error: null,
+  animate: false,
 });
 ok("released rows are no longer held", rowHeldInPlace(gone), false);
 ok("a stray collapsed event outside the collapse is ignored", rowNext(tapped, { type: "collapsed" }), tapped);
@@ -80,6 +90,7 @@ ok("a failed write reverts the flip and pins the reason ON THE ROW", rowNext(tap
   checked: false,
   phase: "error",
   error: "Offline",
+  animate: false,
 });
 
 // Revalidation must never yank a row out from under a finger.
@@ -89,14 +100,30 @@ ok("server truth lands once settled", rowNext(gone, { type: "sync", checked: fal
   checked: false,
   phase: "idle",
   error: null,
+  animate: false,
 });
-const errored: RowState = { checked: false, phase: "error", error: "Offline" };
+const errored: RowState = { checked: false, phase: "error", error: "Offline", animate: false };
 ok("a matching sync still clears a pinned error", rowNext(errored, { type: "sync", checked: false }), {
   checked: false,
   phase: "idle",
   error: null,
+  animate: false,
 });
 ok("an identical sync is the same object (no re-render)", rowNext(gone, { type: "sync", checked: true }) === gone, true);
+
+// --- the moment is a finger's, never a revalidation's ------------------------
+//
+// `animate` is what the check glyph's pop is gated on. A tap earns it; server truth
+// arriving on its own does not, which is the whole of "sync replays the completion
+// pop unprompted".
+ok("a tap earns the pop", rowNext(idle, { type: "toggle" }).animate, true);
+ok("so does an undo", rowNext(tapped, { type: "undo" }).animate, true);
+ok(
+  "but a false→true sync from the server does not",
+  rowNext(idle, { type: "sync", checked: true }),
+  { checked: true, phase: "idle", error: null, animate: false },
+);
+ok("…and the flag is spent by the time the row has collapsed", gone.animate, false);
 
 // --- milestones + accessible name -------------------------------------------
 
@@ -227,6 +254,47 @@ ok(
   deriveNowSections(afterServer, { today: TODAY, todayListId: "today", held }).done,
   [],
 );
+
+// The header count and the rows are two different questions: `held` pins a tapped
+// row in place for the undo window, the count has to agree with the tap in the same
+// frame. So the count reads a SECOND, unheld derivation — and on that pass the
+// header and the list it heads always agree.
+{
+  const heldSections = deriveNowSections(afterServer, {
+    today: TODAY,
+    todayListId: "today",
+    held,
+  });
+  const headerCounts = deriveNowSections(afterServer, { today: TODAY, todayListId: "today" });
+  ok("the header count drops the moment the card is checked", headerCounts.due.length, 0);
+  ok("…while the row is still standing where the thumb left it", heldSections.due.length, 1);
+  // The reject-listed "Done today count mismatch": header and list read the same
+  // array, and that array is exactly what sectionOf says. Asserted, not chased.
+  for (const key of ["today", "due", "done"] as const) {
+    ok(
+      `header count === rows.length on the unheld pass (${key})`,
+      headerCounts[key].length,
+      afterServer.filter((i) => sectionOf(i, TODAY, "today") === key).length,
+    );
+  }
+}
+
+// --- empty copy --------------------------------------------------------------
+
+ok("Focus says what Focus is for", emptyCopyFor("focus"), "Nothing in Focus right now.");
+ok(
+  "Waiting says how a card gets there",
+  emptyCopyFor("waiting"),
+  "Nothing waiting. Snooze a card here from its row menu.",
+);
+ok("Backlog is allowed to be blunt", emptyCopyFor("backlog"), "Backlog\u2019s empty.");
+ok(
+  "Braindump points at the button that fills it",
+  emptyCopyFor("braindump"),
+  "Nothing dumped yet. Tap Capture to drop a thought.",
+);
+ok("a user-made column gets the neutral line", emptyCopyFor("col-abc"), "Nothing in this list yet.");
+ok("no em dash anywhere in the empty copy", ["focus", "waiting", "backlog", "braindump", "x"].some((l) => emptyCopyFor(l).includes("\u2014")), false);
 
 ok("local day of an ISO stamp", localDayOf("2026-09-04T09:00:00.000Z")?.length, 10);
 ok("garbage in, null out", localDayOf("not a date"), null);
