@@ -46,23 +46,25 @@ export default function PhoneReview() {
     <Sheet open={open} onOpenChange={(o) => !o && close()} label="Weekly review" heightSvh={96}>
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
         <p className="wm-ph-title">Weekly review</p>
+        {/* One fact per line. "Written from your history" is already on the More row
+            that opened this sheet; here the only news is when it was written. */}
         <p className="wm-ph-caption">
           {review && body
-            ? `Written from your history · ${whenLabel(review.updated_at)}`
+            ? `Updated ${whenLabel(review.updated_at)}`
             : "Written from your history"}
         </p>
       </div>
 
       <div className="wm-sheet__scroll">
         {body ? (
-          <div className="wm-ph-card">
-            <Markdown source={body} />
-          </div>
+          // No card around it: the review IS the sheet's content, and an outline
+          // around the only thing on screen is an accessory, not information.
+          <Markdown source={body} />
         ) : (
           <p className="wm-ph-hint">
             {loading
               ? "Loading…"
-              : "No review yet. It's generated off this machine and posted in — there's nothing to press here."}
+              : "No review yet. It's generated off this machine and posted in, so there's nothing to press here."}
           </p>
         )}
       </div>
