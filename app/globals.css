@@ -17,13 +17,14 @@
   --veil-soft: #1a2037;
   --text-hi: #ecebf4;
   --text-mid: #a7acc4;
-  --text-lo: #6f7596;
+  /* 5.0:1 on --bg-1. Quiet text still has to be readable at 13px in a dark room. */
+  --text-lo: #7d83a1;
   --now: #e3a866;
   --past: #6e8bc4;
   --done: #6fb89c;
   /* derived washes/lines (kept explicit so the light theme can retune them) */
   --scrim: rgba(0, 0, 0, 0.55); /* behind slide-over panels */
-  --scrim-deep: rgba(8, 10, 18, 0.6); /* behind the quick-capture overlay */
+  --scrim-deep: rgba(6, 8, 15, 0.78); /* behind a phone sheet — the board must recede */
   --field: rgba(8, 10, 18, 0.5); /* text-input backgrounds */
   --wash: rgba(20, 26, 46, 0.35); /* column surfaces */
   --now-wash: rgba(28, 26, 40, 0.5); /* the Today column */
@@ -31,6 +32,29 @@
   --now-tint: rgba(227, 168, 102, 0.22); /* ::selection, scrubber ticks */
   --past-wash: rgba(110, 139, 196, 0.08); /* time-travel surfaces */
   --past-line: rgba(110, 139, 196, 0.4);
+
+  /* ── The phone app's shared ladder ──────────────────────────────────────
+     Declared on :root, NOT on [data-shell="phone"], because Vaul portals every
+     sheet to <body> — outside the shell element. While these lived on the shell,
+     `var(--p-meta)` and `var(--kb)` resolved to nothing inside a sheet, which is
+     why a sheet's bottom bar never cleared the keyboard.
+     Three sizes (11/13/15) and one 26px display, three weights. */
+  --p-title: 15px;
+  --p-body: 15px;
+  --p-meta: 13px;
+  --p-caption: 11px;
+  --p-regular: 400;
+  --p-medium: 510;
+  --p-strong: 590;
+
+  /* Press feedback, and the duration a sheet takes to track the keyboard.
+     --vvh / --vvh-top are written at runtime by useKeyboardInset(); they are
+     deliberately NOT declared here so `var(--vvh, 100dvh)` falls back before
+     hydration. */
+  --dur-fast: 90ms;
+  --dur-kb: 160ms;
+  --kb: 0px;
+
   color-scheme: dark;
 }
 
@@ -46,7 +70,7 @@ html[data-theme="light"] {
   --veil-soft: #e2dccb;
   --text-hi: #2b2a35;
   --text-mid: #565567;
-  --text-lo: #75738a;
+  --text-lo: #6b697f; /* 4.7:1 on --bg-1 */
   --now: #a06a24;
   --past: #4d6ba8;
   --done: #2e7d64;
@@ -366,26 +390,38 @@ body {
   }
 }
 
-/* Type ladder (spec §8): two sizes × three weights + a hairline divider, not
-   five sizes. 11px is the HIG floor and only ever a caption. */
-[data-shell="phone"] {
-  --p-title: 15px;
-  --p-body: 15px;
-  --p-meta: 13px;
-  --p-caption: 11px;
-  --p-regular: 400;
-  --p-medium: 510;
-  --p-strong: 590;
+/* The type ladder lives on :root (see the top of this file) so portaled sheets
+   inherit it: three sizes — 11px caption, 13px meta/label, 15px title/body — plus
+   one 26px serif display, over three weights (400/510/590). Not five sizes.
+   11px is the HIG floor and only ever a caption.
 
+   THE SHELL IS FIXED, not a tall flex column in the document flow. On iOS, focusing
+   a field inside a sheet makes Safari scroll the LAYOUT viewport to reveal it — with
+   a scrollable 100svh body that floats the whole app up and pushes the field you are
+   typing into off the top of the screen. A fixed, inset:0, overflow:hidden root has
+   nothing to scroll, so Safari's scroll-to-reveal is a no-op, and the app tracks the
+   keyboard by HEIGHT instead: --vvh (visualViewport.height, written by
+   useKeyboardInset) while a sheet is open. */
+[data-shell="phone"] {
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  /* svh, never vh: 100vh is taller than the visible viewport while the URL bar
+  /* dvh, never vh: 100vh is taller than the visible viewport while the URL bar
      is up, which hides the tab bar behind it. */
-  height: 100svh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-1);
   color: var(--text-hi);
   -webkit-tap-highlight-color: transparent;
+}
+/* While any sheet is open the shell is exactly the visible viewport, so the sheet
+   above it is measured against the same number the keyboard left behind. No
+   transition here on purpose: iOS emits a visualViewport resize on every frame of
+   the keyboard animation, so height already arrives smooth — a transition would
+   only make it lag its own keyboard. */
+html:has(.wm-sheet) [data-shell="phone"] {
+  height: var(--vvh, 100dvh);
 }
 
 /* Touch feedback is the press itself — never a hover state. */
@@ -396,7 +432,7 @@ body {
   transform: scale(0.985);
 }
 [data-shell="phone"] button {
-  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+  transition: transform var(--dur-fast) cubic-bezier(0.2, 0, 0.2, 1);
 }
 /* Anything typed into on a phone is ≥16px or iOS zooms the whole page. */
 [data-shell="phone"] input,
@@ -404,8 +440,11 @@ body {
 [data-shell="phone"] select {
   font-size: 16px;
 }
+/* Keyboard focus is a ring in TEXT, not in amber: full-strength --now is rationed to
+   one thing per screen (the current tab, or the caret you are typing at), and a focus
+   ring that borrows it makes two ambers fight. */
 [data-shell="phone"] :focus-visible {
-  outline: 2px solid var(--now);
+  outline: 2px solid var(--text-hi);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -417,11 +456,11 @@ body {
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
 }
+/* A date, set as a date — not a tracked-out all-caps eyebrow. */
 .phone-eyebrow {
   font-size: var(--p-caption);
   line-height: 1.5;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--text-lo);
 }
 .phone-title {
@@ -429,7 +468,7 @@ body {
   font-family: var(--font-fraunces), Georgia, serif;
   font-size: 26px;
   line-height: 1.1;
-  font-weight: 500;
+  font-weight: var(--p-medium);
   letter-spacing: -0.01em;
   color: var(--text-hi);
 }
@@ -722,6 +761,10 @@ body {
   border-bottom: 1px solid var(--veil-soft);
   background: var(--bg-1);
   touch-action: pan-x;
+  /* The strip scrolls past both edges; a 20px fade is the cue that it does. It is
+     information, not decoration — a hard clip reads as the last list on the board. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, black 20px, black calc(100% - 20px), transparent 100%);
 }
 .phone-seg::-webkit-scrollbar {
   display: none;
@@ -799,11 +842,20 @@ body {
   border: 0;
   color: var(--text-lo);
 }
+/* The one full-strength amber on this screen: where you are. Hue alone is not a
+   signal, so the current tab's glyph also gains weight. */
 .phone-tab.is-current {
   color: var(--now);
 }
-.phone-tab--capture {
-  color: var(--text-mid);
+/* Scoped to OUTLINED marks: the More glyph is three filled dots, and a stroke-width
+   on them would draw a halo rather than add weight. It gets the same half-pixel by
+   growing its radius instead (a CSS geometry property — where it isn't supported the
+   dot simply stays 1.5 and hue carries the state, as it did before). */
+.phone-tab.is-current .phone-tab__glyph [fill="none"] {
+  stroke-width: 1.8;
+}
+.phone-tab.is-current .phone-tab__glyph circle[fill="currentColor"] {
+  r: 1.8px;
 }
 .phone-tab__glyph {
   width: 20px;
