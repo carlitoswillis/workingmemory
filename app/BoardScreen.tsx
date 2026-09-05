@@ -5,6 +5,7 @@ import { getUsername } from "@/lib/users";
 import { getUserBoards, getBoardName, getBoardMembers, getMemberUsernames } from "@/lib/boards";
 import { getDoorwayMeta } from "@/lib/doorways";
 import Board from "@/components/Board";
+import PhoneShell from "@/components/phone/PhoneShell";
 import ArchiveView from "@/components/ArchiveView";
 import ThemeToggle from "@/components/ThemeToggle";
 import BoardSwitcher from "@/components/BoardSwitcher";
@@ -50,7 +51,16 @@ export default function BoardScreen({
   const linkedIds = [...new Set(items.map((i) => i.linked_board_id).filter(Boolean))] as string[];
   const doorways = main && userId ? getDoorwayMeta(main, userId, linkedIds) : {};
 
+  // TWO SHELLS, ONE BRANCH. The phone app (components/phone/) is not this layout at
+  // 375px — it is its own instrument: one Now feed plus a paged Lists screen, rows
+  // instead of columns, everything in the thumb zone. Both trees are rendered and CSS
+  // picks between them at 768px (the `/* phone shell */` block in globals.css), so
+  // there is no measure-then-render, no hydration flash, and a headless check can
+  // assert which one is live by viewport width alone. Both read the SAME server data
+  // resolved above — no second query, no second data layer.
   return (
+    <>
+      <div data-shell="desktop">
     <main className="mx-auto max-w-[1640px] px-6 py-10 sm:px-10">
       {demo && (
         <div
@@ -138,5 +148,18 @@ export default function BoardScreen({
         openCardId={openCardId}
       />
     </main>
+      </div>
+
+      <PhoneShell
+        boardId={bid}
+        boardName={boardName}
+        lists={lists}
+        listLabels={listLabels}
+        items={items}
+        actors={actors}
+        doorways={doorways}
+        myBoards={boards.map((b) => ({ id: b.id, name: b.name }))}
+      />
+    </>
   );
 }
