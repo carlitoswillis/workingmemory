@@ -1,60 +1,77 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { keyboardInset } from "./keyboardInset.ts";
+import { keyboardInset, visualViewportVars } from "./keyboardInset.ts";
 
-// The one place the app learns how tall the soft keyboard is (spec §4). Every phone
-// sheet pads its bottom bar by this so the Save control never ends up under the keys.
+// The one place the app learns how big the visible viewport actually is (spec §4).
+// It is the fix for the owner's bug, and it is the whole contract the sheets build on.
 //
-// Two consumers, one subscription: `PhoneShell` exposes the number as `PhoneUI.kbInset`
-// for React layout, and this hook ALSO mirrors it onto the document element as `--kb`
-// so CSS (the `/* phone sheets */` block in globals.css) can use it without prop
-// drilling. `--kb` is written at runtime, never declared in a stylesheet, so nothing
-// collides with another package's `:root` block.
+// iOS does not resize the layout viewport for the keyboard: it shrinks the VISUAL
+// viewport and, if the page can scroll, slides the layout viewport up to chase the
+// caret — which is exactly why "the whole app is floated up, I can't see the entry
+// box but can see some results". `svh`/`dvh` cannot see any of that. So this hook
+// mirrors three numbers onto `document.documentElement`, and the shell and every
+// sheet are measured against them instead:
+//
+//   --kb       how much the keyboard covers (a bar's padding-bottom)
+//   --vvh      the height of what you can SEE (the shell's height while a sheet is up,
+//              and every sheet's max-height)
+//   --vvh-top  how far the visual viewport has slid down the layout viewport
+//
+// documentElement, not the shell element: Vaul portals every sheet to <body>, so a
+// variable set on the shell div is invisible to the sheet floating above it. That one
+// scoping mistake is why `.wm-sheet { padding-bottom: var(--kb) }` had always been 0.
 //
 // visualViewport is the only signal that works on iOS; where it's missing (very old
-// browsers, SSR) the inset is simply always 0 and the layout is the no-keyboard one.
+// browsers, SSR) the inset is 0 and the layout is the no-keyboard one.
 
 const KB_VAR = "--kb";
+const VVH_VAR = "--vvh";
+const VVH_TOP_VAR = "--vvh-top";
 
 export function useKeyboardInset(): number {
   const [inset, setInset] = useState(0);
 
   useEffect(() => {
-    const vv = window.visualViewport;
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
     if (!vv) return;
 
+    const root = document.documentElement;
     let raf = 0;
     const read = () => {
       cancelAnimationFrame(raf);
       // Coalesce the burst of resize/scroll events iOS fires while the keyboard
-      // animates in — one measurement per frame is plenty.
+      // animates in — one measurement per frame is plenty, and writing the vars
+      // inside the frame keeps the sheet's height on the same tick as the paint.
       raf = requestAnimationFrame(() => {
-        setInset(
-          keyboardInset({
-            innerHeight: window.innerHeight,
-            viewportHeight: vv.height,
-            offsetTop: vv.offsetTop,
-            scale: vv.scale,
-          }),
-        );
+        const m = {
+          innerHeight: window.innerHeight,
+          viewportHeight: vv.height,
+          offsetTop: vv.offsetTop,
+          scale: vv.scale,
+        };
+        const vars = visualViewportVars(m);
+        root.style.setProperty(KB_VAR, vars.kb);
+        root.style.setProperty(VVH_VAR, vars.vvh);
+        root.style.setProperty(VVH_TOP_VAR, vars.vvhTop);
+        setInset(keyboardInset(m));
       });
     };
 
     read();
     vv.addEventListener("resize", read);
     vv.addEventListener("scroll", read);
+    window.addEventListener("orientationchange", read);
     return () => {
       cancelAnimationFrame(raf);
       vv.removeEventListener("resize", read);
       vv.removeEventListener("scroll", read);
-      document.documentElement.style.removeProperty(KB_VAR);
+      window.removeEventListener("orientationchange", read);
+      root.style.removeProperty(KB_VAR);
+      root.style.removeProperty(VVH_VAR);
+      root.style.removeProperty(VVH_TOP_VAR);
     };
   }, []);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty(KB_VAR, `${inset}px`);
-  }, [inset]);
 
   return inset;
 }
