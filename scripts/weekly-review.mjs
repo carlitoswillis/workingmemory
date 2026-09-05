@@ -23,6 +23,8 @@
 //   CLAUDE_BIN       the claude executable (default: "claude")
 //   OLLAMA_BIN       the ollama executable (default: "ollama")
 //   OWNER_USERNAME   passed through to resolveOwnerBoard (default: "owner")
+//   WM_OWNER_BOARD_ID  pin the board to read/write, bypassing resolution
+//                    (must be a board of the owner; see lib/bridge.ts)
 //
 // Exit codes: 0 ok · 1 usage/env · 2 no snapshot or no owner board ·
 //             3 generation failed (NOTHING is posted) · 4 the POST failed.

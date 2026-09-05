@@ -191,6 +191,18 @@ a real structure without losing its looseness.
   multi-accounts (the file holds every account — no browser session may dump or
   replace it). `GET /api/health` deliberately touches no SQLite (must not defeat
   idle-TTL demo sweeps).
+- **The bridge's board resolution is deterministic, and it has to be**
+  (`lib/bridge.ts#resolveOwnerBoard`, shared by `/api/context`, `/api/review` and
+  `/api/items`). It used to be *only* "the owner's most recently touched board",
+  which is a race: on 2026-09-04 a batch of status flips on the `watching`
+  sub-board beat `Personal` by 28 seconds, so the Friday review POSTed a new
+  sentinel card onto a movie list and `/api/context` handed the assistant that
+  list as the user's board. The order is now (1) `WM_OWNER_BOARD_ID` if the id
+  belongs to the owner — a wrong id warns and falls through, never fails the
+  request; (2) the owner's oldest ROOT board (nothing links to it via
+  `items.linked_board_id`) whose live columns include Today/Focus/Backlog;
+  (3) the old most-recently-touched heuristic. Set `WM_OWNER_BOARD_ID` in the
+  Render env if a board ever needs pinning by hand.
 - Demo boards are deliberately NOT replicated; the hosted disk is fully
   disposable (`scripts/start.sh`: `litestream restore -if-db-not-exists` →
   `replicate -exec next start`).

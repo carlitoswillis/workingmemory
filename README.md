@@ -103,6 +103,15 @@ this repo — you run it when you want a review.
 scoped bearer as `/api/context` and `/api/items`; unset it and the endpoints
 don't exist.
 
+**Which board they mean.** All three share one resolver (`lib/bridge.ts`), and it
+is deterministic: the board pinned by **`WM_OWNER_BOARD_ID`** if that id belongs
+to the owner, else the owner's oldest *root* board carrying the canonical
+Today/Focus/Backlog columns — root meaning no card anywhere opens into it as a
+doorway, so a sub-board like a watch list is never mistaken for the task board —
+and only then, as a last resort, the board most recently written to.
+`GET /api/context` and `GET /api/review` both return `board: {id, name}` so a
+caller can check which one it got.
+
 ## Run it locally
 
 Zero config, zero accounts, zero cloud. Your data is a SQLite file on your disk.

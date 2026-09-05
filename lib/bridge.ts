@@ -21,11 +21,48 @@ export function brainBearerOk(req: NextRequest): boolean {
 
 export type OwnerBoard = { ownerId: string; boardId: string; boardName: string | null };
 
+// The three columns that make a board the OWNER'S TASK BOARD rather than one of
+// their lists-of-things (a movie list, a reading list). Labels, not ids: every
+// board is seeded with the same DEFAULT_LISTS ids, so ids can't tell a renamed
+// "watch list" from the real thing, but a board whose Today/Focus/Backlog have
+// been renamed to "currently"/"unreleased" is no longer the task board. These are
+// the DEFAULT_LISTS labels (lib/lists.ts) a task board keeps.
+const CANONICAL_LABELS = ["today", "focus", "backlog"] as const;
+
+function boardWithName(db: Database.Database, ownerId: string, boardId: string): OwnerBoard {
+  const name =
+    (db.prepare("select name from boards where id = ?").get(boardId) as
+      | { name: string }
+      | undefined)?.name ?? null;
+  return { ownerId, boardId, boardName: name };
+}
+
+// Is this board one the owner can actually reach — created by them, or one they
+// were invited onto? The pin in WM_OWNER_BOARD_ID is checked against this so a
+// typo'd or someone else's board id can never redirect the bridge.
+const OWNED_BOARD_SQL = `b.created_by = ?
+  or exists (select 1 from board_members m where m.board_id = b.id and m.user_id = ?)`;
+
 // The owner is the account NAMED "owner" (OWNER_USERNAME overrides) — pinned
 // by name, not inferred; first-created is only the last-resort fallback for a
-// DB with no such account. Their "active board" is the one they most recently
-// wrote to — the same heuristic the brain app's context reader uses — falling
-// back to the oldest board they created (a brand-new, still-empty board).
+// DB with no such account.
+//
+// Their board is resolved DETERMINISTICALLY (2026-09-04), in this order:
+//
+//   1. WM_OWNER_BOARD_ID, if set and the id belongs to the owner. An explicit
+//      pin always wins; a pin that doesn't resolve logs a warning and falls
+//      through rather than failing the request.
+//   2. The owner's oldest ROOT board carrying the canonical column set — root
+//      meaning no live card on any board opens into it as a doorway
+//      (items.linked_board_id), so sub-boards like a "watching" movie list are
+//      excluded no matter how recently they were touched.
+//   3. Only then the old heuristic: the board they most recently wrote to,
+//      falling back to the oldest board they created.
+//
+// Why: rule 3 alone was the whole resolution, and on 2026-09-04 a batch of
+// status flips on the "watching" sub-board edged out "Personal" by 28 seconds —
+// so the Friday review POSTed its sentinel card onto the movie list and
+// /api/context fed the assistant a list of films as the user's board.
 export function resolveOwnerBoard(db: Database.Database): OwnerBoard | null {
   const username = process.env.OWNER_USERNAME ?? "owner";
   const owner = ((db.prepare("select id from users where username = ?").get(username) ??
@@ -34,6 +71,39 @@ export function resolveOwnerBoard(db: Database.Database): OwnerBoard | null {
     | undefined);
   if (!owner) return null;
 
+  // 1. The explicit pin.
+  const pinned = process.env.WM_OWNER_BOARD_ID?.trim();
+  if (pinned) {
+    const row = db
+      .prepare(`select b.id from boards b where b.id = ? and (${OWNED_BOARD_SQL})`)
+      .get(pinned, owner.id, owner.id) as { id: string } | undefined;
+    if (row) return boardWithName(db, owner.id, row.id);
+    console.warn(
+      `[bridge] WM_OWNER_BOARD_ID=${pinned} is not a board of "${username}" — ignoring it`,
+    );
+  }
+
+  // 2. The oldest root board with the canonical columns.
+  const canonical = db
+    .prepare(
+      `select b.id from boards b
+        where (${OWNED_BOARD_SQL})
+          and not exists (
+            select 1 from items i where i.linked_board_id = b.id and i.archived = 0
+          )
+          and (
+            select count(distinct lower(trim(l.label))) from lists l
+             where l.board_id = b.id and l.archived = 0
+               and lower(trim(l.label)) in (${CANONICAL_LABELS.map(() => "?").join(", ")})
+          ) = ${CANONICAL_LABELS.length}
+        order by b.created_at asc, b.id asc
+        limit 1`,
+    )
+    .get(owner.id, owner.id, ...CANONICAL_LABELS) as { id: string } | undefined;
+  if (canonical) return boardWithName(db, owner.id, canonical.id);
+
+  // 3. The old heuristic, kept as the fallback for a DB that fits neither rule
+  // (a brand-new account, a board whose columns were all renamed).
   const board =
     (db
       .prepare(
@@ -47,9 +117,5 @@ export function resolveOwnerBoard(db: Database.Database): OwnerBoard | null {
       .get(owner.id) as { id: string } | undefined);
   if (!board) return null;
 
-  const name =
-    (db.prepare("select name from boards where id = ?").get(board.id) as
-      | { name: string }
-      | undefined)?.name ?? null;
-  return { ownerId: owner.id, boardId: board.id, boardName: name };
+  return boardWithName(db, owner.id, board.id);
 }
