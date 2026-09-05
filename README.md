@@ -61,6 +61,48 @@ Some one-liners for what that buys you:
   `item_events` and writes it up; it lands in a read-only slot beside the Note.
   See below — the model runs on *your* machine, not the server.
 
+## The phone app
+
+Working Memory on a phone is **its own app**, not the board at 375px. Same data,
+same server actions, same Nocturne tokens; no shared layout. The desktop board
+keeps five columns and drag-and-drop; the phone gets one vertical feed, a paged
+Lists screen, and a bottom tab bar. Anything that needs a confirmation you can
+actually read — creating, renaming or sharing a board, deleting a column — stays
+on the desktop on purpose.
+
+Everything that isn't the feed is a **bottom sheet** (Vaul, which rides Radix
+Dialog, so the focus trap, Escape and the scroll lock are the primitive's, not
+ours):
+
+| Sheet | What it's for |
+|---|---|
+| Card | A 180px peek — title, sub-card count, a full-width Done — dragged up to details, sub-cards, recurrence and move-to |
+| Capture | One textarea, a list chooser defaulting to Brain Dump, Save above the keyboard |
+| Find | The same search the desktop has, in a full-height sheet |
+| Time travel | Its own mode screen: date at the top, the board as it was behind, a 44px scrubber in the thumb zone |
+| Review · Note · Boards · More | The daily note, the weekly review, the board switcher, settings |
+
+Two details worth knowing if you're working on it. The soft keyboard's height is
+measured from `window.visualViewport` and written onto `<html>` as `--kb`
+(`components/phone/useKeyboardInset.ts`); sheets pad by it, which is what keeps a
+Save button above the keys — `interactive-widget=resizes-content` would do the
+job on Chrome, but iOS needs the JS path. And every text input is 16px, because
+below that Safari zooms the whole page on focus.
+
+### Installing it on iOS
+
+The home-screen install is the real runtime: standalone chrome, safe areas, no
+Safari toolbars eating the bottom third. iOS gives web pages **no install
+button** — there is no `beforeinstallprompt` and no API — so it's done by hand:
+
+1. Open the app in Safari and tap **Share** (the square with the arrow).
+2. Scroll to **Add to Home Screen**, then **Add**.
+3. Open it from the home screen, not from Safari.
+
+More → the install card explains the same three steps in the app, and only
+appears in a browser tab (it's gated on `display-mode: standalone` plus
+`navigator.standalone`, so an installed app never shows it) until you dismiss it.
+
 ## How nothing is ever lost
 
 History isn't an app feature that can be forgotten in some code path — it's
@@ -238,6 +280,7 @@ Mac.
 - **better-sqlite3** — one file per board; history via triggers in `lib/schema.ts`
 - **Litestream + Backblaze B2** — streaming replication, restore-on-boot
 - **@dnd-kit** — accessible drag-and-drop (cards, columns, multi-select)
+- **Vaul** — the phone app's bottom sheets (a Radix Dialog underneath)
 - **Tailwind CSS + Fraunces / Space Grotesk** — the matte "Nocturne" look
 
 ## Status & roadmap

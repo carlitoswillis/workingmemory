@@ -613,6 +613,132 @@ body {
 /* Two lines, then clamp — never a single-line ellipsis. The row GROWS rather
    than clipping when the system text size does (WCAG 1.4.10). */
 .phone-row__title {
+/* phone sheets */
+/* Package B's block: the Vaul-backed bottom sheets and the secondary phone screens
+   that live inside them (components/phone/Sheet.tsx and friends). APPEND-ONLY, and
+   scoped to `wm-sheet*` / `wm-ph-*` so it can never reach the desktop board.
+
+   House rules from the spec, in one place:
+     · heights in `svh`, never `vh` — a phone's `100vh` is a lie while the URL bar
+       is showing (§9);
+     · `--kb` is the live keyboard height, written onto <html> at runtime by
+       components/phone/useKeyboardInset.ts. It is deliberately NOT declared in any
+       stylesheet, so nothing here collides with the shell block;
+     · every text field is 16px, because Safari zooms the page below that (§4);
+     · elevation is a luminance step plus a hairline, never a shadow (§8);
+     · no per-component reduced-motion query — the global rule near the top of this
+       file already zeroes every duration with `!important` (§6). */
+
+.wm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wm-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--scrim-deep);
+}
+
+.wm-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-height: 96svh;
+  outline: none;
+  border-top: 1px solid var(--veil);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  background: var(--surface);
+  color: var(--text-hi);
+  /* The sheet is bottom-anchored, so padding here lifts its CONTENT above the
+     on-screen keyboard while the box itself stays glued to the bottom edge. The
+     safe-area term keeps the last control off the home indicator. */
+  padding-bottom: calc(var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A snap-point sheet's box is the whole window; Vaul translates it down so only the
+   active snap is showing. That is what makes a px snap ("180px" for the card peek)
+   exact rather than proportional — so this height must NOT be clamped. */
+.wm-sheet--snapped {
+  height: 100svh;
+  max-height: 100svh;
+}
+
+.wm-sheet[data-vaul-drawer] {
+  will-change: transform;
+}
+
+/* The card sheet's peek has 180px to hold a two-line title, a line of meta and a
+   full-width Done control. Nothing here may grow past that or the Done control ends
+   up under the fold — the one thing the peek exists to prevent. */
+.wm-sheet--card .wm-sheet__head {
+  min-height: 0;
+}
+
+/* Capture is the sheet the keyboard is always up in, so it's sized rather than
+   fixed: a bottom-anchored box with `height: auto` GROWS UPWARD, and folding the
+   keyboard inset into min-height means the visible half-screen stays a half screen
+   while the keys are showing. Pinning `height: 50svh` instead would keep the box the
+   same size and squeeze the textarea down to nothing. */
+.wm-sheet--capture {
+  height: auto;
+  min-height: calc(50svh + var(--kb, 0px));
+  max-height: 92svh;
+}
+
+.wm-sheet__grip {
+  flex: none;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 4px;
+  border-radius: 999px;
+  background: var(--veil);
+}
+
+/* ── the type ladder (§8): two sizes × three weights, plus a caption ───────── */
+
+.wm-ph-title {
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 510;
+  color: var(--text-hi);
+}
+.wm-ph-body {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-hi);
+}
+.wm-ph-meta {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-mid);
+}
+.wm-ph-caption {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-lo);
+}
+.wm-ph-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Titles clamp to two lines and grow rather than clip (WCAG 1.4.10). */
+.wm-ph-clamp2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -839,3 +965,283 @@ body {
   }
 }
 /* /phone shell */
+  overflow-wrap: anywhere;
+}
+
+/* Dynamic Type, Safari only, on top of the rem ladder above. */
+@supports (-webkit-touch-callout: none) {
+  .wm-ph-title,
+  .wm-ph-body {
+    font: -apple-system-body;
+    font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+/* ── structure inside a sheet ─────────────────────────────────────────────── */
+
+.wm-sheet__head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 16px 10px;
+}
+
+/* The one scroller per sheet. `overscroll-behavior: contain` stops a fling at the
+   end of the list from scrolling the board underneath (or triggering back). Vaul's
+   own rule handles drag-to-close: only from scrollTop 0, re-armed after 100ms. */
+.wm-sheet__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 0 16px 16px;
+}
+
+/* A sheet's own action bar — always the last thing above the keyboard. */
+.wm-sheet__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--veil-soft);
+  background: var(--surface);
+}
+/* Inside a sheet the box already carries the safe-area padding. */
+.wm-sheet .wm-sheet__bar {
+  padding-bottom: 10px;
+}
+
+/* ── controls ─────────────────────────────────────────────────────────────── */
+
+/* Every tappable thing in a sheet clears the 44pt floor (HIG / WCAG 2.5.8). */
+.wm-ph-tap {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  color: var(--text-mid);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.wm-ph-tap:active {
+  transform: scale(0.985);
+}
+.wm-ph-tap:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+}
+
+.wm-ph-btn {
+  min-height: 48px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid var(--veil);
+  background: var(--surface-2);
+  color: var(--text-hi);
+  font-size: 15px;
+  font-weight: 510;
+  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.wm-ph-btn:active {
+  transform: scale(0.985);
+}
+.wm-ph-btn:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+}
+.wm-ph-btn[disabled] {
+  opacity: 0.45;
+}
+.wm-ph-btn--primary {
+  border-color: transparent;
+  background: var(--now);
+  color: var(--bg-0);
+}
+.wm-ph-btn--done {
+  border-color: var(--done);
+  color: var(--done);
+  background: transparent;
+}
+.wm-ph-btn--auto {
+  width: auto;
+}
+
+/* Text fields. 16px is not a preference — below it Safari zooms the whole page. */
+.wm-ph-field {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  line-height: 1.4;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--veil-soft);
+  background: var(--field);
+  color: var(--text-hi);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.wm-ph-field::placeholder {
+  color: var(--text-lo);
+}
+.wm-ph-field:focus {
+  border-color: var(--now);
+  outline: none;
+}
+textarea.wm-ph-field {
+  resize: none;
+  min-height: 120px;
+}
+
+/* A horizontal chip strip (the capture list chooser, recurrence, move-to). */
+.wm-ph-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+.wm-ph-chips::-webkit-scrollbar {
+  display: none;
+}
+.wm-ph-chip {
+  flex: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--veil);
+  background: transparent;
+  color: var(--text-mid);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.wm-ph-chip:active {
+  transform: scale(0.985);
+}
+.wm-ph-chip:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+}
+.wm-ph-chip[aria-pressed="true"],
+.wm-ph-chip[aria-checked="true"] {
+  border-color: var(--now-line);
+  background: var(--now-wash);
+  color: var(--text-hi);
+}
+
+/* A full-width row in a sheet list (boards, move-to, More). */
+.wm-ph-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: var(--text-hi);
+  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.wm-ph-row:active {
+  transform: scale(0.985);
+}
+.wm-ph-row:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+}
+.wm-ph-row[aria-current="true"] {
+  border-color: var(--now-line);
+  background: var(--now-wash);
+}
+
+.wm-ph-card {
+  border: 1px solid var(--veil-soft);
+  border-radius: 14px;
+  background: var(--bg-0);
+  padding: 12px 14px;
+}
+
+.wm-ph-hint {
+  color: var(--text-lo);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── time travel (§2 G) ───────────────────────────────────────────────────── */
+
+.wm-ph-scrub {
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: pan-x;
+}
+.wm-ph-scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--veil);
+}
+.wm-ph-scrub::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--veil);
+}
+/* A 44px thumb: the whole point of the phone scrubber, versus the desktop bar's
+   24px steppers (§2, rejected alternatives). */
+.wm-ph-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  margin-top: -20px;
+  border-radius: 999px;
+  border: 1px solid var(--past-line);
+  background: var(--surface-2);
+}
+.wm-ph-scrub::-moz-range-thumb {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--past-line);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.wm-ph-scrub:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 4px;
+}
+
+/* The read-only board behind the scrubber. */
+.wm-ph-past {
+  border-left: 2px solid var(--past);
+  background: var(--past-wash);
+}
+
+/* Hover is a mouse idea; on a touch screen it sticks after a tap (§5). */
+@media (hover: hover) and (pointer: fine) {
+  .wm-ph-row:hover,
+  .wm-ph-chip:hover,
+  .wm-ph-tap:hover {
+    background: var(--surface-2);
+  }
+}
+/* /phone sheets */
