@@ -28,7 +28,7 @@ import { useBoardId } from "../board-context";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneRow from "./PhoneRow";
 import { M, msOf } from "./phone-motion";
-import { applyReorder, pageIndexFor, reassignPositions } from "./phone-logic";
+import { applyReorder, emptyCopyFor, pageIndexFor, reassignPositions } from "./phone-logic";
 
 // Lists — one horizontal pager over the board's other columns, with a sticky
 // segmented header that syncs both ways: tap a segment to jump, swipe to step to the
@@ -58,6 +58,19 @@ export default function PhoneList({
   // Cards per page, position-ordered (the server hands `items` over sorted) with the
   // pending reorder folded in so a drop settles under the finger.
   const [order, setOrder] = useState<Record<string, Item[]>>({});
+  // Sub-cards are not rows on a Lists page — they hang off their parent, exactly as
+  // they do on Now, so a parent here carries the same "2/3 sub-cards" affordance and
+  // the same tap into its sheet. Same map shape as PhoneHome's.
+  const childrenByParent = useMemo(() => {
+    const by = new Map<string, Item[]>();
+    for (const it of items) {
+      if (!it.parent_id) continue;
+      const arr = by.get(it.parent_id);
+      if (arr) arr.push(it);
+      else by.set(it.parent_id, [it]);
+    }
+    return by;
+  }, [items]);
   const grouped = useMemo(() => {
     const by: Record<string, Item[]> = {};
     for (const p of pages) by[p.id] = [];
@@ -148,6 +161,7 @@ export default function PhoneList({
             <Page
               list={page}
               cards={order[page.id] ?? []}
+              childrenByParent={childrenByParent}
               today={today}
               snoozeListId={snoozeListId}
               onReorder={(next) => setOrder((prev) => ({ ...prev, [page.id]: next }))}
@@ -163,12 +177,14 @@ export default function PhoneList({
 function Page({
   list,
   cards,
+  childrenByParent,
   today,
   snoozeListId,
   onReorder,
 }: {
   list: ListDef;
   cards: Item[];
+  childrenByParent: Map<string, Item[]>;
   today: string;
   snoozeListId: string | null;
   onReorder: (next: Item[]) => void;
@@ -239,6 +255,7 @@ function Page({
             <SortableRow
               key={item.id}
               item={item}
+              childItems={childrenByParent.get(item.id)}
               today={today}
               snoozeListId={list.id === snoozeListId ? null : snoozeListId}
               dragging={activeId === item.id}
@@ -247,19 +264,21 @@ function Page({
           ))}
         </ul>
       </SortableContext>
-      {cards.length === 0 && <p className="phone-empty">— {list.hint || "empty"} —</p>}
+      {cards.length === 0 && <p className="phone-empty">{emptyCopyFor(list.id)}</p>}
     </DndContext>
   );
 }
 
 function SortableRow({
   item,
+  childItems,
   today,
   snoozeListId,
   dragging,
   anyDragging,
 }: {
   item: Item;
+  childItems?: Item[];
   today: string;
   snoozeListId: string | null;
   dragging: boolean;
@@ -273,6 +292,7 @@ function SortableRow({
   return (
     <PhoneRow
       item={item}
+      childItems={childItems}
       today={today}
       snoozeListId={snoozeListId}
       dragging={dragging || isDragging}

@@ -2,7 +2,7 @@
 
 import { usePhoneUI } from "./PhoneShell";
 
-// The bottom bar: Now · Lists · ＋ · Find · More. Five slots, every one a 44pt
+// The bottom bar: Now, Lists, capture, Find, More. Five slots, every one a 44pt
 // target, and capture is a SLOT rather than a floating circle — a FAB occludes the
 // last row of the feed and needs its own safe-area maths (spec §2, §9).
 //
@@ -39,10 +39,13 @@ function ListsGlyph() {
     </svg>
   );
 }
+// Two strokes have to hold their own against glyphs built from four or five, so the
+// plus is the one that carries extra weight — not extra colour. Capture is a slot like
+// any other slot.
 function PlusGlyph() {
   return (
     <svg viewBox="0 0 20 20" className="phone-tab__glyph" aria-hidden>
-      <path d="M10 4.4v11.2M4.4 10h11.2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M10 4.4v11.2M4.4 10h11.2" fill="none" stroke="currentColor" strokeWidth="2.0" strokeLinecap="round" />
     </svg>
   );
 }
@@ -107,9 +110,7 @@ export default function PhoneTabs() {
             onClick={() => activate(slot)}
             aria-current={current ? "page" : undefined}
             aria-label={slot.key === "capture" ? "Capture a thought" : slot.label}
-            className={`phone-tab${current ? " is-current" : ""}${
-              slot.key === "capture" ? " phone-tab--capture" : ""
-            }`}
+            className={`phone-tab${current ? " is-current" : ""}`}
           >
             {slot.glyph}
             <span className="phone-tab__label">{slot.label}</span>

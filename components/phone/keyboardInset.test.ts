@@ -7,7 +7,7 @@
 // visualViewport.height by a lot). Both must read as 0, or the sheet's bottom bar
 // jitters while you scroll and jumps while you zoom.
 
-import { keyboardInset, keyboardInsetPx, MIN_KEYBOARD_PX } from "./keyboardInset.ts";
+import { keyboardInset, keyboardInsetPx, visualViewportVars, MIN_KEYBOARD_PX } from "./keyboardInset.ts";
 
 let failures = 0;
 function ok(label: string, got: unknown, want: unknown) {
@@ -76,6 +76,51 @@ ok("a zero-height window is 0", keyboardInset({ innerHeight: 0, viewportHeight: 
 
 ok("px formatting, closed", keyboardInsetPx({ innerHeight: 812, viewportHeight: 812 }), "0px");
 ok("px formatting, open", keyboardInsetPx({ innerHeight: 812, viewportHeight: 476 }), "336px");
+
+// --- the viewport vars ---------------------------------------------------------
+// --vvh is what the shell and every sheet are sized against, so the cases that
+// matter are the ones where it must NOT collapse: pinch-zoom and missing metrics.
+
+ok(
+  "no keyboard: --vvh is the whole window",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 812 }),
+  { kb: "0px", vvh: "812px", vvhTop: "0px" },
+);
+ok(
+  "keyboard up: --vvh is what's left above it",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 476 }),
+  { kb: "336px", vvh: "476px", vvhTop: "0px" },
+);
+ok(
+  "scrolled under the keyboard: --vvh-top carries the offset",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 476, offsetTop: 40 }),
+  { kb: "296px", vvh: "476px", vvhTop: "40px" },
+);
+ok(
+  "Safari's toolbar shrinks --vvh but is not a keyboard",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 762 }),
+  { kb: "0px", vvh: "762px", vvhTop: "0px" },
+);
+ok(
+  "pinch-zoom falls back to the window, never a sliver",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 300, scale: 2 }),
+  { kb: "0px", vvh: "812px", vvhTop: "0px" },
+);
+ok(
+  "a visual viewport taller than the window clamps to the window",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 900 }),
+  { kb: "0px", vvh: "812px", vvhTop: "0px" },
+);
+ok(
+  "NaN metrics never produce NaNpx",
+  visualViewportVars({ innerHeight: NaN, viewportHeight: NaN }),
+  { kb: "0px", vvh: "0px", vvhTop: "0px" },
+);
+ok(
+  "fractional heights round to a whole pixel",
+  visualViewportVars({ innerHeight: 812, viewportHeight: 475.4 }),
+  { kb: "337px", vvh: "475px", vvhTop: "0px" },
+);
 
 console.log(failures === 0 ? "\nall keyboardInset tests passed" : `\n${failures} FAILED`);
 if (failures > 0) process.exit(1);

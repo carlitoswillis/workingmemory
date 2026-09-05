@@ -45,3 +45,37 @@ export function keyboardInset(m: ViewportMetrics): number {
 export function keyboardInsetPx(m: ViewportMetrics): string {
   return `${keyboardInset(m)}px`;
 }
+
+/** The three custom properties the phone shell publishes on `document.documentElement`. */
+export type ViewportVars = {
+  /** `--kb` — how much the keyboard is covering. */
+  kb: string;
+  /** `--vvh` — the height of what the user can actually SEE, keyboard subtracted. */
+  vvh: string;
+  /** `--vvh-top` — how far the visual viewport has slid down the layout viewport. */
+  vvhTop: string;
+};
+
+/**
+ * Every viewport number the CSS needs, in one pure pass.
+ *
+ * `--vvh` is the one that fixes the owner's bug. `svh`/`dvh` describe the LAYOUT
+ * viewport, which iOS does not shrink for a keyboard, so a `100svh` sheet is taller
+ * than the screen the moment you type in it and Safari scrolls the layout viewport to
+ * chase the caret. `visualViewport.height` is the only number that knows about the
+ * keyboard, so it is the one the shell and every sheet are measured against.
+ *
+ * Guarded the same way `keyboardInset` is: a pinch-zoomed or nonsense viewport falls
+ * back to the window height rather than collapsing the app to a sliver.
+ */
+export function visualViewportVars(m: ViewportMetrics): ViewportVars {
+  const kb = keyboardInset(m);
+  const usable =
+    Number.isFinite(m.viewportHeight) && m.viewportHeight > 0 && (m.scale == null || m.scale <= 1.01)
+      ? Math.min(m.viewportHeight, Number.isFinite(m.innerHeight) && m.innerHeight > 0 ? m.innerHeight : m.viewportHeight)
+      : Number.isFinite(m.innerHeight) && m.innerHeight > 0
+        ? m.innerHeight
+        : 0;
+  const top = kb > 0 && Number.isFinite(m.offsetTop ?? 0) ? Math.max(0, Math.round(m.offsetTop ?? 0)) : 0;
+  return { kb: `${kb}px`, vvh: `${Math.round(usable)}px`, vvhTop: `${top}px` };
+}

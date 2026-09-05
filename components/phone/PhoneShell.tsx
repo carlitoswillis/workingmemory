@@ -16,6 +16,7 @@ import PhoneHome from "./PhoneHome";
 import PhoneList from "./PhoneList";
 import PhoneTabs from "./PhoneTabs";
 import { PhoneSheetHost } from "./Sheet";
+import { useKeyboardInset } from "./useKeyboardInset";
 
 // The phone app's root. It is NOT the desktop board at 375px: the five columns
 // become one Now feed plus one paged Lists screen, and everything you actually reach
@@ -55,32 +56,6 @@ export const usePhoneUI = (): PhoneUI => {
   if (!ui) throw new Error("usePhoneUI() must be called inside <PhoneShell>");
   return ui;
 };
-
-// How much of the viewport the software keyboard is eating. `interactive-widget=
-// resizes-content` is Chrome-only, so iOS needs this JS path: visualViewport shrinks
-// while layout viewport (innerHeight) does not, and the difference is the inset.
-// Exposed to CSS as `--kb` on the shell so a sheet's own bottom bar can sit on top of
-// the keyboard without every component measuring it again.
-export function useKeyboardInset(): number {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-    const read = () => {
-      // Rounded, floored at 0: a rubber-band scroll can make this briefly negative.
-      const next = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-      setInset((prev) => (Math.abs(prev - next) > 1 ? next : prev));
-    };
-    read();
-    vv.addEventListener("resize", read);
-    vv.addEventListener("scroll", read);
-    return () => {
-      vv.removeEventListener("resize", read);
-      vv.removeEventListener("scroll", read);
-    };
-  }, []);
-  return inset;
-}
 
 export default function PhoneShell({
   boardId,
@@ -125,6 +100,10 @@ export default function PhoneShell({
     setListId((prev) => (prev && pages.some((p) => p.id === prev) ? prev : pages[0]?.id ?? null));
   }, [pages]);
 
+  // One subscription for the whole app. The hook publishes --kb, --vvh and --vvh-top
+  // on documentElement (NOT on the shell div — Vaul portals sheets to <body>, where a
+  // variable scoped to the shell cannot be seen) and returns the keyboard inset for
+  // the React side.
   const kbInset = useKeyboardInset();
 
   // A sheet is one history entry deep, so the iOS edge-swipe (and Android back)
@@ -196,11 +175,7 @@ export default function PhoneShell({
       <DoorwaysProvider doorways={doorways} myBoards={myBoards}>
         <BoardDataProvider value={boardData}>
           <PhoneUIContext.Provider value={ui}>
-            <div
-              data-shell="phone"
-              className="phone-shell"
-              style={{ ["--kb" as string]: `${kbInset}px` }}
-            >
+            <div data-shell="phone" className="phone-shell">
               {/* Orientation only — nothing here is a target you have to reach. */}
               <header className="phone-topbar">
                 <p className="phone-eyebrow" suppressHydrationWarning>
