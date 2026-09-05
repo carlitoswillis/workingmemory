@@ -478,7 +478,7 @@ body {
   font-size: var(--p-meta);
   color: var(--text-lo);
 }
-.phone-section__toggle .phone-section__count {
+.phone-section__toggle .phone-chevron {
   margin-left: auto;
 }
 .phone-chevron {
@@ -584,14 +584,17 @@ body {
   height: 18px;
   transition: color 140ms linear;
 }
-/* The tick draws itself in rather than appearing: stroke-dashoffset over the
-   check spring's ~140ms, with a single 8% overshoot on the scale. */
-/* The tick draws itself in rather than appearing, and it starts 35% drawn so the
-   empty circle already hints at the stroke that is coming. */
+/* The tick draws itself in rather than appearing, and it rests 35% drawn so the
+   stroke has somewhere to come FROM. At rest it is held at a whisper: a fully
+   opaque fragment of the first leg reads as a disclosure chevron, which is a lie
+   about what the circle does. */
 .phone-check__tick {
   stroke-dasharray: 14;
   stroke-dashoffset: 9;
-  transition: stroke-dashoffset 140ms cubic-bezier(0.2, 0, 0.2, 1);
+  opacity: 0.34;
+  transition:
+    stroke-dashoffset 140ms cubic-bezier(0.2, 0, 0.2, 1),
+    opacity 140ms linear;
 }
 .phone-check__glyph.is-on {
   color: var(--done);
@@ -603,6 +606,7 @@ body {
 }
 .phone-check__glyph.is-on .phone-check__tick {
   stroke-dashoffset: 0;
+  opacity: 1;
 }
 @keyframes phone-check-pop {
   0% {
