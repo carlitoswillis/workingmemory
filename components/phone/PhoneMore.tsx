@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { usePhoneUI, type PhoneSheet } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import {
   readInstallState,
   rememberInstallDismissed,
@@ -33,6 +33,7 @@ const ROWS: { kind: PhoneSheet["kind"]; label: string; hint: string }[] = [
 
 export default function PhoneMore() {
   const { close, open } = usePhoneUI();
+  const { open: shown } = useSheetOpen();
 
   // The install card is decided on the client only: matchMedia and
   // navigator.standalone don't exist on the server, and rendering the card and then
@@ -41,7 +42,7 @@ export default function PhoneMore() {
   useEffect(() => setOfferInstall(shouldOfferInstall(readInstallState())), []);
 
   return (
-    <Sheet open onOpenChange={(o) => !o && close()} label="More" heightSvh={72}>
+    <Sheet open={shown} onOpenChange={(o) => !o && close()} label="More" heightSvh={72}>
       <div className="wm-sheet__head">
         <p className="wm-ph-title" style={{ flex: 1 }}>
           More

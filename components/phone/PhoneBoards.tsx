@@ -1,7 +1,7 @@
 "use client";
 
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
 // The board switcher (§2 F). A list, and nothing else.
@@ -17,10 +17,11 @@ import { usePhoneBoardData } from "./phone-data";
 
 export default function PhoneBoards() {
   const { close } = usePhoneUI();
+  const { open, dismiss } = useSheetOpen();
   const { boardId, boards, loading } = usePhoneBoardData();
 
   return (
-    <Sheet open onOpenChange={(o) => !o && close()} label="Your boards" heightSvh={45}>
+    <Sheet open={open} onOpenChange={(o) => !o && close()} label="Your boards" heightSvh={45}>
       <div className="wm-sheet__head">
         <p className="wm-ph-title" style={{ flex: 1 }}>
           Boards
@@ -45,7 +46,7 @@ export default function PhoneBoards() {
                     onClick={(e) => {
                       if (current) {
                         e.preventDefault();
-                        close();
+                        dismiss();
                       }
                     }}
                   >

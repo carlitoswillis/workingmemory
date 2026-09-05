@@ -15,7 +15,7 @@ import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recu
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { childrenOf, findItem, movableLists, usePhoneBoardData } from "./phone-data";
 import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
 
@@ -51,6 +51,7 @@ function CountRing({ n }: { n: number }) {
 
 export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   const { close, open } = usePhoneUI();
+  const { open: shown, dismiss } = useSheetOpen();
   const { boardId, items, lists, listLabels, refresh } = usePhoneBoardData();
   const [snap, setSnap] = useState<SnapPoint | null>(CARD_SNAP_POINTS[0]);
   const [, startTransition] = useTransition();
@@ -120,18 +121,28 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
     setSnap(CARD_SNAP_POINTS[0]); // a new card opens at the peek
   }, [itemId]);
 
-  function requestClose(next: boolean) {
-    if (next) return;
+  // Two halves, because closing a sheet and giving its history entries back are
+  // different moments. `dismiss()` starts the exit animation; `Sheet` calls this back
+  // once it's finished, and only then does the shell forget the sheet.
+  function dropHistory() {
     const n = stack.current.length;
     stack.current = [];
-    close();
     if (n > 0) window.history.go(-n);
+  }
+  function dismissSheet() {
+    dropHistory();
+    dismiss();
+  }
+  function onClosed(next: boolean) {
+    if (next) return;
+    dropHistory();
+    close();
   }
 
   if (!item) {
     // The card was archived or deleted out from under the sheet.
     return (
-      <Sheet open onOpenChange={requestClose} label="Card" heightSvh={30}>
+      <Sheet open={shown} onOpenChange={onClosed} label="Card" heightSvh={30}>
         <div className="wm-sheet__scroll">
           <p className="wm-ph-body" style={{ color: "var(--text-lo)" }}>
             That card isn&apos;t on the board any more.
@@ -143,8 +154,8 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
 
   return (
     <Sheet
-      open
-      onOpenChange={requestClose}
+      open={shown}
+      onOpenChange={onClosed}
       snapPoints={CARD_SNAP_POINTS}
       activeSnapPoint={snap}
       onSnapPointChange={setSnap}
@@ -161,7 +172,7 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
         onExpand={() => setSnap(CARD_SNAP_POINTS[1])}
         onOpenChild={(id) => open({ kind: "card", itemId: id })}
         onChanged={refresh}
-        onArchived={() => requestClose(false)}
+        onArchived={dismissSheet}
         run={startTransition}
       />
     </Sheet>

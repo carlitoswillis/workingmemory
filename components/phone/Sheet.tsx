@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
 import PhoneBoards from "./PhoneBoards";
 import PhoneCapture from "./PhoneCapture";
@@ -78,10 +78,43 @@ export function Sheet({
     if (open && snapPoints && activeSnapPoint === undefined) setOwnSnap(snapPoints[0] ?? null);
   }, [open, snapPoints, activeSnapPoint]);
 
+  // The sheet is mounted only while it's the active sheet, so `open` arrives already
+  // true. Two things go wrong if that's handed straight to Vaul: the OPEN animation
+  // never plays (the drawer's first render is its final state), and the CLOSE never
+  // plays either, because the host unmounts the moment the app's state changes —
+  // which also robs Radix of the unmount it restores focus during, dumping focus on
+  // <body> instead of back on the control that opened the sheet.
+  //
+  // So the visual state is held here: false on the first render, true a tick later,
+  // and the caller isn't told about a close until the exit animation has finished
+  // and Radix has put focus back. `shown` is the animation; `open` is the intent.
+  const [shown, setShown] = useState(false);
+  const hasOpened = useRef(false);
+  useEffect(() => {
+    if (open) hasOpened.current = true;
+    setShown(open);
+  }, [open]);
+
+  // Who to give focus back to. Radix returns focus to its own <Dialog.Trigger>, and
+  // these sheets have none — they're opened from the tab bar through app state, not
+  // from a trigger Radix ever saw. Left alone it calls focus() on a null trigger and
+  // focus lands on <body>, which strands a keyboard or VoiceOver user at the top of
+  // the page after every Escape. So remember what was focused when the sheet went up
+  // and hand it back on the way out.
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = document.activeElement;
+    opener.current = el instanceof HTMLElement ? el : null;
+  }, []);
+
   return (
     <Drawer.Root
-      open={open}
-      onOpenChange={onOpenChange}
+      open={shown}
+      onOpenChange={(next) => {
+        // Vaul's own dismissals (Escape, the overlay, a drag past the threshold)
+        // start the exit animation; the caller hears about it below.
+        if (!next) setShown(false);
+      }}
       snapPoints={snapPoints as (number | string)[] | undefined}
       activeSnapPoint={snapPoints ? snap : undefined}
       setActiveSnapPoint={snapPoints ? setSnap : undefined}
@@ -95,6 +128,7 @@ export function Sheet({
       autoFocus
       onAnimationEnd={(isOpen) => {
         if (isOpen) onOpenComplete?.();
+        else if (hasOpened.current) onOpenChange(false);
       }}
     >
       <Drawer.Portal>
@@ -105,6 +139,22 @@ export function Sheet({
           // exact. Without them the box is sized here, in svh.
           className={`wm-sheet ${snapPoints ? "wm-sheet--snapped" : ""} ${className}`}
           style={heightSvh && !snapPoints ? { height: `${heightSvh}svh` } : undefined}
+          // Radix does NOT set aria-modal — it isolates the dialog with aria-hidden
+          // on everything else plus a focus scope, which is the more robust mechanism
+          // but leaves the attribute off. The app's dialogs are all announced as
+          // modal, so state it. This is one attribute passed through the primitive,
+          // not a second implementation of anything.
+          aria-modal="true"
+          // Radix composes this BEFORE its own handler and skips that one once we've
+          // prevented the default, so this is the supported way to redirect the
+          // return of focus — not a second focus implementation.
+          onCloseAutoFocus={(e) => {
+            const el = opener.current;
+            if (el?.isConnected) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
           // We never render a Description; tell Radix so on purpose rather than
           // letting it warn on every open.
           aria-describedby={undefined}
@@ -116,6 +166,18 @@ export function Sheet({
       </Drawer.Portal>
     </Drawer.Root>
   );
+}
+
+/**
+ * The two lines every sheet needs: `open` to hand to <Sheet>, and `dismiss()` for a
+ * sheet closing itself (Save, Done, an archive that empties the card). Going through
+ * `dismiss` rather than calling `PhoneUI.close()` directly is what lets the exit
+ * animation play and lets Radix put focus back where it was — `close()` unmounts the
+ * sheet on the spot, and neither happens.
+ */
+export function useSheetOpen(): { open: boolean; dismiss: () => void } {
+  const [open, setOpen] = useState(true);
+  return { open, dismiss: () => setOpen(false) };
 }
 
 /**

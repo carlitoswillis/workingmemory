@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createNoteAction, editDetailsAction } from "@/app/actions";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { findNote, usePhoneBoardData } from "./phone-data";
 
 // The daily note, on the phone: a full-height editor in a sheet. Its own component
@@ -29,6 +29,7 @@ const Markdown = dynamic(() => import("../Markdown"), {
 
 export default function PhoneNote() {
   const { close } = usePhoneUI();
+  const { open, dismiss } = useSheetOpen();
   const { boardId, items, loading, refresh } = usePhoneBoardData();
   const note = findNote(items);
 
@@ -56,7 +57,7 @@ export default function PhoneNote() {
 
   return (
     <Sheet
-      open
+      open={open}
       onOpenChange={(o) => {
         if (o) return;
         save();
@@ -128,7 +129,7 @@ export default function PhoneNote() {
             className="wm-ph-btn wm-ph-btn--primary"
             onClick={() => {
               save();
-              close();
+              dismiss();
             }}
           >
             Done

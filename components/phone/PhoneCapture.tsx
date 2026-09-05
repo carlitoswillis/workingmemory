@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addItemAction } from "@/app/actions";
 import { DEFAULT_LISTS } from "@/lib/lists";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { movableLists, usePhoneBoardData } from "./phone-data";
 
 // Capture (§2 C). One job: write a thought down and get out of the way. A single
@@ -25,6 +25,7 @@ const BRAIN_DUMP = "braindump";
 
 export default function PhoneCapture({ listId }: { listId?: string }) {
   const { close } = usePhoneUI();
+  const { open, dismiss } = useSheetOpen();
   const { boardId, lists, refresh } = usePhoneBoardData();
   const [text, setText] = useState("");
   const [, startTransition] = useTransition();
@@ -41,13 +42,39 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
     BRAIN_DUMP;
   const [target, setTarget] = useState<string>(listId ?? fallback);
 
+  // Brain Dump is the LAST column, so on a phone the selected chip starts off the
+  // right-hand edge of the strip and the sheet looks like it has no list chosen at
+  // all. Scroll it into view once, on open.
+  // (Keyed on the columns arriving, not on mount: under the fallback fetch there are
+  // no chips yet on the first render. Once, though — after that the strip is the
+  // reader's to scroll.)
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const scrolledToTarget = useRef(false);
+  useEffect(() => {
+    if (scrolledToTarget.current || columns.length === 0) return;
+    scrolledToTarget.current = true;
+    // scrollLeft rather than scrollIntoView: the strip is inside a portal that is
+    // still transforming while the sheet opens, and scrollIntoView either no-ops
+    // against it or scrolls the wrong ancestor. One frame later, this is exact.
+    const raf = requestAnimationFrame(() => {
+      const strip = chipsRef.current;
+      const sel = strip?.querySelector<HTMLElement>('[aria-checked="true"]');
+      if (!strip || !sel) return;
+      strip.scrollLeft = Math.max(
+        0,
+        sel.offsetLeft - (strip.clientWidth - sel.clientWidth) / 2,
+      );
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [columns.length]);
+
   const canSave = text.trim().length > 0;
 
   function save() {
     const t = text.trim();
     if (!t) return;
     setText("");
-    close();
+    dismiss();
     startTransition(() => {
       addItemAction(boardId, t, target);
       refresh();
@@ -56,7 +83,7 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
 
   return (
     <Sheet
-      open
+      open={open}
       onOpenChange={(o) => !o && close()}
       label="Capture a thought"
       // No fixed height: the box is sized by `.wm-sheet--capture`, whose min-height
@@ -90,6 +117,7 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
         />
 
         <div
+          ref={chipsRef}
           className="wm-ph-chips"
           style={{ marginTop: 12 }}
           role="radiogroup"
@@ -113,7 +141,7 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
       {/* The bar the whole sheet is arranged around: always the last thing above the
           keyboard, never behind it. */}
       <div className="wm-sheet__bar">
-        <button type="button" className="wm-ph-btn wm-ph-btn--auto" onClick={close}>
+        <button type="button" className="wm-ph-btn wm-ph-btn--auto" onClick={dismiss}>
           Cancel
         </button>
         <button

@@ -6,7 +6,7 @@ import { isSentinelList } from "@/lib/lists";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import type { Item, ItemEvent } from "@/lib/types";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
 // Time travel gets its OWN MODE SCREEN on the phone (§2 G), not the desktop
@@ -33,6 +33,7 @@ const fmtMoment = (ms: number) =>
 
 export default function PhoneTimeTravel() {
   const { close } = usePhoneUI();
+  const { open, dismiss } = useSheetOpen();
   const { boardId, listLabels } = usePhoneBoardData();
   const [timeline, setTimeline] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
   const [now] = useState(() => Date.now());
@@ -94,7 +95,7 @@ export default function PhoneTimeTravel() {
   }, [snapshot]);
 
   return (
-    <Sheet open onOpenChange={(o) => !o && close()} label="Time travel" heightSvh={96}>
+    <Sheet open={open} onOpenChange={(o) => !o && close()} label="Time travel" heightSvh={96}>
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
         <p className="wm-ph-caption">{active ? "As it was" : "Time travel"}</p>
         <p className="wm-ph-title wm-ph-num">
@@ -153,7 +154,7 @@ export default function PhoneTimeTravel() {
         <button
           type="button"
           className={`wm-ph-btn ${active ? "wm-ph-btn--primary" : ""}`}
-          onClick={() => (active ? setValueMs(null) : close())}
+          onClick={() => (active ? setValueMs(null) : dismiss())}
         >
           {active ? "Return to now" : "Close"}
         </button>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getItemAction, searchArchivedAction } from "@/app/actions";
 import { searchItems, type SearchHit } from "@/lib/search";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
 // Find (§2 E). The SAME search this app has always had, in a sheet: the ranking, the
@@ -37,6 +37,7 @@ function Highlight({ snippet, start, length }: SearchHit) {
 
 export default function PhoneSearch() {
   const { close, open } = usePhoneUI();
+  const { open: shown } = useSheetOpen();
   const { boardId, items, listLabels } = usePhoneBoardData();
   const [q, setQ] = useState("");
   const [archived, setArchived] = useState<SearchHit[] | null>(null);
@@ -92,7 +93,7 @@ export default function PhoneSearch() {
 
   return (
     <Sheet
-      open
+      open={shown}
       onOpenChange={(o) => !o && close()}
       label="Search cards"
       heightSvh={96}

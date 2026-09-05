@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet } from "./Sheet";
+import { Sheet, useSheetOpen } from "./Sheet";
 import { findReview, usePhoneBoardData } from "./phone-data";
 
 // The AI weekly review, on the phone. Its own component reading the same row the
@@ -37,12 +37,13 @@ function whenLabel(iso: string): string {
 
 export default function PhoneReview() {
   const { close } = usePhoneUI();
+  const { open } = useSheetOpen();
   const { items, loading } = usePhoneBoardData();
   const review = findReview(items);
   const body = review?.details?.trim() ?? "";
 
   return (
-    <Sheet open onOpenChange={(o) => !o && close()} label="Weekly review" heightSvh={96}>
+    <Sheet open={open} onOpenChange={(o) => !o && close()} label="Weekly review" heightSvh={96}>
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
         <p className="wm-ph-title">Weekly review</p>
         <p className="wm-ph-caption">
