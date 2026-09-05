@@ -16,7 +16,14 @@ import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
 import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
-import { Chevron, Sheet, fieldFocusProps, useSheetOpen } from "./Sheet";
+import {
+  Chevron,
+  Sheet,
+  fieldFocusProps,
+  onFieldBlur,
+  onFieldFocus,
+  useSheetOpen,
+} from "./Sheet";
 import { childrenOf, findItem, movableLists, usePhoneBoardData } from "./phone-data";
 import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
 
@@ -283,6 +290,31 @@ function CardBody({
   const [title, setTitle] = useState(item.text);
   const [details, setDetails] = useState(item.details ?? "");
   useEffect(() => setTitle(item.text), [item.id, item.text]);
+
+  // In the full state the card's name IS the field — printing it in the head and
+  // again as the first thing in the body reads as a bug, and a fixed two-row box
+  // leaves a dead strip under a one-line title. So the head's title becomes the
+  // field when the sheet is expanded, and the field is exactly as tall as its text.
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title, expanded]);
+
+  function saveTitle() {
+    const t = title.trim();
+    if (!t || t === item.text) {
+      setTitle(item.text);
+      return;
+    }
+    run(() => {
+      editItemAction(boardId, item.id, t);
+      onChanged();
+    });
+  }
+
   useEffect(() => setDetails(item.details ?? ""), [item.id, item.details]);
 
   const [childText, setChildText] = useState("");
@@ -306,7 +338,23 @@ function CardBody({
         <div style={{ minWidth: 0, flex: 1 }}>
           {/* Depth is stated once, in words, and never by indenting a row. */}
           {parentTitle && <p className="wm-ph-parent wm-ph-clamp2">{parentTitle}</p>}
-          <p className="wm-ph-title wm-ph-clamp2">{item.text}</p>
+          {expanded ? (
+            <textarea
+              ref={titleRef}
+              rows={1}
+              className="wm-ph-field wm-ph-field--title"
+              aria-label="Card title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onFocus={onFieldFocus}
+              onBlur={() => {
+                onFieldBlur();
+                saveTitle();
+              }}
+            />
+          ) : (
+            <p className="wm-ph-title wm-ph-clamp2">{item.text}</p>
+          )}
           <p className="wm-ph-caption" style={{ marginTop: 3 }}>
             {listLabels[item.list] ?? item.list}
             {kids.length > 0 && (
@@ -363,43 +411,22 @@ function CardBody({
       {/* ── full: the editor ────────────────────────────────────────────── */}
       {expanded && (
         <div className="wm-sheet__scroll">
-          {/* No `Title` / `Details` captions: the first field holds the card's name,
-              which is already written across the top of the sheet, and the second is
-              the only other thing here. A label over a self-evident field is
-              furniture. */}
-          <textarea
-            id="wm-ph-card-title"
-            className="wm-ph-field"
-            style={{ minHeight: 56 }}
-            rows={2}
-            aria-label="Card title"
-            {...fieldFocusProps()}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              const t = title.trim();
-              if (!t || t === item.text) {
-                setTitle(item.text);
-                return;
-              }
-              run(() => {
-                editItemAction(boardId, item.id, t);
-                onChanged();
-              });
-            }}
-          />
-
+          {/* No `Title` / `Details` captions, and no second copy of the title: the
+              card's name is the field in the head, and this is the only other thing
+              here. A label over a self-evident field is furniture. */}
           <textarea
             id="wm-ph-card-details"
             className="wm-ph-field"
             // Tall enough that a paragraph is not cut off by its own underline.
-            style={{ marginTop: 14, minHeight: 140 }}
+            style={{ minHeight: 140 }}
             value={details}
             aria-label="Details"
             placeholder="Anything worth remembering about this, markdown supported"
-            {...fieldFocusProps()}
+            onFocus={onFieldFocus}
             onChange={(e) => setDetails(e.target.value)}
             onBlur={() => {
+              // Both: the layout-scroll pin is released, THEN the write goes out.
+              onFieldBlur();
               if (details === (item.details ?? "")) return;
               run(() => {
                 editDetailsAction(boardId, item.id, details);

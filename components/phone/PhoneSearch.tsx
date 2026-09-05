@@ -31,6 +31,11 @@ import { usePhoneBoardData } from "./phone-data";
 
 type Row = { kind: "board" | "archived"; hit: SearchHit };
 
+// The daily note and the weekly review live on sentinel lists, which have no column
+// on the board and so no label in `listLabels`. Name them rather than printing the
+// raw id under a hit.
+const SENTINEL_LABELS: Record<string, string> = { note: "Note", review: "Review" };
+
 function Highlight({ snippet, start, length }: SearchHit) {
   return (
     <>
@@ -164,7 +169,10 @@ export default function PhoneSearch() {
           <ul>
             {rows.map((row, i) => {
               const head = section(i);
-              const listLabel = listLabels[row.hit.item.list] ?? row.hit.item.list;
+              const listLabel =
+                listLabels[row.hit.item.list] ??
+                SENTINEL_LABELS[row.hit.item.list] ??
+                row.hit.item.list;
               const isArchived = row.kind === "archived";
               return (
                 <li key={`${row.kind}-${row.hit.item.id}`}>

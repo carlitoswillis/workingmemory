@@ -1004,6 +1004,29 @@ body {
   border-bottom: 0;
 }
 
+/* The note. Its body — the editor, or the rendered markdown you tap to edit — is the
+   whole sheet, so there is no dead half-screen under the last line to tap into
+   nothing. */
+.wm-sheet--note .wm-sheet__scroll {
+  display: flex;
+  flex-direction: column;
+}
+.wm-sheet--note .wm-sheet__scroll > .wm-ph-field,
+.wm-sheet--note .wm-sheet__scroll > .wm-ph-read {
+  flex: 1 1 auto;
+}
+/* Rendered markdown you tap to edit. A reading surface, not a control: flush left on
+   the same 16px rule as the text it replaces, and the whole of it is the target. */
+.wm-ph-read {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text-hi);
+}
+
 .wm-sheet__grip {
   flex: none;
   width: 36px;
@@ -1215,6 +1238,23 @@ body {
 textarea.wm-ph-field {
   resize: none;
   min-height: 96px;
+}
+/* The card's name in the full state. It is the sheet's title AND the field you
+   rename in — one of them, not two — so it carries the title's weight, no box, no
+   rule, and no min-height: the caret is the only mark, and the box is exactly as
+   tall as the words. 16px, because Safari zooms the page below that. */
+textarea.wm-ph-field--title {
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: var(--p-medium, 510);
+  border-bottom: 0;
+  overflow: hidden;
+  /* 44pt to tap, 20px on the page: the padding makes the target and the negative
+     margin gives the space back, so the title sits exactly where it sat in the peek
+     and expanding the sheet does not nudge it. */
+  min-height: 44px;
+  padding: 12px 0;
+  margin: -12px 0;
 }
 
 /* A horizontal chip strip (the capture list chooser, recurrence, move-to). */
