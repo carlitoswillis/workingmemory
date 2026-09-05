@@ -13,14 +13,21 @@ import { keyboardInset, visualViewportVars } from "./keyboardInset.ts";
 // mirrors three numbers onto `document.documentElement`, and the shell and every
 // sheet are measured against them instead:
 //
-//   --kb       how much the keyboard covers (a bar's padding-bottom)
+//   --kb       how much the keyboard covers (the sheet's `bottom`, so the box sits
+//              ON the keys rather than behind them)
 //   --vvh      the height of what you can SEE (the shell's height while a sheet is up,
 //              and every sheet's max-height)
 //   --vvh-top  how far the visual viewport has slid down the layout viewport
 //
 // documentElement, not the shell element: Vaul portals every sheet to <body>, so a
-// variable set on the shell div is invisible to the sheet floating above it. That one
-// scoping mistake is why `.wm-sheet { padding-bottom: var(--kb) }` had always been 0.
+// variable set on the shell div is invisible to the sheet floating above it. While
+// these lived on the shell every sheet read --kb as 0 and the bug was hidden; moving
+// them here is what made the numbers real, and what exposed the sheet rules that were
+// spending them twice. Each of --kb and --vvh is spent in exactly ONE place now (the
+// `.wm-sheet` rule in app/globals.css), and <Sheet> turns Vaul's own repositionInputs
+// off for every sheet these describe, so nothing else writes height or bottom on
+// those drawers. A snapped sheet (the card) is the exception, and Vaul keeps the
+// keyboard there — see the prop in ./Sheet.tsx.
 //
 // visualViewport is the only signal that works on iOS; where it's missing (very old
 // browsers, SSR) the inset is 0 and the layout is the no-keyboard one.

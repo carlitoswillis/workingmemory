@@ -9,9 +9,9 @@ import { movableLists, usePhoneBoardData } from "./phone-data";
 
 // Capture (§2 C). One job: write a thought down and get out of the way. A single
 // snap, one textarea, a list chooser, and a Save control in the sheet's own bottom
-// bar — which is the whole reason `--kb` exists. The sheet is bottom-anchored, so the
-// keyboard inset applied as padding-bottom lifts the bar above the keys instead of
-// leaving it buried under them.
+// bar — which is the whole reason `--kb` exists. The sheet is bottom-anchored, and
+// `.wm-sheet { bottom: var(--kb) }` stands the whole box on top of the keyboard, so
+// the bar is the last thing above the keys instead of buried under them.
 //
 // It is NOT a form: no bordered box, no focus ring, no `Title` label over an obvious
 // field. A caret on the sheet's own surface, a hairline under it, the lists, and the

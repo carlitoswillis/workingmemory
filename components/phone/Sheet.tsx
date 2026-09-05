@@ -25,8 +25,8 @@ import type { SnapPoint } from "./sheetSnaps.ts";
 //   - `onOpenComplete`, fired off Vaul's open/close animation-end callback — the ONLY
 //     place a sheet may move focus into a field, so the sheet and the keyboard never
 //     animate at the same time (§4);
-//   - the `--kb` keyboard inset as padding-bottom on the sheet box, which (because the
-//     sheet is bottom-anchored) lifts its contents clear of the on-screen keyboard;
+//   - one owner for the keyboard per sheet — the app's --kb/--vvh for a sized sheet,
+//     Vaul's own `repositionInputs` for a snapped one (see the prop below);
 //   - `scrollLockTimeout={100}`: Vaul's own rule that a downward drag only closes the
 //     sheet from `scrollTop === 0`, re-armed 100ms after the inner scroller stops.
 //
@@ -123,6 +123,29 @@ export function Sheet({
       snapToSequentialPoint
       // Vaul's own "don't close while the inner list is scrolled" rule (§4).
       scrollLockTimeout={100}
+      // WHO OWNS THE KEYBOARD. Exactly one of the two models may be live per sheet,
+      // and which one is right depends on how the box is anchored.
+      //
+      // A SIZED sheet (Capture, Find, the rest) is a real bottom-anchored box, and
+      // the app's own model fits it: --kb / --vvh (components/phone/useKeyboardInset
+      // .ts) become `bottom` and `max-height` in one CSS rule. Vaul's
+      // `repositionInputs` must be OFF for these, because it writes an inline
+      // `height` on the drawer when the keyboard opens and only restores it when the
+      // keyboard closes — freezing the box at whatever height it had at that instant.
+      // Both sheets are `height: auto`, sized by their content, so the freeze is
+      // fatal: open Find, the field autofocuses, the keyboard arrives while the sheet
+      // is still a field and a hint line, and the box is pinned at ~110px. Every
+      // result you type after that lands in a slot too small to show one row, and the
+      // sheet never grows again.
+      //
+      // A SNAPPED sheet (the card) is not bottom-anchored by CSS at all: its box is
+      // the whole window and Vaul translates it down, off `window.innerHeight`, so
+      // that only the active snap shows. `bottom: var(--kb)` would carry that
+      // translate along and push the card's title off the top of the screen, and the
+      // correction needs the active snap's offset — which only Vaul has. So Vaul
+      // keeps the keyboard here, and its inline height costs nothing: the box has a
+      // fixed height already.
+      repositionInputs={Boolean(snapPoints)}
       // Radix moves focus into the sheet on open; the caller then moves it to the
       // right field on open-COMPLETE. Without this Vaul leaves focus on the trigger
       // and the sheet is unreachable from the keyboard / VoiceOver.

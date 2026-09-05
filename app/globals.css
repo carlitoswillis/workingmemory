@@ -983,40 +983,60 @@ html:has(.wm-sheet) [data-shell="phone"] {
 .wm-sheet {
   position: fixed;
   right: 0;
-  bottom: 0;
   left: 0;
   z-index: 61;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  /* The keyboard fix (§ pass-2). `--vvh` is the visual viewport's height in px,
-     written onto <html> by useKeyboardInset. While the keyboard is up the visual
-     viewport shrinks, so the sheet must shrink with it — otherwise its top edge
-     (and, in search, the field) is pushed off the screen. `min()` keeps the
-     no-keyboard case at 96svh, and the transition means the sheet TRACKS the
-     keyboard instead of snapping to its new size. This is the one piece of
+  /* THE KEYBOARD, IN TWO LINES, AND ONLY HERE.
+     `position: fixed` is fixed to the LAYOUT viewport, which iOS does not shrink for
+     the keyboard — so a plain `bottom: 0` sheet sits behind the keys. `--kb` (how
+     much the keyboard covers) lifts the box off them; `--vvh` (the height you can
+     actually see) keeps its top on screen. Both are written onto <html> by
+     components/phone/useKeyboardInset.ts.
+     Spend each of them ONCE. This rule is the whole budget for a sized sheet: there
+     is no `--kb` padding anywhere below, and <Sheet> turns Vaul's own
+     `repositionInputs` off for these so nothing else writes height/bottom on the
+     drawer. Paying twice is not a smaller sheet, it is an empty one — border-box
+     sizing meant a `--kb` padding inside a `--vvh` cap left Capture's textarea in an
+     8px scroller with the Save bar drawn over it, and Find's results in a 60px slot.
+     `min()` keeps the no-keyboard case at 96svh, and the transitions mean the sheet
+     TRACKS the keyboard rather than snapping. This is the one piece of
      non-finger-triggered motion in the app, and it exists to remove a jump. */
+  bottom: var(--kb, 0px);
   max-height: min(96svh, var(--vvh, 96svh));
-  transition: max-height var(--dur-kb, 160ms) cubic-bezier(0.32, 0.72, 0, 1);
+  transition:
+    max-height var(--dur-kb, 160ms) cubic-bezier(0.32, 0.72, 0, 1),
+    bottom var(--dur-kb, 160ms) cubic-bezier(0.32, 0.72, 0, 1);
   outline: none;
   border-top: 1px solid var(--veil);
   border-top-left-radius: 18px;
   border-top-right-radius: 18px;
   background: var(--surface);
   color: var(--text-hi);
-  /* The sheet is bottom-anchored, so padding here lifts its CONTENT above the
-     on-screen keyboard while the box itself stays glued to the bottom edge. The
-     safe-area term keeps the last control off the home indicator. */
-  padding-bottom: calc(var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  /* The home indicator, and nothing else. The keyboard is `bottom: var(--kb)`
+     above — while the keys are up they cover the indicator anyway, so this term
+     goes to 0 exactly when it stops meaning anything. */
+  padding-bottom: max(0px, calc(env(safe-area-inset-bottom, 0px) - var(--kb, 0px)));
   -webkit-tap-highlight-color: transparent;
 }
 
 /* A snap-point sheet's box is the whole window; Vaul translates it down so only the
    active snap is showing. That is what makes a px snap ("180px" for the card peek)
-   exact rather than proportional — so this height must NOT be clamped. */
+   exact rather than proportional — so this height must NOT be clamped.
+   And `bottom` goes back to 0 here, because a snapped sheet is not bottom-anchored
+   by this rule at all: what puts it on the bottom edge is Vaul's own translate,
+   measured off `window.innerHeight`. Lifting the box by `--kb` as well would carry
+   the translate with it and push the sheet's head off the TOP of the screen. Vaul
+   owns the keyboard for these — <Sheet> leaves `repositionInputs` on wherever there
+   are snap points, since only Vaul knows the active snap's offset. The transition
+   goes with it: both dimensions are constants here, and an animated `bottom` would
+   only lag the inline one Vaul writes. */
 .wm-sheet--snapped {
+  bottom: 0;
   height: 100svh;
   max-height: 100svh;
+  transition: none;
 }
 
 .wm-sheet[data-vaul-drawer] {
