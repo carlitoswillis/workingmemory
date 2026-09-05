@@ -613,132 +613,6 @@ body {
 /* Two lines, then clamp — never a single-line ellipsis. The row GROWS rather
    than clipping when the system text size does (WCAG 1.4.10). */
 .phone-row__title {
-/* phone sheets */
-/* Package B's block: the Vaul-backed bottom sheets and the secondary phone screens
-   that live inside them (components/phone/Sheet.tsx and friends). APPEND-ONLY, and
-   scoped to `wm-sheet*` / `wm-ph-*` so it can never reach the desktop board.
-
-   House rules from the spec, in one place:
-     · heights in `svh`, never `vh` — a phone's `100vh` is a lie while the URL bar
-       is showing (§9);
-     · `--kb` is the live keyboard height, written onto <html> at runtime by
-       components/phone/useKeyboardInset.ts. It is deliberately NOT declared in any
-       stylesheet, so nothing here collides with the shell block;
-     · every text field is 16px, because Safari zooms the page below that (§4);
-     · elevation is a luminance step plus a hairline, never a shadow (§8);
-     · no per-component reduced-motion query — the global rule near the top of this
-       file already zeroes every duration with `!important` (§6). */
-
-.wm-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.wm-sheet__overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: var(--scrim-deep);
-}
-
-.wm-sheet {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 61;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  max-height: 96svh;
-  outline: none;
-  border-top: 1px solid var(--veil);
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
-  background: var(--surface);
-  color: var(--text-hi);
-  /* The sheet is bottom-anchored, so padding here lifts its CONTENT above the
-     on-screen keyboard while the box itself stays glued to the bottom edge. The
-     safe-area term keeps the last control off the home indicator. */
-  padding-bottom: calc(var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* A snap-point sheet's box is the whole window; Vaul translates it down so only the
-   active snap is showing. That is what makes a px snap ("180px" for the card peek)
-   exact rather than proportional — so this height must NOT be clamped. */
-.wm-sheet--snapped {
-  height: 100svh;
-  max-height: 100svh;
-}
-
-.wm-sheet[data-vaul-drawer] {
-  will-change: transform;
-}
-
-/* The card sheet's peek has 180px to hold a two-line title, a line of meta and a
-   full-width Done control. Nothing here may grow past that or the Done control ends
-   up under the fold — the one thing the peek exists to prevent. */
-.wm-sheet--card .wm-sheet__head {
-  min-height: 0;
-}
-
-/* Capture is the sheet the keyboard is always up in, so it's sized rather than
-   fixed: a bottom-anchored box with `height: auto` GROWS UPWARD, and folding the
-   keyboard inset into min-height means the visible half-screen stays a half screen
-   while the keys are showing. Pinning `height: 50svh` instead would keep the box the
-   same size and squeeze the textarea down to nothing. */
-.wm-sheet--capture {
-  height: auto;
-  min-height: calc(50svh + var(--kb, 0px));
-  max-height: 92svh;
-}
-
-.wm-sheet__grip {
-  flex: none;
-  width: 36px;
-  height: 4px;
-  margin: 8px auto 4px;
-  border-radius: 999px;
-  background: var(--veil);
-}
-
-/* ── the type ladder (§8): two sizes × three weights, plus a caption ───────── */
-
-.wm-ph-title {
-  font-size: 15px;
-  line-height: 1.25;
-  font-weight: 510;
-  color: var(--text-hi);
-}
-.wm-ph-body {
-  font-size: 15px;
-  line-height: 1.4;
-  color: var(--text-hi);
-}
-.wm-ph-meta {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-mid);
-}
-.wm-ph-caption {
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-lo);
-}
-.wm-ph-num {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Titles clamp to two lines and grow rather than clip (WCAG 1.4.10). */
-.wm-ph-clamp2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -965,6 +839,137 @@ body {
   }
 }
 /* /phone shell */
+
+/* phone sheets */
+/* Package B's block: the Vaul-backed bottom sheets and the secondary phone screens
+   that live inside them (components/phone/Sheet.tsx and friends). APPEND-ONLY, and
+   scoped to `wm-sheet*` / `wm-ph-*` so it can never reach the desktop board.
+
+   House rules from the spec, in one place:
+     · heights in `svh`, never `vh` — a phone's `100vh` is a lie while the URL bar
+       is showing (§9);
+     · `--kb` is the live keyboard height, written onto <html> at runtime by
+       components/phone/useKeyboardInset.ts. It is deliberately NOT declared in any
+       stylesheet, so nothing here collides with the shell block;
+     · every text field is 16px, because Safari zooms the page below that (§4);
+     · elevation is a luminance step plus a hairline, never a shadow (§8);
+     · no per-component reduced-motion query — the global rule near the top of this
+       file already zeroes every duration with `!important` (§6). */
+
+.wm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wm-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--scrim-deep);
+}
+
+.wm-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-height: 96svh;
+  outline: none;
+  border-top: 1px solid var(--veil);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  background: var(--surface);
+  color: var(--text-hi);
+  /* The sheet is bottom-anchored, so padding here lifts its CONTENT above the
+     on-screen keyboard while the box itself stays glued to the bottom edge. The
+     safe-area term keeps the last control off the home indicator. */
+  padding-bottom: calc(var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A snap-point sheet's box is the whole window; Vaul translates it down so only the
+   active snap is showing. That is what makes a px snap ("180px" for the card peek)
+   exact rather than proportional — so this height must NOT be clamped. */
+.wm-sheet--snapped {
+  height: 100svh;
+  max-height: 100svh;
+}
+
+.wm-sheet[data-vaul-drawer] {
+  will-change: transform;
+}
+
+/* The card sheet's peek has 180px to hold a two-line title, a line of meta and a
+   full-width Done control. Nothing here may grow past that or the Done control ends
+   up under the fold — the one thing the peek exists to prevent. */
+.wm-sheet--card .wm-sheet__head {
+  min-height: 0;
+}
+
+/* Capture is the sheet the keyboard is always up in, so it's sized rather than
+   fixed: a bottom-anchored box with `height: auto` GROWS UPWARD, and folding the
+   keyboard inset into min-height means the visible half-screen stays a half screen
+   while the keys are showing. Pinning `height: 50svh` instead would keep the box the
+   same size and squeeze the textarea down to nothing. */
+.wm-sheet--capture {
+  height: auto;
+  min-height: calc(50svh + var(--kb, 0px));
+  max-height: 92svh;
+}
+
+.wm-sheet__grip {
+  flex: none;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 4px;
+  border-radius: 999px;
+  background: var(--veil);
+}
+
+/* ── the type ladder (§8): two sizes × three weights, plus a caption ───────── */
+
+.wm-ph-title {
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 510;
+  color: var(--text-hi);
+}
+.wm-ph-body {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-hi);
+}
+.wm-ph-meta {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-mid);
+}
+.wm-ph-caption {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-lo);
+}
+.wm-ph-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Titles clamp to two lines and grow rather than clip (WCAG 1.4.10). */
+.wm-ph-clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 
