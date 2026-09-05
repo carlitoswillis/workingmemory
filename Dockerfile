@@ -33,6 +33,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
 COPY next.config.js ./
 COPY litestream.yml /etc/litestream.yml
 COPY scripts/start.sh ./scripts/start.sh
