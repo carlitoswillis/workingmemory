@@ -5,7 +5,11 @@ import { Drawer } from "vaul";
 import PhoneBoards from "./PhoneBoards";
 import PhoneCapture from "./PhoneCapture";
 import PhoneCardSheet from "./PhoneCardSheet";
+import PhoneMore from "./PhoneMore";
+import PhoneNote from "./PhoneNote";
+import PhoneReview from "./PhoneReview";
 import PhoneSearch from "./PhoneSearch";
+import PhoneTimeTravel from "./PhoneTimeTravel";
 import { usePhoneUI } from "./PhoneShell";
 import type { SnapPoint } from "./sheetSnaps.ts";
 
@@ -137,8 +141,14 @@ export function PhoneSheetHost() {
       return <PhoneSearch key="search" />;
     case "boards":
       return <PhoneBoards key="boards" />;
-    default:
-      return null;
+    case "time":
+      return <PhoneTimeTravel key="time" />;
+    case "review":
+      return <PhoneReview key="review" />;
+    case "note":
+      return <PhoneNote key="note" />;
+    case "more":
+      return <PhoneMore key="more" />;
   }
 }
 
