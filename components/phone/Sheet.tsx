@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Drawer } from "vaul";
+import PhoneBoards from "./PhoneBoards";
 import PhoneCapture from "./PhoneCapture";
 import PhoneCardSheet from "./PhoneCardSheet";
+import PhoneSearch from "./PhoneSearch";
 import { usePhoneUI } from "./PhoneShell";
 import type { SnapPoint } from "./sheetSnaps.ts";
 
@@ -131,6 +133,10 @@ export function PhoneSheetHost() {
       return <PhoneCardSheet key="card" itemId={sheet.itemId} />;
     case "capture":
       return <PhoneCapture key="capture" listId={sheet.listId} />;
+    case "search":
+      return <PhoneSearch key="search" />;
+    case "boards":
+      return <PhoneBoards key="boards" />;
     default:
       return null;
   }
