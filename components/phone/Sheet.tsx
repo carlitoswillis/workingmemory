@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Drawer } from "vaul";
+import PhoneCapture from "./PhoneCapture";
 import PhoneCardSheet from "./PhoneCardSheet";
 import { usePhoneUI } from "./PhoneShell";
 import type { SnapPoint } from "./sheetSnaps.ts";
@@ -128,6 +129,8 @@ export function PhoneSheetHost() {
   switch (sheet.kind) {
     case "card":
       return <PhoneCardSheet key="card" itemId={sheet.itemId} />;
+    case "capture":
+      return <PhoneCapture key="capture" listId={sheet.listId} />;
     default:
       return null;
   }

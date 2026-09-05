@@ -421,6 +421,17 @@ body {
   min-height: 0;
 }
 
+/* Capture is the sheet the keyboard is always up in, so it's sized rather than
+   fixed: a bottom-anchored box with `height: auto` GROWS UPWARD, and folding the
+   keyboard inset into min-height means the visible half-screen stays a half screen
+   while the keys are showing. Pinning `height: 50svh` instead would keep the box the
+   same size and squeeze the textarea down to nothing. */
+.wm-sheet--capture {
+  height: auto;
+  min-height: calc(50svh + var(--kb, 0px));
+  max-height: 92svh;
+}
+
 .wm-sheet__grip {
   flex: none;
   width: 36px;
