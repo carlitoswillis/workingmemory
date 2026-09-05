@@ -2,14 +2,18 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { getUserBoards } from "@/lib/boards";
 import {
   addList,
   deleteList,
+  ensureLists,
+  getListLabels,
+  getLists,
   listExists,
   renameList,
   reorderLists,
 } from "@/lib/columns";
-import { DEMO_MODE, getBoardContext } from "@/lib/db";
+import { DEMO_MODE, getBoardContext, getMainDb } from "@/lib/db";
 import {
   demoteToCard,
   getProvenance,
@@ -21,10 +25,12 @@ import { setParent } from "@/lib/nesting";
 import { formatRecurrence, parseRecurrence } from "@/lib/recurrence";
 import { pokeBoard } from "@/lib/realtime";
 import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
+import type { ListDef } from "@/lib/lists";
 import {
   getArchivedItems,
   getHistory,
   getItem,
+  getItems,
   getTimelineData,
 } from "@/lib/queries";
 import { searchItems, searchTerms } from "@/lib/search";
@@ -405,4 +411,38 @@ export async function timelineDataAction(
 ): Promise<{ items: Item[]; events: ItemEvent[] }> {
   const { db, boardId: bid } = getBoardContext(boardId);
   return getTimelineData(db, bid);
+}
+
+// ---- Phone app -----------------------------------------------------------------
+// The phone sheets (components/phone/*) live in a subtree that may be mounted beside
+// the desktop board rather than inside it, so they can't count on being handed the
+// board as props. This is their one read: everything a sheet needs, in a single trip,
+// through the same scoped choke point as every other action.
+//
+// It's a FALLBACK, not the normal path — when the phone shell provides its board data
+// through <PhoneDataProvider>, no sheet ever calls this. It exists so package B is
+// correct on its own, whatever the shell around it ends up doing.
+
+export type PhoneBoardSnapshot = {
+  items: Item[];
+  lists: ListDef[];
+  listLabels: Record<string, string>;
+  boards: { id: string; name: string }[];
+};
+
+export async function phoneBoardDataAction(
+  boardId: string | null,
+): Promise<PhoneBoardSnapshot> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  ensureLists(db, bid);
+  return {
+    items: getItems(db, bid),
+    lists: getLists(db, bid),
+    listLabels: getListLabels(db, bid),
+    // The board switcher's list. Empty off the hosted instance, where there is
+    // exactly one board and nothing to switch to.
+    boards: userId
+      ? getUserBoards(getMainDb(), userId).map((b) => ({ id: b.id, name: b.name }))
+      : [],
+  };
 }

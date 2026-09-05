@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Drawer } from "vaul";
+import PhoneCardSheet from "./PhoneCardSheet";
 import { usePhoneUI } from "./PhoneShell";
 import type { SnapPoint } from "./sheetSnaps.ts";
 
@@ -92,7 +93,10 @@ export function Sheet({
       <Drawer.Portal>
         <Drawer.Overlay className="wm-sheet__overlay" />
         <Drawer.Content
-          className={`wm-sheet ${className}`}
+          // With snap points the sheet box is the WHOLE window and Vaul translates
+          // it down so only the active snap shows — that's how a px snap can be
+          // exact. Without them the box is sized here, in svh.
+          className={`wm-sheet ${snapPoints ? "wm-sheet--snapped" : ""} ${className}`}
           style={heightSvh && !snapPoints ? { height: `${heightSvh}svh` } : undefined}
           // We never render a Description; tell Radix so on purpose rather than
           // letting it warn on every open.
@@ -111,20 +115,22 @@ export function Sheet({
  * The single mount point for every phone sheet. `PhoneShell` renders exactly this and
  * nothing else about overlays; which sheet is up is `PhoneUI.sheet` and nothing more.
  * Returns null when no sheet is open, so the phone tree costs nothing at rest.
+ *
+ * Each sheet is keyed on its KIND and not on its subject: drilling from a card into
+ * one of its sub-cards must keep the same sheet mounted, because that sheet owns the
+ * history entries the back-gesture unwinds. Switching to a different kind remounts,
+ * which is what we want — no sheet inherits another's state.
  */
 export function PhoneSheetHost() {
-  const { sheet, close } = usePhoneUI();
-
-  // Vaul unmounts on close, but its exit animation needs the content to stay mounted
-  // for a frame; keep the last sheet around while `open` falls to false.
-  const last = useRef(sheet);
-  if (sheet) last.current = sheet;
-
+  const { sheet } = usePhoneUI();
   if (!sheet) return null;
-  // Sheets land in the commits that follow; this file's job in commit 1 is the
-  // `Sheet` wrapper above, which unblocks package A.
-  void close;
-  return null;
+
+  switch (sheet.kind) {
+    case "card":
+      return <PhoneCardSheet key="card" itemId={sheet.itemId} />;
+    default:
+      return null;
+  }
 }
 
 export default Sheet;

@@ -402,9 +402,23 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Vaul sets an explicit height when snap points are in play; let it. */
+/* A snap-point sheet's box is the whole window; Vaul translates it down so only the
+   active snap is showing. That is what makes a px snap ("180px" for the card peek)
+   exact rather than proportional — so this height must NOT be clamped. */
+.wm-sheet--snapped {
+  height: 100svh;
+  max-height: 100svh;
+}
+
 .wm-sheet[data-vaul-drawer] {
   will-change: transform;
+}
+
+/* The card sheet's peek has 180px to hold a two-line title, a line of meta and a
+   full-width Done control. Nothing here may grow past that or the Done control ends
+   up under the fold — the one thing the peek exists to prevent. */
+.wm-sheet--card .wm-sheet__head {
+  min-height: 0;
 }
 
 .wm-sheet__grip {
