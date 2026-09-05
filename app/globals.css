@@ -390,9 +390,6 @@ body {
 
 /* Touch feedback is the press itself — never a hover state. */
 [data-shell="phone"] .phone-row__body:active,
-[data-shell="phone"] .phone-check:active,
-[data-shell="phone"] .phone-row__undo:active,
-[data-shell="phone"] .phone-row__more:active,
 [data-shell="phone"] .phone-tab:active,
 [data-shell="phone"] .phone-seg__btn:active,
 [data-shell="phone"] .phone-section__toggle:active {
@@ -564,6 +561,13 @@ body {
   border-color: var(--veil);
 }
 
+/* The check zone is the most-tapped button in the app and had no press state at
+   all — the one place a missing 90ms confirmation is actually felt. */
+.phone-check:active,
+.phone-row__undo:active,
+.phone-row__more:active {
+  transform: scale(0.985);
+}
 .phone-check {
   flex: 0 0 auto;
   display: grid;
