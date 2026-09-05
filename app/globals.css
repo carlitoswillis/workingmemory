@@ -313,3 +313,33 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* collapsible columns */
+/* Weekly-review + Note column collapse (components/ReviewColumn.tsx,
+   components/NoteColumn.tsx). The grid-template-rows trick animates to/from
+   an unmeasured content height without JS, so no layout math and no jump when
+   markdown reflows; the prefers-reduced-motion rule above already zeroes every
+   transition-duration on the page, this included. */
+.wm-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms ease,
+    opacity 160ms ease;
+}
+.wm-collapsible.is-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.wm-collapsible__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.wm-collapsible-chevron {
+  transition: transform 160ms ease;
+}
+.wm-collapsible-chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
