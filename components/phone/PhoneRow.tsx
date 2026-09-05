@@ -310,19 +310,14 @@ export default function PhoneRow({
               {...dragHandleProps}
             >
               <span className="phone-row__title">{item.text}</span>
-              {(subTotal > 0 || item.details.trim() || state.error) && (
+              {(subTotal > 0 || state.error) && (
                 <span className="phone-row__meta">
                   {state.error ? (
                     <span className="phone-row__error">{state.error}</span>
                   ) : (
-                    <>
-                      {subTotal > 0 && (
-                        <span className="tabular-nums">
-                          {subDone}/{subTotal} sub-cards
-                        </span>
-                      )}
-                      {item.details.trim() && <span aria-hidden>Notes</span>}
-                    </>
+                    <span className="tabular-nums">
+                      {subDone}/{subTotal} sub-cards
+                    </span>
                   )}
                 </span>
               )}
@@ -334,6 +329,9 @@ export default function PhoneRow({
               </button>
             ) : (
               <>
+                {/* A card with details carries a dot, not a word — the same mark the
+                    desktop card uses, and one that never competes with the title. */}
+                {item.details.trim() && <span className="phone-row__dot" aria-hidden />}
                 {repeats && streak > 0 && (
                   <span
                     className={`phone-row__streak${pulse ? " is-milestone" : ""}`}

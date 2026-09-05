@@ -634,6 +634,15 @@ body {
 .phone-row__error {
   color: var(--now);
 }
+/* Has details — a mark, never a word. */
+.phone-row__dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+  border-radius: 9999px;
+  background: var(--past);
+}
 .phone-row__streak {
   flex: 0 0 auto;
   padding: 0 2px;
