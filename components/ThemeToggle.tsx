@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { applyPref, writePref } from "@/lib/theme";
 
 // Dark (Nocturne, default) ⇄ light ("Nocturne Day") switch. A device-level
 // preference, not account data: stored in localStorage("wm-theme") and applied
@@ -17,13 +18,8 @@ export default function ThemeToggle() {
   function toggle() {
     const next = !light;
     setLight(next);
-    if (next) document.documentElement.dataset.theme = "light";
-    else delete document.documentElement.dataset.theme;
-    try {
-      localStorage.setItem("wm-theme", next ? "light" : "dark");
-    } catch {
-      // storage unavailable (private mode etc.) — theme still applies for the page
-    }
+    writePref(next ? "light" : "dark");
+    applyPref(next ? "light" : "dark");
   }
 
   return (

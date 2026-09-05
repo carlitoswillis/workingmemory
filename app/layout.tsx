@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import ThemeSync from "@/components/ThemeSync";
 
 // Fraunces — the literary "memory" voice (wordmark, headers, italic notes).
 const fraunces = Fraunces({
@@ -65,7 +66,10 @@ export const metadata: Metadata = {
 // `viewportFit: 'cover'` is what lets the phone tab bar reach the bottom edge
 // and makes env(safe-area-inset-*) return anything but 0 (spec §7, §9).
 export const viewport: Viewport = {
-  themeColor: "#0b0e1a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f2e9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0e1a" },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -74,7 +78,7 @@ export const viewport: Viewport = {
 // Applies the saved theme before anything paints (inline + synchronous at the
 // top of <body>, so there's no dark→light flash). Dark is the default; only
 // "light" is ever stored. Keep in sync with components/ThemeToggle.tsx.
-const THEME_INIT = `try{if(localStorage.getItem("wm-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}`;
+const THEME_INIT = `try{var t=localStorage.getItem("wm-theme");if(t==="light"||(t!=="dark"&&matchMedia("(prefers-color-scheme: light)").matches))document.documentElement.dataset.theme="light"}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -84,6 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body>
+        <ThemeSync />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         {children}
       </body>

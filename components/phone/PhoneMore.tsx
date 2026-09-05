@@ -9,6 +9,7 @@ import {
   rememberInstallDismissed,
   shouldOfferInstall,
 } from "./installPrompt.ts";
+import { applyPref, readPref, writePref, type ThemePref } from "@/lib/theme";
 
 // More (§2 F): the drawer of everything that isn't Now, Lists, capture or Find —
 // Review, Note, Boards, Time travel — plus the settings a phone actually has.
@@ -39,6 +40,8 @@ export default function PhoneMore() {
   // navigator.standalone don't exist on the server, and rendering the card and then
   // hiding it on hydration is a flash of advice the reader may not need.
   const [offerInstall, setOfferInstall] = useState(false);
+  const [themePref, setThemePref] = useState<ThemePref>("system");
+  useEffect(() => setThemePref(readPref()), []);
   useEffect(() => setOfferInstall(shouldOfferInstall(readInstallState())), []);
 
   return (
@@ -83,6 +86,33 @@ export default function PhoneMore() {
         </ul>
 
         <p className="wm-ph-sect">Settings</p>
+
+        {/* Appearance. A device preference, so it lives in localStorage, not the
+            account; "System" clears the stored choice and follows the phone. */}
+        <div className="wm-ph-pad">
+          <p className="wm-ph-hint" style={{ marginBottom: 8 }}>
+            Appearance
+          </p>
+          <div className="wm-ph-chips" role="radiogroup" aria-label="Appearance">
+            {(["system", "light", "dark"] as ThemePref[]).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                role="radio"
+                aria-checked={themePref === opt}
+                aria-pressed={themePref === opt}
+                className="wm-ph-chip"
+                onClick={() => {
+                  writePref(opt);
+                  applyPref(opt);
+                  setThemePref(opt);
+                }}
+              >
+                {opt === "system" ? "System" : opt === "light" ? "Light" : "Dark"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Notifications. Owned by the Web Push package; renders nothing until it
             lands. Whatever it renders, the permission request happens inside a click
