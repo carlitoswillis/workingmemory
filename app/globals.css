@@ -343,3 +343,499 @@ body {
 .wm-collapsible-chevron.is-collapsed {
   transform: rotate(-90deg);
 }
+
+/* phone shell */
+/* ── The phone app (components/phone/) ────────────────────────────────────────
+   Package A's half: the shell, the row, the Now feed, the Lists pager, the tab
+   bar. Append-only and self-contained — nothing above this line changes, and the
+   desktop board keeps every rule it had.
+
+   THE BRANCH. app/BoardScreen.tsx renders both trees and this pair of queries
+   picks one. Doing it in CSS (rather than measuring the viewport in JS) is what
+   keeps the first paint honest: no flash of the wrong shell, no hydration
+   mismatch, and a headless check can assert which shell is live from the width
+   alone. */
+@media (max-width: 767.98px) {
+  [data-shell="desktop"] {
+    display: none !important;
+  }
+}
+@media (min-width: 768px) {
+  [data-shell="phone"] {
+    display: none !important;
+  }
+}
+
+/* Type ladder (spec §8): two sizes × three weights + a hairline divider, not
+   five sizes. 11px is the HIG floor and only ever a caption. */
+[data-shell="phone"] {
+  --p-title: 15px;
+  --p-body: 15px;
+  --p-meta: 13px;
+  --p-caption: 11px;
+  --p-regular: 400;
+  --p-medium: 510;
+  --p-strong: 590;
+
+  display: flex;
+  flex-direction: column;
+  /* svh, never vh: 100vh is taller than the visible viewport while the URL bar
+     is up, which hides the tab bar behind it. */
+  height: 100svh;
+  overflow: hidden;
+  background: var(--bg-1);
+  color: var(--text-hi);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch feedback is the press itself — never a hover state. */
+[data-shell="phone"] .phone-row__body:active,
+[data-shell="phone"] .phone-tab:active,
+[data-shell="phone"] .phone-seg__btn:active,
+[data-shell="phone"] .phone-section__toggle:active {
+  transform: scale(0.985);
+}
+[data-shell="phone"] button {
+  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+/* Anything typed into on a phone is ≥16px or iOS zooms the whole page. */
+[data-shell="phone"] input,
+[data-shell="phone"] textarea,
+[data-shell="phone"] select {
+  font-size: 16px;
+}
+[data-shell="phone"] :focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Orientation only. Nothing up here is a target you have to reach. */
+.phone-topbar {
+  flex: 0 0 auto;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 8px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+.phone-eyebrow {
+  font-size: var(--p-caption);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-lo);
+}
+.phone-title {
+  margin-top: 2px;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 26px;
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-hi);
+}
+
+.phone-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Now: one ordinary vertical scroll, three sections. */
+.phone-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 24px;
+}
+.phone-section {
+  padding: 0 0 10px;
+}
+.phone-section__head,
+.phone-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
+  background: none;
+  border: 0;
+  text-align: left;
+}
+.phone-section__title {
+  font-size: var(--p-meta);
+  font-weight: var(--p-strong);
+  letter-spacing: 0.02em;
+  color: var(--text-mid);
+}
+.phone-section__count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--p-meta);
+  color: var(--text-lo);
+}
+.phone-section__toggle .phone-section__count {
+  margin-left: auto;
+}
+.phone-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-lo);
+  transition: transform 160ms ease;
+}
+.phone-chevron.is-open {
+  transform: rotate(90deg);
+}
+.phone-empty {
+  padding: 4px max(16px, env(safe-area-inset-left)) 10px;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-size: var(--p-meta);
+  color: var(--text-lo);
+}
+
+/* ── The row ──────────────────────────────────────────────────────────────────
+   56px, a 44px leading check zone, a two-line title, a trailing streak. The
+   collapse uses the grid-template-rows trick so it animates from an unmeasured
+   height with no JS layout maths — the same one the desktop's collapsible
+   columns use. */
+.phone-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.phone-rowwrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--row-collapse, 180ms) cubic-bezier(0.4, 0, 0.2, 1),
+    opacity var(--row-collapse, 180ms) cubic-bezier(0.4, 0, 0.2, 1);
+}
+.phone-rowwrap.is-collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+.phone-rowwrap__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.phone-rowline {
+  position: relative;
+  overflow: hidden; /* a swiping row cuts against its own edges */
+}
+.phone-row {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding-left: max(6px, env(safe-area-inset-left));
+  padding-right: max(6px, env(safe-area-inset-right));
+  border-bottom: 1px solid var(--veil-soft);
+  background: var(--bg-1);
+  /* Vertical scroll is the browser's; the horizontal swipe is ours. */
+  touch-action: pan-y;
+}
+/* Done = one luminance step up + text to secondary. Elevation is never a shadow. */
+.phone-row.is-done {
+  background: var(--surface);
+}
+.phone-row.is-done .phone-row__title {
+  color: var(--text-lo);
+}
+.phone-row.is-dragging {
+  background: var(--surface-2);
+  border-color: var(--veil);
+}
+
+.phone-check {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-lo);
+}
+.phone-check__glyph {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+/* The tick draws itself in rather than appearing: stroke-dashoffset over the
+   check spring's ~140ms, with a single 8% overshoot on the scale. */
+.phone-check__tick {
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  transition: stroke-dashoffset 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.phone-check__ring {
+  transition: stroke 140ms linear;
+}
+.phone-check__glyph.is-on {
+  color: var(--done);
+  animation: phone-check-pop 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.phone-check__glyph.is-on .phone-check__tick {
+  stroke-dashoffset: 0;
+}
+@keyframes phone-check-pop {
+  0% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.phone-row__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 8px 6px;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+/* Two lines, then clamp — never a single-line ellipsis. The row GROWS rather
+   than clipping when the system text size does (WCAG 1.4.10). */
+.phone-row__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--p-title);
+  line-height: 1.25;
+  font-weight: var(--p-medium);
+  color: var(--text-hi);
+  overflow-wrap: anywhere;
+}
+.phone-row__meta {
+  display: flex;
+  gap: 8px;
+  font-size: var(--p-meta);
+  line-height: 1.45;
+  color: var(--text-lo);
+}
+/* A failed write pins itself on the row. There is no toast anywhere in this app. */
+.phone-row__error {
+  color: var(--now);
+}
+/* Has details — a mark, never a word. */
+.phone-row__dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+  border-radius: 9999px;
+  background: var(--past);
+}
+.phone-row__streak {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  font-size: var(--p-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-lo);
+}
+@keyframes phone-milestone {
+  0% {
+    color: var(--text-lo);
+  }
+  30% {
+    color: var(--now);
+  }
+  100% {
+    color: var(--text-lo);
+  }
+}
+.phone-row__streak.is-milestone {
+  animation: phone-milestone var(--milestone, 400ms) ease-out;
+}
+.phone-row__undo,
+.phone-row__more {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  color: var(--text-lo);
+}
+.phone-row__undo {
+  font-size: var(--p-meta);
+  font-weight: var(--p-medium);
+  color: var(--now);
+}
+/* The swipe's actions as ordinary buttons — the gesture is a shortcut, never the
+   only path to them. */
+.phone-row__actions {
+  display: flex;
+  gap: 8px;
+  padding: 6px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--veil-soft);
+  background: var(--surface);
+}
+.phone-row__action {
+  min-height: 44px;
+  min-width: 88px;
+  padding: 0 14px;
+  border: 1px solid var(--veil);
+  border-radius: 10px;
+  background: var(--bg-1);
+  font-size: var(--p-meta);
+  color: var(--text-mid);
+}
+
+/* ── Lists: native scroll-snap pager + synced segmented header ────────────────
+   pageSnap is 'native' in the motion tokens for a reason — a JS pan handler
+   would race iOS's edge-swipe-back, and this one physically cannot. */
+.phone-lists {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.phone-seg {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  padding: 4px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--veil-soft);
+  background: var(--bg-1);
+  touch-action: pan-x;
+}
+.phone-seg::-webkit-scrollbar {
+  display: none;
+}
+.phone-seg__btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: none;
+  font-size: var(--p-meta);
+  font-weight: var(--p-medium);
+  color: var(--text-lo);
+  white-space: nowrap;
+}
+.phone-seg__btn.is-current {
+  border-color: var(--veil);
+  background: var(--surface);
+  color: var(--text-hi);
+}
+.phone-pager {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.phone-pager::-webkit-scrollbar {
+  display: none;
+}
+.phone-page {
+  flex: 0 0 100%;
+  min-width: 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.phone-page__rows {
+  padding-bottom: 24px;
+}
+
+/* ── The bottom bar ───────────────────────────────────────────────────────────
+   Five slots, capture among them rather than floating over the last row. The
+   safe-area padding needs `viewport-fit=cover` on the document (package B) to be
+   a real number; the 10px floor is what it falls back to. */
+.phone-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--veil);
+  background: var(--bg-0);
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.phone-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 2px 4px;
+  background: none;
+  border: 0;
+  color: var(--text-lo);
+}
+.phone-tab.is-current {
+  color: var(--now);
+}
+.phone-tab--capture {
+  color: var(--text-mid);
+}
+.phone-tab__glyph {
+  width: 20px;
+  height: 20px;
+}
+.phone-tab__label {
+  font-size: var(--p-caption);
+  line-height: 1.5;
+}
+
+/* Hover is not a thing a thumb has — every hover rule is gated on a real pointer. */
+@media (hover: hover) and (pointer: fine) {
+  .phone-tab:hover,
+  .phone-seg__btn:hover,
+  .phone-row__more:hover {
+    color: var(--text-mid);
+  }
+}
+
+/* Dynamic Type, progressive enhancement on Safari only: the rem ladder above
+   stays the universal baseline, and this lets the row's title follow the system
+   text size where the platform offers one. */
+@supports (-webkit-touch-callout: none) {
+  .phone-row__title,
+  .phone-row__meta {
+    font: -apple-system-body;
+    font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  }
+  .phone-row__title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+/* /phone shell */
