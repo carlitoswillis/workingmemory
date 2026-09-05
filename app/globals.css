@@ -884,7 +884,15 @@ body {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  max-height: 96svh;
+  /* The keyboard fix (§ pass-2). `--vvh` is the visual viewport's height in px,
+     written onto <html> by useKeyboardInset. While the keyboard is up the visual
+     viewport shrinks, so the sheet must shrink with it — otherwise its top edge
+     (and, in search, the field) is pushed off the screen. `min()` keeps the
+     no-keyboard case at 96svh, and the transition means the sheet TRACKS the
+     keyboard instead of snapping to its new size. This is the one piece of
+     non-finger-triggered motion in the app, and it exists to remove a jump. */
+  max-height: min(96svh, var(--vvh, 96svh));
+  transition: max-height var(--dur-kb, 160ms) cubic-bezier(0.32, 0.72, 0, 1);
   outline: none;
   border-top: 1px solid var(--veil);
   border-top-left-radius: 18px;
@@ -917,6 +925,60 @@ body {
   min-height: 0;
 }
 
+/* A ledger row inside a sheet keeps its shape and loses its ground: the sheet is
+   already one luminance step up from the board, so the row is transparent and "done"
+   steps up once more from there. Same grammar, measured from a different floor. */
+.wm-sheet .phone-row {
+  background: transparent;
+}
+.wm-sheet .phone-row.is-done {
+  background: var(--surface-2);
+}
+
+/* Sub-cards in the peek. They are not a preview and not a summary — they are the
+   same 56px ledger row as their parent, so a sub-card is completable in two taps
+   from Now and openable in two. `flex: none` keeps them above the fold of the px
+   snap that was grown to hold them. */
+.wm-sheet--card .wm-ph-kids {
+  flex: none;
+  border-top: 1px solid var(--veil-soft);
+}
+.wm-sheet--card .wm-ph-kids .phone-rowwrap:last-child .phone-row {
+  border-bottom-color: transparent;
+}
+
+/* The parent's name, above the title, when you have drilled in. */
+.wm-ph-parent {
+  font-size: var(--p-meta, 13px);
+  line-height: 1.45;
+  color: var(--text-lo);
+}
+
+/* Find. Content-driven height, capped: two results should not open a 96svh box.
+   The field is the sheet's FIRST element and lives outside the scroller, pinned on a
+   hairline, so it can never leave the top of the screen when the keyboard arrives. */
+.wm-sheet--search {
+  height: auto;
+  max-height: min(92svh, var(--vvh, 92svh));
+}
+.wm-sheet--search .wm-sheet__head {
+  border-bottom: 1px solid var(--veil-soft);
+  padding: 0 16px;
+}
+/* The grip is trimmed to nothing above the field so the input's top edge is within
+   8px of the sheet's, which is the whole point of putting it first. */
+.wm-sheet--search .wm-sheet__grip {
+  margin: 2px auto 0;
+}
+/* One hairline, not two: the field writes ON the head's rule rather than carrying a
+   second one of its own, and that rule is what warms when you are typing. */
+.wm-sheet--search .wm-sheet__head .wm-ph-field {
+  border-bottom: 0;
+}
+.wm-sheet--search .wm-sheet__head:focus-within {
+  border-bottom-color: var(--now-line);
+}
+
 /* Capture is the sheet the keyboard is always up in, so it's sized rather than
    fixed: a bottom-anchored box with `height: auto` GROWS UPWARD, and folding the
    keyboard inset into min-height means the visible half-screen stays a half screen
@@ -924,8 +986,22 @@ body {
    same size and squeeze the textarea down to nothing. */
 .wm-sheet--capture {
   height: auto;
-  min-height: calc(50svh + var(--kb, 0px));
-  max-height: 92svh;
+  min-height: 0;
+  max-height: min(92svh, var(--vvh, 92svh));
+}
+/* The scroller is the flexible middle: the textarea takes whatever height is left
+   between the title and the chips, so there is never a dead gap under the caret and
+   never a 50svh box with three words in it. */
+.wm-sheet--capture .wm-sheet__scroll {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+}
+.wm-sheet--capture .wm-ph-field {
+  flex: 1 1 96px;
+  /* No rule here. The textarea IS the sheet's body — a hairline floating below the
+     last word you typed marks nothing. The caret says where you are. */
+  border-bottom: 0;
 }
 
 .wm-sheet__grip {
@@ -1002,7 +1078,20 @@ body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  scroll-padding-top: 8px;
   padding: 0 16px 16px;
+}
+
+/* Sheets whose scroller holds full-bleed ledger rows: the rows carry their own
+   16px gutter so their hairlines can reach both edges. Anything that is NOT a row
+   list gets the gutter back with `.wm-ph-pad`. */
+.wm-sheet--ledger .wm-sheet__scroll {
+  padding-left: 0;
+  padding-right: 0;
+}
+.wm-ph-pad {
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 /* A sheet's own action bar — always the last thing above the keyboard. */
@@ -1070,10 +1159,18 @@ body {
 .wm-ph-btn[disabled] {
   opacity: 0.45;
 }
+/* Outlined, never filled: a solid amber slab is the loudest shape in the app and
+   amber is rationed to one full-strength use per screen (the active tab, the caret). */
 .wm-ph-btn--primary {
+  border-color: var(--now-line);
+  background: transparent;
+  color: var(--now);
+}
+/* Cancel must not compete with Save. */
+.wm-ph-btn--ghost {
   border-color: transparent;
-  background: var(--now);
-  color: var(--bg-0);
+  background: transparent;
+  color: var(--text-mid);
 }
 .wm-ph-btn--done {
   border-color: var(--done);
@@ -1090,24 +1187,34 @@ body {
   box-sizing: border-box;
   font-size: 16px;
   line-height: 1.4;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--veil-soft);
-  background: var(--field);
+  /* No box. A field is a line you write on: the sheet's own surface, one hairline
+     under it, and an amber caret to say where you are. */
+  padding: 11px 0; /* 22px line box + 22px = the 44pt floor */
+  border: 0;
+  border-bottom: 1px solid var(--veil-soft);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-hi);
+  caret-color: var(--now);
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Safari draws its own grey × inside type="search"; ours is a measured 44px button. */
+.wm-ph-field::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
 }
 .wm-ph-field::placeholder {
   color: var(--text-lo);
 }
+/* Focus is a 1px warm underline, not a ring: the caret already says where you are. */
 .wm-ph-field:focus {
-  border-color: var(--now);
+  border-bottom-color: var(--now-line);
   outline: none;
 }
 textarea.wm-ph-field {
   resize: none;
-  min-height: 120px;
+  min-height: 96px;
 }
 
 /* A horizontal chip strip (the capture list chooser, recurrence, move-to). */
@@ -1119,6 +1226,22 @@ textarea.wm-ph-field {
   touch-action: pan-x;
   scrollbar-width: none;
   padding: 2px 0;
+  /* A strip that runs off the edge says so, rather than looking like a chip was
+     cut in half by mistake. */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 20px,
+    black calc(100% - 20px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 20px,
+    black calc(100% - 20px),
+    transparent 100%
+  );
 }
 .wm-ph-chips::-webkit-scrollbar {
   display: none;
@@ -1151,37 +1274,76 @@ textarea.wm-ph-field {
   color: var(--text-hi);
 }
 
-/* A full-width row in a sheet list (boards, move-to, More). */
+/* A full-width row in a sheet list (boards, More, a search hit). Same ledger as the
+   board rows: flush left on the 16px rule, one hairline underneath, no card, no
+   radius, no gap between rows. A row that only navigates has no check column. */
 .wm-ph-row {
   display: flex;
   width: 100%;
   align-items: center;
   gap: 12px;
   min-height: 56px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid transparent;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--veil-soft);
+  border-radius: 0;
   background: transparent;
   text-align: left;
   color: var(--text-hi);
-  transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
+  transition: transform var(--dur-fast, 90ms) cubic-bezier(0.2, 0, 0.2, 1);
 }
 .wm-ph-row:active {
   transform: scale(0.985);
 }
 .wm-ph-row:focus-visible {
   outline: 2px solid var(--now);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 .wm-ph-row[aria-current="true"] {
-  border-color: var(--now-line);
   background: var(--now-wash);
 }
+/* A search hit: the same row, sized to two lines of snippet. */
+.wm-ph-row--ledger {
+  align-items: flex-start;
+  min-height: 56px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--veil-soft);
+  padding: 8px 16px;
+}
 
+/* One section-label system, everywhere: 13px, 590, sentence case, --text-mid. */
+.wm-ph-sect {
+  font-size: var(--p-meta, 13px);
+  font-weight: var(--p-strong, 590);
+  letter-spacing: 0.02em;
+  color: var(--text-mid);
+  padding: 14px 16px 6px;
+}
+
+/* Back, from a sub-card to its parent. The only mark of depth in the app. */
+.wm-ph-back {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -12px;
+  border-radius: 12px;
+  color: var(--text-mid);
+  background: transparent;
+  transition: transform var(--dur-fast, 90ms) cubic-bezier(0.2, 0, 0.2, 1);
+}
+.wm-ph-back:active {
+  transform: scale(0.985);
+}
+
+/* Grouped content inside a sheet: a hairline, never a darker well. `--bg-0` under
+   a `--surface` sheet is a step DOWN, which reads as a hole punched in the sheet. */
 .wm-ph-card {
   border: 1px solid var(--veil-soft);
   border-radius: 14px;
-  background: var(--bg-0);
+  background: transparent;
   padding: 12px 14px;
 }
 
@@ -1235,9 +1397,16 @@ textarea.wm-ph-field {
   outline-offset: 4px;
 }
 
-/* The read-only board behind the scrubber. */
+/* The read-only board behind the scrubber. The same flat ledger as everywhere else
+   — a rewound card is still a card — with one 2px blue rule at the left edge to say
+   which pole of the timeline you are standing on. Not a stack of rounded tiles: the
+   row never changes shape, at any depth or any date. */
 .wm-ph-past {
+  display: block;
+  min-height: 44px;
+  padding: 10px 16px 10px 14px;
   border-left: 2px solid var(--past);
+  border-bottom: 1px solid var(--veil-soft);
   background: var(--past-wash);
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addItemAction } from "@/app/actions";
 import { DEFAULT_LISTS } from "@/lib/lists";
 import { usePhoneUI } from "./PhoneShell";
-import { Sheet, useSheetOpen } from "./Sheet";
+import { Sheet, fieldFocusProps, useSheetOpen } from "./Sheet";
 import { movableLists, usePhoneBoardData } from "./phone-data";
 
 // Capture (§2 C). One job: write a thought down and get out of the way. A single
@@ -12,6 +12,11 @@ import { movableLists, usePhoneBoardData } from "./phone-data";
 // bar — which is the whole reason `--kb` exists. The sheet is bottom-anchored, so the
 // keyboard inset applied as padding-bottom lifts the bar above the keys instead of
 // leaving it buried under them.
+//
+// It is NOT a form: no bordered box, no focus ring, no `Title` label over an obvious
+// field. A caret on the sheet's own surface, a hairline under it, the lists, and the
+// bar. The box is `height: auto` and the textarea takes the slack, so the sheet is
+// the size of what you have written and there is no dead gap to explain.
 //
 // Focus lands on the textarea from Vaul's open-COMPLETE callback, not on mount (§4):
 // focusing on mount starts the keyboard animation while the sheet is still moving,
@@ -86,9 +91,11 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
       open={open}
       onOpenChange={(o) => !o && close()}
       label="Capture a thought"
-      // No fixed height: the box is sized by `.wm-sheet--capture`, whose min-height
-      // INCLUDES the keyboard inset. A bottom-anchored box grows upward, so the sheet
-      // rises with the keyboard instead of having its content squeezed out by it.
+      // No fixed height: `.wm-sheet--capture` is `height: auto`, capped at the live
+      // visual viewport. A bottom-anchored box grows upward, so the sheet rises with
+      // the keyboard rather than having its content squeezed out by it — and because
+      // the cap is `--vvh`, the keyboard resizes it over `--dur-kb` instead of
+      // shoving it off the top.
       className="wm-sheet--capture"
       onOpenComplete={() => taRef.current?.focus()}
     >
@@ -114,6 +121,8 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
               save();
             }
           }}
+          // Undo Safari's "reveal the field" layout scroll; see Sheet.tsx.
+          {...fieldFocusProps()}
         />
 
         <div
@@ -141,7 +150,12 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
       {/* The bar the whole sheet is arranged around: always the last thing above the
           keyboard, never behind it. */}
       <div className="wm-sheet__bar">
-        <button type="button" className="wm-ph-btn wm-ph-btn--auto" onClick={dismiss}>
+        {/* Cancel is a ghost: leaving is always available and never the point. */}
+        <button
+          type="button"
+          className="wm-ph-btn wm-ph-btn--ghost wm-ph-btn--auto"
+          onClick={dismiss}
+        >
           Cancel
         </button>
         <button
