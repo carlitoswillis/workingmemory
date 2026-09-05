@@ -122,6 +122,28 @@ create table if not exists lists (
   created_at text not null default (${ISO_NOW}),
   primary key (id, board_id)
 );
+
+-- Web Push subscriptions (phone app, 2026-09-04). One row per DEVICE+APP install:
+-- endpoint is the browser-issued URL for that install and is the real key, hence
+-- UNIQUE — the same endpoint re-POSTed just refreshes last_seen_at (lib/push.ts).
+-- p256dh/auth are the client's public ECDH key and auth secret; the payload is
+-- encrypted to them, so these are not secrets we can leak into a notification.
+-- user_id has deliberately NO foreign key: local single-user mode has an empty
+-- users table and files its subscription under the sentinel id "local".
+-- No triggers: a subscription is device plumbing, not change-tracked content, and
+-- it must never appear in a card's history or a time-travel snapshot.
+create table if not exists push_subscriptions (
+  id           text primary key,
+  user_id      text not null,
+  endpoint     text not null unique,
+  p256dh       text not null,
+  auth         text not null,
+  user_agent   text not null default '',
+  created_at   text not null default (${ISO_NOW}),
+  last_seen_at text not null default (${ISO_NOW})
+);
+
+create index if not exists push_subscriptions_user_idx on push_subscriptions(user_id);
 `;
 
 // The logging triggers are VERSIONED (_v2 since shared boards, 2026-07-07): they now
