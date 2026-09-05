@@ -183,6 +183,55 @@ env $(cat ~/.wm-backup.env) RESTORE_LOCAL=1 ./scripts/pull-backup.sh
 The daily launchd job must never set `RESTORE_LOCAL` — it would silently
 overwrite local changes every morning.
 
+## Push notifications
+
+Web Push for the phone app — iOS 16.4+ (**home-screen installs only**; Safari in
+a tab can't receive them) and Android. Off unless VAPID keys are set: with them
+unset the endpoints 404 and Settings honestly says "not set up".
+
+Generate a keypair once:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then set three env vars — locally in `.env.local`, on Render under
+**Environment** (mark the private key secret; it is deliberately *not* in
+`render.yaml`, since a blueprint value would be committed):
+
+| Var | What it is |
+| --- | --- |
+| `VAPID_PUBLIC_KEY` | Handed to the browser as `applicationServerKey` |
+| `VAPID_PRIVATE_KEY` | Signs the push; **secret** |
+| `VAPID_SUBJECT` | `mailto:` or `https://` contact, per RFC 8292 |
+
+Turn it on from the phone: **More → Settings → Notifications → Enable
+notifications**. That button is the only thing in the app that calls
+`Notification.requestPermission()` or registers the service worker
+(`public/sw.js` — push handling only, no offline cache). **Send test** proves the
+whole round trip. Subscriptions are one row per device in `push_subscriptions`,
+keyed by endpoint; a push service answering 404/410 prunes the row.
+
+### Sending one
+
+There is no scheduler in the app — the owner's Mac triggers every push. The send
+endpoint takes the **same bearer as `/api/context`** (`BRAIN_TOKEN`, see
+`lib/bridge.ts`), so the Mac-side assistant gains a verb, not a credential, and
+delivers to whichever account `resolveOwnerBoard()` calls the owner:
+
+```bash
+curl -X POST "$WM_URL/api/push/send" \
+  -H "Authorization: Bearer $WM_BRAIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Today","body":"3 due · Gym, Standup, Taxes"}'
+# → {"sent":1,"pruned":0}
+```
+
+`url` (a same-origin path — absolute URLs are refused) deep-links the tap; `tag`
+groups a notification so a re-send replaces rather than stacks. The two intended
+moments are a 07:30 "Today" and a 21:00 "Nightly log", both LaunchAgents on the
+Mac.
+
 ## Stack
 
 - **Next.js 14 (App Router) + React 18 + TypeScript** — server components + actions

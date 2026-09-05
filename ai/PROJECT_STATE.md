@@ -414,6 +414,26 @@ a real structure without losing its looseness.
 
 
 ## Completed log (condensed; details in git history of this file)
+- **2026-09-04 — Web Push for the phone app** (package C of
+  `ai/plans/2026-09-04-phone-app.md` §7; built in a worktree alongside the phone
+  shell and sheets). `lib/push.ts` (VAPID config, payload shaping, endpoint-keyed
+  subscription upsert, `sendToUser` + 404/410 pruning) is `next`-free so
+  `node lib/push.test.ts` — 42 assertions, added to `npm test` — covers it without
+  a network. New `push_subscriptions` table in `CREATE_TABLES` (endpoint UNIQUE, no
+  FK on `user_id`: local mode has no `users` rows and files under the sentinel
+  `"local"`), no triggers — a device subscription is plumbing, not journaled
+  content, so it stays out of history and time travel.
+  `GET/POST/DELETE /api/push/subscribe` + `POST /api/push/test` are session-cookie
+  auth; **`POST /api/push/send` reuses `brainBearerOk`** — the *same* BRAIN_TOKEN as
+  `/api/context`/`/api/items` — so the Mac assistant gained a verb, not a
+  credential. `public/sw.js` is push + notificationclick ONLY (no app-shell cache,
+  deliberately out of scope), registered exclusively from
+  `components/phone/PushSettings.tsx`, which is also the single call site of
+  `Notification.requestPermission()` (inside its click handler; a static grep pins
+  this). Unset VAPID keys = the endpoints 404, matching the BRAIN_TOKEN/export
+  pattern. Still to do: set `VAPID_*` in the Render dashboard, and write the 07:30
+  "Today" / 21:00 "Nightly log" LaunchAgents on the Mac — the app has no scheduler
+  by design.
 - **2026-08-30 — Card ↔ board doorways + the AI weekly review pipeline.** Both plans
   green-lit by the owner at recommended defaults and built in parallel worktrees;
   verified together post-merge with tsc, 13 node suites, and a prod build.
