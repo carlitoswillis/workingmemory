@@ -30,7 +30,9 @@ PURPOSE: The authoritative rulebook for AI assistants working on Working Memory.
   multi-tenant SQLite file (`DATA_DIR/owner/wm.db` — legacy path, read it as "main.db")
   with **app-level scoping by `board_id`**: `board_id IS ?` in EVERY read and
   `and board_id is ?` on EVERY mutation (no RLS — the guard is the query shape; never
-  write a query without it). Membership is verified ONCE per request in
+  write a query without it), except `getProvenance` (`lib/doorways.ts`), which crosses
+  boards by design and substitutes an explicit `getMembership` check. Membership is
+  verified ONCE per request in
   `getBoardContext(boardId)` (a 404, not 403, for a non-member), so downstream queries
   trust a plain `board_id = ?`. `items.user_id` now means CREATOR; `items.touched_by` is
   the last actor, copied by the v2 triggers into `item_events.actor_id` ("who did it").
