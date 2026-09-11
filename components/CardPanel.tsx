@@ -462,6 +462,10 @@ export default function CardPanel({
 
       <aside
         ref={asideRef}
+        // A name the history guard can hold on to: scripts/dev/assert-phone-flows.mjs
+        // opens this panel, toggles done and presses back, and "the panel is open" has
+        // to mean this box and not one of the other `card-in` overlays.
+        data-panel="card"
         onClick={(e) => e.stopPropagation()}
         className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
       >
@@ -490,6 +494,10 @@ export default function CardPanel({
 
         <div className="mb-5">
           <button
+            // Named for the same reason the panel is: the guard has to press THIS
+            // button, and its label changes with the card ("Mark done" / "Done" /
+            // "Done today" / "Done this week").
+            data-done-toggle=""
             onClick={toggleDone}
             className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
               effDone
@@ -590,7 +598,7 @@ export default function CardPanel({
 
           {kids.length > 0 && (
             <SortableContext items={kids.map((k) => k.id)} strategy={stillStrategy}>
-              <div ref={kidsRef} className="mb-2 flex flex-col gap-1.5">
+              <div ref={kidsRef} data-subcards="" className="mb-2 flex flex-col gap-1.5">
                 {kids.map((child, i) => (
                   <SortableItemCard
                     key={child.id}

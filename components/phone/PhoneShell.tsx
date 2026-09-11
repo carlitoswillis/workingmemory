@@ -11,6 +11,7 @@ import {
   type DoorwayInfo,
 } from "../board-context";
 import { localToday } from "@/lib/recurrence";
+import { useLevelStack } from "../useLevelStack";
 import { PhoneDataProvider, type PhoneBoardValue } from "./phone-data";
 import { pagerLists } from "./phone-logic";
 import PhoneHome from "./PhoneHome";
@@ -40,11 +41,24 @@ export type PhoneSheet =
   | { kind: "more" }
   | { kind: "archive" };
 
+/**
+ * How `open()` treats a sheet that is already up.
+ *
+ * By default a different KIND replaces it: PhoneSheetHost keys each sheet on its kind,
+ * so the outgoing sheet unmounts, and the levels it pushed are given back with it.
+ *
+ * `asLevel` stacks the new sheet ON TOP instead — one more history level, whose undo
+ * puts the outgoing sheet back. That is what makes a card opened from the Archive a
+ * step INTO the archive rather than a step past it: one back gesture returns to the
+ * archive list, a second closes it.
+ */
+export type OpenOptions = { asLevel?: boolean };
+
 export type PhoneUI = {
   tab: "now" | "lists" | "find" | "more";
   setTab(t: PhoneUI["tab"]): void;
   sheet: PhoneSheet | null;
-  open(s: PhoneSheet): void;
+  open(s: PhoneSheet, opts?: OpenOptions): void;
   close(): void;
   listId: string | null; // active page in the Lists pager
   setListId(id: string): void;
@@ -116,67 +130,18 @@ export default function PhoneShell({
   const kbInset = useKeyboardInset();
 
   // ---- history ---------------------------------------------------------------
-  // ONE owner for every history entry the phone app creates, so a back gesture has a
-  // single handler and a single bookkeeper. Each entry we push is a LEVEL: level 1 is
-  // "a sheet is open", levels 2+ are a card sheet drilled into a sub-card. Every level
-  // carries the callback that undoes it, and the browser — never us — decides when
-  // that callback runs.
-  //
-  // The level count lives in a REF and never in history.state. It has to: a server
-  // action's revalidatePath makes Next's App Router call history.replaceState with
-  // only its own router tree, so an entry we pushed can come back stateless at any
-  // moment. Anything that read our depth out of the current entry would then conclude
-  // "no sheet, depth 0" and unwind a stack the browser still holds — which is how one
-  // sub-card tap used to leave an installed PWA on a dead entry until relaunch. We do
-  // still TAG each entry (`wmPhoneLevel`), because the tag is the only way to know how
-  // far a jump we did not issue travelled; when the tag has been wiped the count is
-  // the answer, since a back gesture removes exactly one entry.
-  const levelsRef = useRef<Array<() => void>>([]);
-  // Where a history.go() WE issued is meant to land. Ours are the only jumps that can
-  // cross more than one entry, so this is the whole of that ambiguity.
-  const jumpRef = useRef<number | null>(null);
+  // Every history entry the phone app pushes is a LEVEL on one stack: level 1 is "a
+  // sheet is open", levels 2+ are a sheet that has drilled deeper (a card sheet inside
+  // a sub-card, a snapshot opened from Time travel, a card opened from the Archive).
+  // The stack — the push, the tag, the single popstate handler, and the rule that the
+  // count lives in a ref rather than in history.state — is `useLevelStack`, shared with
+  // the desktop panel in components/Board.tsx. Read the why there.
+  const { pushLevel, goBackLevels, dropLevels, depth } = useLevelStack("wmPhoneLevel");
 
   const setTab = useCallback((t: PhoneUI["tab"]) => {
     if (t === "now" || t === "lists") baseTabRef.current = t;
     setTabState(t);
   }, []);
-
-  // Count a level ONLY once the browser has actually taken the entry. pushState is
-  // refusable — every engine rate-limits it (roughly 100 calls per half-minute, a
-  // per-document budget Next's own router.replaceState spends out of too), and
-  // restricted contexts throw outright. Counting first and pushing second would leave
-  // the ref claiming an entry the session history does not hold, and since close() and
-  // goToLevel() both measure their `history.go(-n)` off this array, the next back
-  // gesture would travel one entry past the page the phone app opened on — the dead
-  // entry this whole owner exists to prevent. So: push, then record.
-  const pushLevel = useCallback((onPop: () => void) => {
-    if (typeof window === "undefined") return;
-    try {
-      window.history.pushState(
-        { ...window.history.state, wmPhoneLevel: levelsRef.current.length + 1 },
-        "",
-      );
-    } catch {
-      return; // history is best-effort; the sheet still opens, just without an entry
-    }
-    levelsRef.current = [...levelsRef.current, onPop];
-  }, []);
-
-  const goToLevel = useCallback((target: number) => {
-    const back = levelsRef.current.length - target;
-    if (back <= 0 || typeof window === "undefined") return;
-    jumpRef.current = target;
-    try {
-      window.history.go(-back);
-    } catch {
-      jumpRef.current = null;
-    }
-  }, []);
-
-  const goBackLevels = useCallback(
-    (n: number) => goToLevel(Math.max(0, levelsRef.current.length - n)),
-    [goToLevel],
-  );
 
   // Forget the sheet WITHOUT touching history — what a popped level-1 entry means,
   // because the browser has already taken the entry back.
@@ -185,59 +150,54 @@ export default function PhoneShell({
     setTabState((prev) => (prev === "find" || prev === "more" ? baseTabRef.current : prev));
   }, []);
 
+  // What is on screen right now, readable from a callback the browser runs. `sheet`
+  // itself is state, and every caller of open() below is either an event handler or a
+  // level's undo — both of which run after the render that set it.
+  const sheetRef = useRef<PhoneSheet | null>(null);
+  sheetRef.current = sheet;
+
   const open = useCallback(
-    (s: PhoneSheet) => {
+    (s: PhoneSheet, opts?: OpenOptions) => {
+      const cur = sheetRef.current;
       setSheet(s);
-      // One entry for "a sheet is open", however often the sheet's KIND changes while
-      // it is up (More → Note, Find → a card).
-      if (levelsRef.current.length === 0) pushLevel(forgetSheet);
+
+      // Nothing up yet: one entry for "a sheet is open".
+      if (!cur || depth() === 0) {
+        if (depth() === 0) pushLevel(forgetSheet);
+        return;
+      }
+
+      // Stacked deliberately on top of what is up (the Archive opening a card): one
+      // more level, whose undo puts the outgoing sheet back.
+      if (opts?.asLevel) {
+        pushLevel(() => setSheet(cur));
+        return;
+      }
+
+      // Same kind, new subject (the card sheet drilling into a sub-card). The sheet
+      // stays mounted — PhoneSheetHost keys on the kind — and owns those levels
+      // itself, so the stack is none of our business here.
+      if (cur.kind === s.kind) return;
+
+      // A different KIND replaces what is up (More → Note, a card → Find). The
+      // outgoing sheet unmounts, so the levels it pushed are now callbacks that would
+      // reopen a sheet the user has left: a back gesture from Find used to reopen the
+      // card you had drilled into. Give those entries back — without running their
+      // undos, since what they would restore is already gone — so the incoming sheet
+      // stands on the base level and ONE back gesture closes it.
+      dropLevels(1);
     },
-    [pushLevel, forgetSheet],
+    [pushLevel, dropLevels, depth, forgetSheet],
   );
 
   // THE close path — the only one. A sheet that closes itself (Save, Archive, the
   // grip dragged down) lands here too, via Sheet's exit animation, so the entries are
-  // given back exactly once.
+  // given back exactly once, in one jump.
   const close = useCallback(() => {
     setSheet(null);
     setTabState(baseTabRef.current);
-    const n = levelsRef.current.length;
-    if (n === 0 || typeof window === "undefined") return;
-    // Drop the callbacks first: the sheet is already gone, so the entries the browser
-    // is about to hand back have nothing left to undo.
-    levelsRef.current = [];
-    jumpRef.current = 0;
-    try {
-      window.history.go(-n);
-    } catch {
-      jumpRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    const onPop = (e: PopStateEvent) => {
-      const jump = jumpRef.current;
-      jumpRef.current = null;
-      const depth = levelsRef.current.length;
-      if (depth === 0) return; // not ours — Board.tsx or the router owns this one
-      let target: number;
-      if (jump !== null) {
-        target = jump;
-      } else {
-        const tag = (e.state as { wmPhoneLevel?: number } | null)?.wmPhoneLevel;
-        // A tag above our count is a FORWARD step into an entry we no longer stand
-        // behind; leave the stack alone rather than popping a level for it.
-        target = typeof tag === "number" ? Math.max(0, Math.min(tag, depth)) : depth - 1;
-      }
-      while (levelsRef.current.length > target) {
-        const undo = levelsRef.current[levelsRef.current.length - 1];
-        levelsRef.current = levelsRef.current.slice(0, -1);
-        undo();
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+    dropLevels(0);
+  }, [dropLevels]);
 
   const ui = useMemo<PhoneUI>(
     () => ({

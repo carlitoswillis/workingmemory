@@ -96,7 +96,12 @@ export default function PhoneArchive() {
               <li key={it.id} className="wm-ph-row wm-ph-row--ledger" style={{ gap: 8 }}>
                 <button
                   type="button"
-                  onClick={() => open({ kind: "card", itemId: it.id })}
+                  // A level ABOVE the archive, not a replacement for it: reading an
+                  // archived card is a step into the list, so one back gesture comes
+                  // straight back to it. Opening it flat closed the archive and left
+                  // the board bare, and getting back meant More → Archive → scroll
+                  // again for every card you wanted to look at.
+                  onClick={() => open({ kind: "card", itemId: it.id }, { asLevel: true })}
                   aria-label={`Open ${it.text}, in ${listLabels[it.list] ?? it.list}, archived ${fmt(it.updated_at)}`}
                   style={{
                     flex: 1,

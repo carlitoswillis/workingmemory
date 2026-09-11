@@ -452,6 +452,134 @@ try {
     MARK,
   );
   ok("desktop: search finds the card", hits > 0, `${hits} hits`);
+
+  // ---- the card panel's history (backlog A4) --------------------------------
+  // The panel used to mirror its depth onto `history.state` as `wmDepth` — and a
+  // server action's `revalidatePath` makes Next's App Router call
+  // `history.replaceState` with only its own router tree, which wipes that key off the
+  // current entry. So: open a card, tick it done, press back, and the handler read
+  // "depth 0" from an entry it no longer recognised, closed the panel AND spent the
+  // entry the panel stood on. A second back walked off the board entirely. The depth
+  // lives in a ref now, on the same level stack PhoneShell uses
+  // (components/useLevelStack.ts), so the toggle cannot touch it.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+
+  const urlBefore = page.url();
+  await page
+    .locator('[data-shell="desktop"] button', { hasText: MARK })
+    .first()
+    .click();
+  await page.waitForSelector('[data-panel="card"]');
+  await page.waitForTimeout(400);
+  ok("desktop: a card opens its panel", (await page.locator('[data-panel="card"]').count()) === 1);
+
+  // The server action, from inside the panel. This is the write whose revalidate
+  // fires the replaceState the old code's depth used to disappear into.
+  await page.locator('[data-panel="card"] button:text-is("Mark done")').click();
+  await page.locator('[data-panel="card"] button:text-is("Done")').waitFor();
+  await page.waitForTimeout(2000);
+  ok(
+    "desktop: the panel's Done toggle survives its own round trip",
+    (await page.locator('[data-panel="card"]').count()) === 1,
+  );
+
+  // A marker on the live document: if the back gesture NAVIGATED rather than popping
+  // one of our pushState entries, the page reloads and this is gone.
+  await page.evaluate(() => {
+    window.__deskAlive = true;
+  });
+  await page.evaluate(() => window.history.back());
+  await page.waitForTimeout(1200);
+  ok(
+    "desktop: one back closes the card panel",
+    (await page.locator('[data-panel="card"]').count()) === 0,
+  );
+  const stillHere = await page.evaluate(() => ({
+    alive: window.__deskAlive === true,
+    board: !!document.querySelector('[data-shell="desktop"]'),
+    url: location.href,
+  }));
+  ok(
+    "desktop: that back stayed on the board — no reload, no navigation",
+    stillHere.alive && stillHere.board && stillHere.url === urlBefore,
+    `alive ${stillHere.alive}, board ${stillHere.board}, ${stillHere.url}`,
+  );
+  ok("desktop: the card is still on the board after the panel closed", (await page.getByText(MARK).count()) > 0);
+
+  // ---- and the step the old scheme actually lost ----------------------------
+  // The check above is the contract, but it cannot fail on the old code: a
+  // replaceState wipes the tag off the entry you are STANDING on, and the handler
+  // reads the entry you LAND on. The wipe only bites once you step FORWARD off a
+  // wiped entry — which is the ordinary way anyone uses this panel. Toggle done on a
+  // card (its entry loses the tag), drill into one of its sub-cards, press back: the
+  // old handler read the parent's vanished tag as "depth 0" and closed the whole
+  // panel instead of stepping to the parent, leaving the board standing on an entry
+  // nobody would give back. This is the desktop twin of the phone's
+  // "one back gesture steps sub-card -> parent" in assert-phone-history.mjs.
+  // What the panel's back arrow currently says — "Back to board" at the top level,
+  // "Back to <parent>" inside a sub-card, and null when there is no panel at all.
+  // Read through evaluate rather than a locator on purpose: when this regresses the
+  // panel is GONE, and a locator would spend 15s retrying and then report a timeout
+  // instead of the assertion that names the cause.
+  const backLabel = () =>
+    page.evaluate(
+      () => document.querySelector('[data-panel="card"] button')?.getAttribute("aria-label") ?? null,
+    );
+
+  const nested = page
+    .locator('[data-shell="desktop"] .card-in')
+    .filter({ has: page.locator('span[title$="sub-cards done"]') })
+    .first();
+  await nested.waitFor();
+  const nestedTitle = (await nested.locator("button").nth(1).textContent())?.trim() ?? "";
+  ok("desktop: the board has a card with sub-cards", nestedTitle.length > 0, nestedTitle);
+  await nested.locator("button").nth(1).click();
+  await page.waitForSelector('[data-panel="card"] [data-subcards]');
+  await page.waitForTimeout(400);
+
+  // The server action, on the PARENT's entry — the one the drill-in then steps off.
+  const doneLabel = (await page.locator("[data-done-toggle]").textContent())?.trim() ?? "";
+  await page.locator("[data-done-toggle]").click();
+  await page.waitForFunction(
+    (was) => document.querySelector("[data-done-toggle]")?.textContent?.trim() !== was,
+    doneLabel,
+  );
+  await page.waitForTimeout(2000); // the write, the revalidate, and Next's replaceState
+
+  const kid = page.locator('[data-panel="card"] [data-subcards] .card-in').first();
+  await kid.locator("button").nth(1).click();
+  await page.waitForTimeout(900);
+  ok(
+    "desktop: the panel drills into a sub-card",
+    (await backLabel()) === `Back to ${nestedTitle}`,
+    `back arrow says "${await backLabel()}"`,
+  );
+
+  await page.evaluate(() => window.history.back());
+  await page.waitForTimeout(1200);
+  const stepped = {
+    open: (await page.locator('[data-panel="card"]').count()) === 1,
+    back: await backLabel(),
+  };
+  ok(
+    "desktop: after a server action, one back steps sub-card -> parent, not whole-panel close",
+    stepped.open && stepped.back === "Back to board",
+    stepped.open ? `back arrow says "${stepped.back}"` : "panel closed",
+  );
+  await page.evaluate(() => window.history.back());
+  await page.waitForTimeout(1200);
+  const closedOut = await page.evaluate(() => ({
+    alive: window.__deskAlive === true,
+    panel: !!document.querySelector('[data-panel="card"]'),
+    url: location.href,
+  }));
+  ok(
+    "desktop: a second back closes the panel and still does not leave the board",
+    !closedOut.panel && closedOut.alive && closedOut.url === urlBefore,
+    `panel ${closedOut.panel}, alive ${closedOut.alive}, ${closedOut.url}`,
+  );
+
   ok("no page errors on the desktop path", pageErrors.length === 0, pageErrors.join(" | "));
   await context.close();
 } catch (e) {

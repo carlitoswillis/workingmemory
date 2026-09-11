@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timelineDataAction } from "@/app/actions";
 import { isSentinelList } from "@/lib/lists";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
@@ -48,7 +48,7 @@ const fmtMoment = (ms: number) =>
   });
 
 export default function PhoneTimeTravel() {
-  const { close } = usePhoneUI();
+  const { close, pushLevel, goBackLevels } = usePhoneUI();
   const { open, dismiss } = useSheetOpen();
   const { boardId, listLabels } = usePhoneBoardData();
   const [timeline, setTimeline] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
@@ -134,16 +134,54 @@ export default function PhoneTimeTravel() {
     return [...by.entries()];
   }, [snapshot]);
 
-  // The read-only detail sheet's current subject. Unlike PhoneCardSheet's chain,
-  // there's nothing to unwind on an edge-swipe-back — a snapshot is only ever
-  // dismissed by ✕ or by drilling to a different card, and its parent is always
-  // just whatever `parent_id` says, so one id is enough.
+  // ---- the read-only detail card, and its history -------------------------------
+  // Drilling into a past card is a step FORWARD, so it owes the browser an entry:
+  // without one, the single back gesture that should have put the snapshot away closed
+  // the whole Time travel sheet instead, and the moment you had scrubbed to went with
+  // it. So this plays by the same rules the card sheet does (PhoneCardSheet's chain) —
+  // the shell owns every entry, this file only says what a level undoes, and nothing
+  // here reads or writes `history.state` itself.
+  //
+  // `snapStack` is the cards drilled through, bottom first: a ref because the shell
+  // runs these callbacks outside React's update cycle, and each level's undo restores
+  // the chain as it was before that card was opened.
+  const snapStack = useRef<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const openItem = openId ? (byId.get(openId) ?? null) : null;
   const openParent = openItem?.parent_id ? (byId.get(openItem.parent_id) ?? null) : null;
+
+  const openSnapshot = useCallback(
+    (id: string) => {
+      const prev = snapStack.current;
+      // Tapping the breadcrumb goes BACK to a card already in the chain; let the
+      // browser unwind those entries so the gesture and the button are one path.
+      const at = prev.indexOf(id);
+      if (at >= 0) {
+        goBackLevels(prev.length - 1 - at);
+        return;
+      }
+      snapStack.current = [...prev, id];
+      setOpenId(id);
+      pushLevel(() => {
+        snapStack.current = prev;
+        setOpenId(prev.length > 0 ? prev[prev.length - 1] : null);
+      });
+    },
+    [pushLevel, goBackLevels],
+  );
+
+  // ✕ gives every snapshot entry back at once and leaves the Time travel sheet up.
+  const closeSnapshot = useCallback(() => {
+    if (snapStack.current.length > 0) goBackLevels(snapStack.current.length);
+    else setOpenId(null);
+  }, [goBackLevels]);
+
+  // "Return to now" empties the snapshot, so anything open on top of it has no subject
+  // left. Close it the same way ✕ does rather than just blanking the state, or its
+  // levels would sit on the stack pointing at a card that no longer exists.
   useEffect(() => {
-    if (!active) setOpenId(null);
-  }, [active]);
+    if (!active) closeSnapshot();
+  }, [active, closeSnapshot]);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && close()} label="Time travel" heightSvh={96}>
@@ -181,7 +219,7 @@ export default function PhoneTimeTravel() {
                         type="button"
                         className="wm-ph-past"
                         style={{ width: "100%", textAlign: "left" }}
-                        onClick={() => setOpenId(r.id)}
+                        onClick={() => openSnapshot(r.id)}
                       >
                         <p
                           className="wm-ph-body wm-ph-clamp2"
@@ -211,7 +249,7 @@ export default function PhoneTimeTravel() {
                                   paddingLeft: 28,
                                   borderLeftColor: "var(--veil)",
                                 }}
-                                onClick={() => setOpenId(k.id)}
+                                onClick={() => openSnapshot(k.id)}
                               >
                                 <p
                                   className="wm-ph-body wm-ph-clamp2"
@@ -240,8 +278,8 @@ export default function PhoneTimeTravel() {
           listLabels={listLabels}
           childItems={childrenByParent.get(openItem.id) ?? []}
           asOf={active ? new Date(current).toISOString() : null}
-          onOpenCard={(id) => setOpenId(id)}
-          onClose={() => setOpenId(null)}
+          onOpenCard={openSnapshot}
+          onClose={closeSnapshot}
         />
       )}
 
