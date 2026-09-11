@@ -243,20 +243,25 @@ a real structure without losing its looseness.
 
 ## completed (to be condensed) (all done)
 - **2026-09-10 — Phone app: history-key wipe root cause + data provider wiring +
-  lost features restored.** Built in four parallel worktree branches over the August
-  rewrite; this entry records the entire batch's completion, scope, and open items.
+  lost features restored.** Built as one foundation commit on main, then five parallel worktree
+  branches merged back; this entry records the entire batch's completion, scope, and open items.
   All verified: tsc, `npm test`, `npm run build` (15 node suites with new coverage).
   - *A1: history-key wipe fix* — subtask completion ran a server action whose
     `revalidatePath` rewrote the history entry via `replaceState`, which dropped
     the phone shell's own `wmSheet` and `wmPhoneDepth` keys. Next's back gesture
     saw no keys, closed the sheet, and its unmount cleanup called `go(-n)` on
     entries the browser already popped. One gesture ate 2-3 entries; in a PWA with
-    no chrome to recover, users got stuck. **Root fix**: preserve those keys across
-    `replaceState` via an effect in `PhoneShell.tsx` (spread incoming state onto
-    the replacement state before writing, so the keys live). Also widened the close
-    path (skip unmount cleanup if a popstate caused the unmount, single close
-    codepath), and added `data-vaul-no-drag` on `.phone-row__body` to keep small
-    wobbles from dismissing the sheet.
+    no chrome to recover, users got stuck. **Root fix**: the phone app no longer keeps any truth in
+    `history.state`. `PhoneShell` owns a ref-counted stack of "levels" (one for an
+    open sheet, one more per sub-card drilled into), each carrying the callback that
+    undoes it; a back gesture pops exactly one, and a jump the shell issues itself
+    records its target first so a multi-entry unwind is unambiguous even after Next
+    wipes the entry's tag. `PhoneCardSheet` no longer touches history; it has one
+    close path (sheet closed -> shell `close()`), so the old double pop and the
+    unmount-time `go(-n)` are gone by construction. A later fix (cf6e260) makes a
+    sheet that unmounts mid-close still report the close to the shell. Also
+    `data-vaul-no-drag` on `.phone-check` and `.phone-row__body` so a small wobble on
+    a check does not dismiss the sheet. Guarded by `scripts/dev/assert-phone-history.mjs`.
   - *A2: PhoneDataProvider wiring* — sheets fetched their data through
     `BoardDataProvider`, a different context, and refetched the whole board on
     open — every card sheet initially showed "That card isn't on the board any
@@ -267,9 +272,10 @@ a real structure without losing its looseness.
   - *B: lost features restored* — The August rewrite shed several features with no
     dedicated plan. These are now rebuilt: **Archive** (browse, restore, view
     archived card), **Move to board** (cross-board reassignment), **Doorways**
-    (link card to board, promote/demote subtrees), **History** (timeline with past
-    snapshots and time-jump chips), **Sub-card reorder** (long-press drag inside
-    the sheet), **Today reorder** (long-press reorder on the primary list),
+    (link card to board, promote/demote subtrees), **History** (the card's event
+    timeline), **Time travel** (tap a past card for a read-only detail, past
+    sub-cards under their parent, relative-jump chips), **Sub-card reorder** (up
+    and down buttons inside the sheet), **Today reorder** (long-press reorder on Now),
     **Streak history strip** (visual week-by-week record), and **markdown details**
     rendering (no more raw textarea).
   - *Smaller bugs fixed (A4 batch)* — sub-card badge counts archived children

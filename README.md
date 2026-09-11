@@ -96,11 +96,11 @@ The Now feed is the default view; other screens open as bottom sheets:
 - **Move to board** — reassign a card to a different board (via "Move to").
 - **Opens (Doorways)** — link a card to another board, promote or demote sub-cards to
   become boards themselves, and see what board it came from.
-- **History** — a timeline of changes to a card, with past snapshots and time-jump chips.
-- **Sub-card reorder** — long-press and drag sub-cards inside their parent to change
-  the order.
-- **Today reorder** — reorder cards in the Today list via long-press.
-- **Time Travel** — scrub to any past moment and tap a card to see how it was then.
+- **History** — the card's event timeline, collapsed behind a row in the expanded sheet.
+- **Sub-card reorder** — up and down buttons on each sub-card inside the expanded sheet.
+- **Today reorder** — long-press a card on Now to reorder today's open cards.
+- **Time Travel** — scrub or jump (1h ago, yesterday, last week) to a past moment and tap a
+  card to see how it was then.
 
 Current state, backlog and the ops notes worth knowing live in
 [`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md).
