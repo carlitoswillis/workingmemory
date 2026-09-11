@@ -33,6 +33,11 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
   const { open, dismiss } = useSheetOpen();
   const { boardId, lists, refresh } = usePhoneBoardData();
   const [text, setText] = useState("");
+  // Capture stays open after Save, like QuickCapture.tsx (~41-48, ~108-112): several
+  // thoughts in a row shouldn't cost a re-open each. A tap on Done is the only thing
+  // that dismisses the sheet on its own; the sheet's normal close (✕, drag, back) is
+  // untouched.
+  const [added, setAdded] = useState(0);
   const [, startTransition] = useTransition();
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,7 +84,8 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
     const t = text.trim();
     if (!t) return;
     setText("");
-    dismiss();
+    setAdded((n) => n + 1);
+    taRef.current?.focus();
     startTransition(() => {
       addItemAction(boardId, t, target);
       refresh();
@@ -103,6 +109,11 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
         <p className="wm-ph-title" style={{ flex: 1 }}>
           Capture
         </p>
+        {added > 0 && (
+          <p className="wm-ph-caption">
+            <span className="wm-ph-num">{added}</span> added
+          </p>
+        )}
       </div>
 
       <div className="wm-sheet__scroll">
@@ -150,13 +161,15 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
       {/* The bar the whole sheet is arranged around: always the last thing above the
           keyboard, never behind it. */}
       <div className="wm-sheet__bar">
-        {/* Cancel is a ghost: leaving is always available and never the point. */}
+        {/* A ghost: leaving is always available and never the point. Once something
+            has actually been saved there's nothing left to cancel, so the label
+            says what the tap now does. */}
         <button
           type="button"
           className="wm-ph-btn wm-ph-btn--ghost wm-ph-btn--auto"
           onClick={dismiss}
         >
-          Cancel
+          {added > 0 ? "Done" : "Cancel"}
         </button>
         <button
           type="button"

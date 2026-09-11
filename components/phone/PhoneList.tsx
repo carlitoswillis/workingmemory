@@ -23,7 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
 import { reorderItemsAction } from "@/app/actions";
-import { localToday } from "@/lib/recurrence";
+import { effectiveDone, localToday } from "@/lib/recurrence";
 import { useBoardId } from "../board-context";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneRow from "./PhoneRow";
@@ -148,6 +148,14 @@ export default function PhoneList({
         ))}
       </div>
 
+      {/* The column's own hint — orientation for a list you're actually using, not
+          furniture on an empty one you already know the point of. */}
+      {pages[index] && (order[pages[index].id]?.length ?? 0) > 0 && (
+        <p className="wm-ph-hint wm-ph-pad" style={{ marginTop: 8 }}>
+          {pages[index].hint}
+        </p>
+      )}
+
       <div className="phone-pager" ref={trackRef}>
         {pages.map((page, i) => (
           <section
@@ -192,6 +200,12 @@ function Page({
   const boardId = useBoardId();
   const [, startTransition] = useTransition();
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Collapsed to its count until opened — a receipt, not a workspace, exactly like
+  // Now's "Done today" (PhoneHome.tsx ~166-196). Reorder only ever touches the open
+  // cards; a done card's place in the list doesn't matter once it's tucked away.
+  const [showDone, setShowDone] = useState(false);
+  const open = cards.filter((c) => !effectiveDone(c, today));
+  const done = cards.filter((c) => effectiveDone(c, today));
 
   // Long-press only, on every input that has one. 250ms / 5px: a scroll never becomes
   // a drag, and a deliberate hold always does.
@@ -203,22 +217,22 @@ function Page({
 
   const announcements: Announcements = {
     onDragStart: ({ active }) => {
-      const i = cards.findIndex((c) => c.id === active.id);
-      return `Picked up ${cards[i]?.text ?? "card"}, card ${i + 1} of ${cards.length} in ${list.label}.`;
+      const i = open.findIndex((c) => c.id === active.id);
+      return `Picked up ${open[i]?.text ?? "card"}, card ${i + 1} of ${open.length} in ${list.label}.`;
     },
     onDragOver: ({ active, over }) => {
       if (!over) return;
-      const i = cards.findIndex((c) => c.id === over.id);
-      return `${cards.find((c) => c.id === active.id)?.text ?? "Card"} moved to position ${
+      const i = open.findIndex((c) => c.id === over.id);
+      return `${open.find((c) => c.id === active.id)?.text ?? "Card"} moved to position ${
         i + 1
-      } of ${cards.length} in ${list.label}.`;
+      } of ${open.length} in ${list.label}.`;
     },
     onDragEnd: ({ active, over }) => {
       if (!over) return `Movement cancelled.`;
-      const i = cards.findIndex((c) => c.id === over.id);
-      return `${cards.find((c) => c.id === active.id)?.text ?? "Card"} dropped at position ${
+      const i = open.findIndex((c) => c.id === over.id);
+      return `${open.find((c) => c.id === active.id)?.text ?? "Card"} dropped at position ${
         i + 1
-      } of ${cards.length} in ${list.label}.`;
+      } of ${open.length} in ${list.label}.`;
     },
     onDragCancel: () => "Movement cancelled. The card is back where it was.",
   };
@@ -231,11 +245,12 @@ function Page({
     setActiveId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const from = cards.findIndex((c) => c.id === active.id);
-    const to = cards.findIndex((c) => c.id === over.id);
+    const from = open.findIndex((c) => c.id === active.id);
+    const to = open.findIndex((c) => c.id === over.id);
     if (from < 0 || to < 0) return;
-    onReorder(applyReorder(cards, from, to)); // settles locally first
-    const updates = reassignPositions(cards, from, to, list.id);
+    const reordered = applyReorder(open, from, to);
+    onReorder([...reordered, ...done]); // settles locally first
+    const updates = reassignPositions(open, from, to, list.id);
     if (updates.length) startTransition(() => void reorderItemsAction(boardId, updates));
   }
 
@@ -249,9 +264,9 @@ function Page({
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={open.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <ul className="phone-rows phone-page__rows">
-          {cards.map((item) => (
+          {open.map((item) => (
             <SortableRow
               key={item.id}
               item={item}
@@ -265,6 +280,45 @@ function Page({
         </ul>
       </SortableContext>
       {cards.length === 0 && <p className="phone-empty">{emptyCopyFor(list.id)}</p>}
+
+      {done.length > 0 && (
+        <section className="phone-section">
+          <button
+            type="button"
+            className="phone-section__toggle"
+            aria-expanded={showDone}
+            onClick={() => setShowDone((v) => !v)}
+          >
+            <span className="phone-section__title">Done</span>
+            <span className="phone-section__count tabular-nums">{done.length}</span>
+            <span className={`phone-chevron${showDone ? " is-open" : ""}`} aria-hidden>
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path
+                  d="M5.5 3.5L10.5 8l-5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          {showDone && (
+            <ul className="phone-rows phone-page__rows">
+              {done.map((item) => (
+                <PhoneRow
+                  key={item.id}
+                  item={item}
+                  childItems={childrenByParent.get(item.id)}
+                  today={today}
+                  snoozeListId={list.id === snoozeListId ? null : snoozeListId}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </DndContext>
   );
 }

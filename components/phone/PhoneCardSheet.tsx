@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import {
   addChildAction,
   archiveItemAction,
@@ -15,6 +16,8 @@ import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recu
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
 import PhoneRow from "./PhoneRow";
+import PhoneStreakStrip from "./PhoneStreakStrip";
+import PhoneSubCardList from "./PhoneSubCardList";
 import { usePhoneUI } from "./PhoneShell";
 import {
   Chevron,
@@ -26,6 +29,13 @@ import {
 } from "./Sheet";
 import { childrenOf, findItem, movableLists, usePhoneBoardData } from "./phone-data";
 import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
+
+// Code-split, like CardPanel.tsx: details render as markdown at rest and only the
+// full state ever needs the renderer.
+const Markdown = dynamic(() => import("../Markdown"), {
+  ssr: false,
+  loading: () => <span className="wm-ph-hint">rendering…</span>,
+});
 
 // `dense` and `onOpen` are PhoneRow props owned by the rows package; this cast keeps
 // the file compiling against either revision of that file. A sub-card row is a row
@@ -317,6 +327,11 @@ function CardBody({
 
   useEffect(() => setDetails(item.details ?? ""), [item.id, item.details]);
 
+  // Details render as markdown at rest, tap to drop into the raw textarea — same
+  // rule as CardPanel.tsx ~154-156. Empty details always show the editor.
+  const [editingDetails, setEditingDetails] = useState(false);
+  useEffect(() => setEditingDetails(false), [item.id]);
+
   const [childText, setChildText] = useState("");
 
   const doneName = `${item.text}${streak > 0 ? `, ${streak} ${rec.kind === "weekly" ? "week" : "day"} streak` : ""}, ${done ? "done" : "not done"}${rec.kind !== "none" ? " today" : ""}`;
@@ -414,30 +429,45 @@ function CardBody({
           {/* No `Title` / `Details` captions, and no second copy of the title: the
               card's name is the field in the head, and this is the only other thing
               here. A label over a self-evident field is furniture. */}
-          <textarea
-            id="wm-ph-card-details"
-            className="wm-ph-field"
-            // Tall enough that a paragraph is not cut off by its own underline.
-            style={{ minHeight: 140 }}
-            value={details}
-            aria-label="Details"
-            placeholder="Anything worth remembering about this, markdown supported"
-            onFocus={onFieldFocus}
-            onChange={(e) => setDetails(e.target.value)}
-            onBlur={() => {
-              // Both: the layout-scroll pin is released, THEN the write goes out.
-              onFieldBlur();
-              if (details === (item.details ?? "")) return;
-              run(() => {
-                editDetailsAction(boardId, item.id, details);
-                onChanged();
-              });
-            }}
-          />
+          {editingDetails || !details.trim() ? (
+            <textarea
+              id="wm-ph-card-details"
+              className="wm-ph-field"
+              // Tall enough that a paragraph is not cut off by its own underline.
+              style={{ minHeight: 140 }}
+              value={details}
+              aria-label="Details"
+              placeholder="Anything worth remembering about this, markdown supported"
+              onFocus={() => {
+                onFieldFocus();
+                setEditingDetails(true);
+              }}
+              onChange={(e) => setDetails(e.target.value)}
+              onBlur={() => {
+                // Both: the layout-scroll pin is released, THEN the write goes out.
+                onFieldBlur();
+                setEditingDetails(false);
+                if (details === (item.details ?? "")) return;
+                run(() => {
+                  editDetailsAction(boardId, item.id, details);
+                  onChanged();
+                });
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="wm-ph-details-preview"
+              aria-label="Details, tap to edit"
+              onClick={() => setEditingDetails(true)}
+            >
+              <Markdown source={details} />
+            </button>
+          )}
 
           {/* Sub-cards. The same row as the parent, at every depth: no indent, no
-              arrow glyph, no smaller type. The negative margin lets the rows and
-              their hairlines reach the sheet's edges through the scroller's gutter. */}
+              arrow glyph, no smaller type. Reorderable with the up/down buttons —
+              see PhoneSubCardList.tsx for why this isn't a dnd-kit drag here. */}
           <p className="wm-ph-sect" style={{ padding: "18px 0 6px" }}>
             Sub-cards
             {kids.length > 0 && (
@@ -447,14 +477,18 @@ function CardBody({
               </span>
             )}
           </p>
-          <ul style={{ marginLeft: -16, marginRight: -16 }}>
-            {kids.map((k) => (
-              <SubRow key={k.id} item={k} today={today} dense onOpen={onOpenChild} />
-            ))}
-            {kids.length === 0 && (
-              <li className="wm-ph-hint wm-ph-pad">Nothing inside this one yet.</li>
-            )}
-          </ul>
+          {kids.length === 0 ? (
+            <p className="wm-ph-hint wm-ph-pad">Nothing inside this one yet.</p>
+          ) : (
+            <PhoneSubCardList
+              kids={kids}
+              today={today}
+              boardId={boardId}
+              onOpenChild={onOpenChild}
+              onChanged={onChanged}
+              run={run}
+            />
+          )}
           <form
             style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "flex-end" }}
             onSubmit={(e) => {
@@ -511,6 +545,22 @@ function CardBody({
               </button>
             ))}
           </div>
+
+          {/* Streak history — CardPanel.tsx's recent-history strip (~859-874), as its
+              own component so this file's diff stays small. */}
+          {rec.kind !== "none" && (
+            <PhoneStreakStrip
+              dayset={daysWithLiveCheck(
+                item.completed_days ?? [],
+                today,
+                item.recurrence,
+                done,
+                item.completed_on,
+              )}
+              today={today}
+              rec={rec}
+            />
+          )}
 
           {/* Move to — the phone's ONLY way to move a card. Hover-hold nesting is a
               desktop gesture and is deliberately absent here (§5). */}
