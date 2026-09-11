@@ -200,6 +200,7 @@ export default function PhoneRow({
   // stays a shortcut. Directional lock decides who owns the drag within the first
   // 15px; a touch starting inside 28px of either edge is iOS's, not ours.
   const [dx, setDx] = useState(0);
+  const dxRef = useRef(0); // the live value; `dx` is one render behind a fast thumb
   const [revealed, setRevealed] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const axisRef = useRef<"pending" | "x">("pending");
@@ -207,19 +208,26 @@ export default function PhoneRow({
 
   const canSwipe = swipeEnabled && !dragging && !dense;
 
-  function onPointerDown(e: React.PointerEvent) {
+  // TOUCH EVENTS FOR FINGERS, POINTER EVENTS FOR THE REST. iOS Safari cancels a
+  // pointer sequence the moment it suspects a pan — a thumb's arc leans vertical
+  // for its first few pixels — and `touch-action: pan-y` does not talk it out of
+  // it. Touch events keep firing through that decision, which is why the old
+  // SwipeToArchive.tsx (touch events) worked on the owner's phone and this row
+  // (pointer events) never did. So a touch drives the swipe through the touch
+  // handlers, and every pointer event whose pointerType is "touch" is ignored, so
+  // the two never race on one gesture.
+  function beginSwipe(x: number, y: number) {
     if (!canSwipe) return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (!withinSwipeZone(e.clientX, window.innerWidth)) return;
-    startRef.current = { x: e.clientX, y: e.clientY };
+    if (!withinSwipeZone(x, window.innerWidth)) return;
+    startRef.current = { x, y };
     axisRef.current = "pending";
   }
 
-  function onPointerMove(e: React.PointerEvent) {
+  function moveSwipe(x: number, y: number) {
     const start = startRef.current;
     if (!start || !canSwipe) return;
-    const ddx = e.clientX - start.x;
-    const ddy = e.clientY - start.y;
+    const ddx = x - start.x;
+    const ddy = y - start.y;
     if (axisRef.current === "pending") {
       const axis = lockAxis(ddx, ddy);
       if (axis === "y") {
@@ -231,17 +239,20 @@ export default function PhoneRow({
     }
     // Rubber-band past the action width so the row can't be dragged off screen.
     const clamped = Math.max(-120, Math.min(120, ddx));
+    dxRef.current = clamped;
     setDx(clamped);
   }
 
   function endSwipe() {
     const start = startRef.current;
     const travelled = axisRef.current === "x";
+    const travelledDx = dxRef.current;
     startRef.current = null;
     axisRef.current = "pending";
+    dxRef.current = 0;
     if (!start || !travelled) return;
-    const intent = swipeIntent(dx);
-    swipedRef.current = Math.abs(dx) > 6; // swallow the click this gesture would fire
+    const intent = swipeIntent(travelledDx);
+    swipedRef.current = Math.abs(travelledDx) > 6; // swallow the click this gesture would fire
     setDx(0);
     if (intent === "complete") {
       if (!stateRef.current.checked) toggle();
@@ -250,6 +261,29 @@ export default function PhoneRow({
     } else {
       setRevealed(false);
     }
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (e.pointerType === "touch") return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    beginSwipe(e.clientX, e.clientY);
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (e.pointerType === "touch") return;
+    moveSwipe(e.clientX, e.clientY);
+  }
+  function onPointerEnd(e: React.PointerEvent) {
+    if (e.pointerType === "touch") return;
+    endSwipe();
+  }
+  function onTouchStart(e: React.TouchEvent) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    beginSwipe(t.clientX, t.clientY);
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    const t = e.touches[0];
+    if (t) moveSwipe(t.clientX, t.clientY);
   }
 
   function swallowClickAfterSwipe(e: React.MouseEvent) {
@@ -322,8 +356,12 @@ export default function PhoneRow({
             }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
-            onPointerUp={endSwipe}
-            onPointerCancel={endSwipe}
+            onPointerUp={onPointerEnd}
+            onPointerCancel={onPointerEnd}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={endSwipe}
+            onTouchCancel={endSwipe}
             onClickCapture={swallowClickAfterSwipe}
           >
             <button
