@@ -13,6 +13,7 @@ import {
   listExists,
   renameList,
   reorderLists,
+  restoreLandingList,
 } from "@/lib/columns";
 import { DEMO_MODE, getBoardContext, getMainDb } from "@/lib/db";
 import {
@@ -265,8 +266,21 @@ function setArchived(boardId: string | null, ids: string[], archived: 0 | 1) {
   const stmt = db.prepare(
     "update items set archived = ?, touched_by = ? where id = ? and board_id is ?",
   );
+  // A restore also has to find the card a live column: the one it was archived from
+  // can have been deleted while it sat in the archive (deleteList only refuses while
+  // a column holds a VISIBLE card), and `archived = 0` on its own would then drop it
+  // off the board AND out of the archive. restoreLandingList (lib/columns.ts) answers
+  // null when the card's list is fine as it is. One UPDATE, so the per-field triggers
+  // journal both the restore and the move.
+  const restore = db.prepare(
+    "update items set archived = 0, list = ?, touched_by = ? where id = ? and board_id is ?",
+  );
   db.transaction(() => {
-    for (const id of ids) stmt.run(archived, userId, id, bid);
+    for (const id of ids) {
+      const landing = archived === 0 ? restoreLandingList(db, bid, id) : null;
+      if (landing) restore.run(landing, userId, id, bid);
+      else stmt.run(archived, userId, id, bid);
+    }
   })();
   revalidateBoard(bid);
 }

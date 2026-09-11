@@ -98,6 +98,28 @@ export function captureLandingList(
   );
 }
 
+// Where a card coming BACK from the archive lands. deleteList only refuses while a
+// column still holds a VISIBLE card, so a column whose last card is archived deletes
+// cleanly — and restoring that card with a plain `archived = 0` would put it on a
+// column getLists() no longer returns: off the board and out of the archive both,
+// reachable only through Find or the time machine. So a restore re-homes it the way
+// a capture for a dead column lands. Null means leave the card's list alone — the
+// column is still live, or the list isn't a column at all: the pinned sentinels (the
+// daily note, the weekly review) own their own slot, and a sub-card's list mirrors
+// its parent's rather than naming a column it sits in.
+export function restoreLandingList(
+  db: Database.Database,
+  boardId: string | null,
+  id: string,
+): string | null {
+  const row = db
+    .prepare("select list, parent_id from items where id = ? and board_id is ?")
+    .get(id, boardId) as { list: string; parent_id: string | null } | undefined;
+  if (!row || row.parent_id !== null) return null;
+  if (isSentinelList(row.list) || listExists(db, boardId, row.list)) return null;
+  return captureLandingList(db, boardId, row.list);
+}
+
 function liveCount(db: Database.Database, boardId: string | null): number {
   return (
     db

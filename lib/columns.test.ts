@@ -16,6 +16,7 @@ import {
   listExists,
   renameList,
   reorderLists,
+  restoreLandingList,
 } from "./columns.ts";
 
 let failures = 0;
@@ -101,6 +102,21 @@ ok("last column can't be deleted", "error" in deleteList(db, U, getLists(db, U)[
   const bdId = "id" in bd ? bd.id : "";
   ok("an archived Brain Dump id lands in the live Brain Dump", captureLandingList(db, U, "braindump"), bdId);
   ok("a sentinel list lands in Brain Dump", captureLandingList(db, U, "note"), bdId);
+
+  // --- where a RESTORED card lands ---------------------------------------------
+  // i1 was archived out of "backlog" and that column has since been deleted, so
+  // restoring it as-is would drop it off the board and out of the archive both.
+  ok("a card archived out of a deleted column is re-homed", restoreLandingList(db, U, "i1"), bdId);
+
+  const ins = db.prepare("insert into items (id, text, list, parent_id, user_id) values (?, ?, ?, ?, null)");
+  ins.run("i2", "on a live column", only, null);
+  ok("a card whose column is still live stays put", restoreLandingList(db, U, "i2"), null);
+  ins.run("i3", "a parent", only, null);
+  ins.run("i4", "a sub-card", "backlog", "i3");
+  ok("a sub-card keeps its parent's list", restoreLandingList(db, U, "i4"), null);
+  ins.run("i5", "the daily note", "note", null);
+  ok("the pinned note keeps its sentinel list", restoreLandingList(db, U, "i5"), null);
+  ok("an unknown id is left alone", restoreLandingList(db, U, "nope"), null);
 }
 
 if (failures > 0) {
