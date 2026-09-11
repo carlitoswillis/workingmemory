@@ -14,6 +14,8 @@ import {
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
+import PhoneCardDoorway from "./PhoneCardDoorway";
+import PhoneCardHistory from "./PhoneCardHistory";
 import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
 import {
@@ -537,6 +539,9 @@ function CardBody({
             ))}
           </div>
 
+          {/* Doorways (spec 2026-08-30): new component, see PhoneCardDoorway.tsx. */}
+          <PhoneCardDoorway item={item} boardId={boardId} childCount={kids.length} onChanged={onChanged} />
+
           <button
             type="button"
             className="wm-ph-btn"
@@ -555,6 +560,10 @@ function CardBody({
             Archived cards keep their whole history, and come back from Archive on the
             desktop board.
           </p>
+
+          {/* History (card ↔ board doorways spec, §"provenance"): new component,
+              see PhoneCardHistory.tsx. */}
+          <PhoneCardHistory item={item} boardId={boardId} />
         </div>
       )}
     </>
