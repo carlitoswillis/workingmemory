@@ -140,17 +140,25 @@ export default function PhoneShell({
     setTabState(t);
   }, []);
 
+  // Count a level ONLY once the browser has actually taken the entry. pushState is
+  // refusable — every engine rate-limits it (roughly 100 calls per half-minute, a
+  // per-document budget Next's own router.replaceState spends out of too), and
+  // restricted contexts throw outright. Counting first and pushing second would leave
+  // the ref claiming an entry the session history does not hold, and since close() and
+  // goToLevel() both measure their `history.go(-n)` off this array, the next back
+  // gesture would travel one entry past the page the phone app opened on — the dead
+  // entry this whole owner exists to prevent. So: push, then record.
   const pushLevel = useCallback((onPop: () => void) => {
-    levelsRef.current = [...levelsRef.current, onPop];
     if (typeof window === "undefined") return;
     try {
       window.history.pushState(
-        { ...window.history.state, wmPhoneLevel: levelsRef.current.length },
+        { ...window.history.state, wmPhoneLevel: levelsRef.current.length + 1 },
         "",
       );
     } catch {
-      /* history is best-effort; the sheet still opens */
+      return; // history is best-effort; the sheet still opens, just without an entry
     }
+    levelsRef.current = [...levelsRef.current, onPop];
   }, []);
 
   const goToLevel = useCallback((target: number) => {
