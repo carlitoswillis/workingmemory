@@ -15,6 +15,17 @@ import { usePhoneBoardData } from "./phone-data";
 // the phone's row grammar (see PhoneBoards.tsx) rather than the desktop's card list.
 // Tapping a row opens the card sheet to read it, same as a board row would.
 
+// The last list this board answered with, kept across the component's own lifetime.
+// Opening an archived card is an `asLevel` push (see the row below): PhoneSheetHost
+// keys sheets on kind, so the archive UNMOUNTS while the card sheet is up and mounts
+// again when the back gesture pops that level. Fetch-on-mount alone puts the sheet
+// back on "Loading…" every time — and that refetch is issued from inside the popstate
+// handler, where a dev server can drop it on the floor and leave the sheet loading
+// forever with nothing to do but close it. So the list is seeded from here and the
+// fetch only ever REPLACES what is already on screen. It is one board's rows, keyed by
+// board id and only read back for that same board, so nothing crosses a board.
+let cached: { boardId: string | null; items: Item[] } | null = null;
+
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -28,19 +39,33 @@ export default function PhoneArchive() {
   const { close, open } = usePhoneUI();
   const { open: shown } = useSheetOpen();
   const { boardId, listLabels } = usePhoneBoardData();
-  const [items, setItems] = useState<Item[] | null>(null);
+  const [items, setItems] = useState<Item[] | null>(() =>
+    cached && cached.boardId === boardId ? cached.items : null,
+  );
   const [q, setQ] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     let alive = true;
-    archivedItemsAction(boardId).then((res) => {
-      if (alive) setItems(res);
-    });
+    setFailed(false);
+    archivedItemsAction(boardId).then(
+      (res) => {
+        cached = { boardId, items: res };
+        if (alive) setItems(res);
+      },
+      // A refused or aborted fetch must not leave the sheet on "Loading…" with no way
+      // out: with nothing cached there is a line and a Try again, and with a cached
+      // list the rows simply stay as they were.
+      () => {
+        if (alive) setFailed(true);
+      },
+    );
     return () => {
       alive = false;
     };
-  }, [boardId]);
+  }, [boardId, attempt]);
 
   const shownItems = useMemo(
     () => (items && q.trim() ? searchItems(items, q, items.length).map((h) => h.item) : items),
@@ -51,6 +76,11 @@ export default function PhoneArchive() {
   // the same pattern ArchiveView.tsx's restore() uses.
   function restore(id: string) {
     setItems((cur) => cur?.filter((i) => i.id !== id) ?? cur);
+    // The seed for the next mount has to lose the row too, or a restored card comes
+    // back to the archive on the way out of the card sheet.
+    if (cached && cached.boardId === boardId) {
+      cached = { boardId, items: cached.items.filter((i) => i.id !== id) };
+    }
     startTransition(() => {
       unarchiveItemAction(boardId, id).catch(() => {});
     });
@@ -85,7 +115,23 @@ export default function PhoneArchive() {
         )}
 
         {items === null ? (
-          <p className="wm-ph-hint wm-ph-pad">Loading…</p>
+          failed ? (
+            <div className="wm-ph-pad">
+              <p className="wm-ph-hint" role="alert">
+                The archive didn&apos;t load.
+              </p>
+              <button
+                type="button"
+                className="wm-ph-btn wm-ph-btn--auto"
+                style={{ marginTop: 10 }}
+                onClick={() => setAttempt((n) => n + 1)}
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <p className="wm-ph-hint wm-ph-pad">Loading…</p>
+          )
         ) : items.length === 0 ? (
           <p className="wm-ph-hint wm-ph-pad">Nothing archived — the board is all there is.</p>
         ) : shownItems && shownItems.length === 0 ? (

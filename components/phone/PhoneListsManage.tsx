@@ -248,19 +248,34 @@ export default function PhoneListsManage() {
             submitAdd();
           }}
         >
-          <input
-            className="wm-ph-field"
-            value={addDraft}
-            maxLength={MAX_LIST_LABEL}
-            placeholder="Add a list…"
-            aria-label="Add a list"
-            onChange={(e) => setAddDraft(e.target.value)}
-            onFocus={onFieldFocus}
-            onBlur={() => {
-              onFieldBlur();
-              submitAdd();
-            }}
-          />
+          {/* Adding a column is a DELIBERATE act, so it takes a deliberate tap (or the
+              return key) — never a blur. The rename field above commits on blur because
+              it edits a row that already exists; this one creates data, and blur is
+              fired by the sheet's own dismiss, by any other row's button, and by tapping
+              another label to rename it. Committing there wrote a column the user never
+              asked for, out of sight, with only a delete (itself refused once the column
+              holds a card) to undo it. The field only pays for the keyboard now; the
+              button is the commit, and it is here because a phone keyboard does not
+              always offer a return key. */}
+          <div className="wm-ph-listmgr__addrow">
+            <input
+              className="wm-ph-field"
+              value={addDraft}
+              maxLength={MAX_LIST_LABEL}
+              placeholder="Add a list…"
+              aria-label="Add a list"
+              onChange={(e) => setAddDraft(e.target.value)}
+              onFocus={onFieldFocus}
+              onBlur={onFieldBlur}
+            />
+            <button
+              type="submit"
+              className="wm-ph-btn wm-ph-btn--auto"
+              disabled={!addDraft.trim() || addBusy}
+            >
+              {addBusy ? "Adding…" : "Add"}
+            </button>
+          </div>
           {rowError?.id === null && (
             <p className="wm-ph-hint" style={{ marginTop: 6, color: "var(--now)" }} role="alert">
               {rowError.text}

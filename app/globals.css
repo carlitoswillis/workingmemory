@@ -1842,6 +1842,18 @@ a.phone-row__doorway:active {
   margin-top: 4px;
   padding-top: 14px;
 }
+/* The field writes the name, the button commits it — adding a column never happens
+   on a blur. Same shape as PhoneBoardManage's invite row: one line, one trailing
+   button, the field taking whatever is left. */
+.wm-ph-listmgr__addrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wm-ph-listmgr__addrow .wm-ph-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 /* ── track "boards": create / rename / invite / remove / leave / delete ─────
    PhoneBoards.tsx's row (a switch link plus a trailing "Manage" toggle) and

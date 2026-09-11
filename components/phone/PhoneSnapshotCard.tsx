@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { BoardItemAt } from "@/lib/timetravel";
@@ -21,6 +21,19 @@ import { Chevron } from "./Sheet";
 // bottom edge along with the drawer. Out here `inset: 0` is the viewport again, and
 // `.wm-ph-snapcard` pays the safe-area insets itself (globals.css) because nothing
 // above it does.
+//
+// LEAVING THE DRAWER COSTS TWO THINGS, AND BOTH ARE PAID HERE. One is pointer events:
+// Radix puts `pointer-events: none` on <body> while a dialog is open, and
+// `.wm-ph-snapcard { pointer-events: auto }` (globals.css) hands them back. The other
+// is SCROLLING. Vaul's overlay is a Radix dialog overlay, which wraps its subtree in
+// react-remove-scroll with the drawer as the only shard; that sidecar puts a
+// non-passive `touchmove`/`wheel` listener on `document` and calls preventDefault on
+// every one of them whose target is neither inside the overlay nor inside a shard.
+// Out here we are neither — a sibling of both under <body> — so the card's own
+// scroller was dead: on a past card longer than the screen, the details and the
+// sub-cards below the fold could not be reached. The effect below keeps those events
+// from ever reaching the document listener. It is a native, non-passive listener on
+// the card's own root because that is the layer the lock listens above.
 const Markdown = dynamic(() => import("../Markdown"), {
   ssr: false,
   loading: () => <span className="wm-ph-hint">rendering…</span>,
@@ -50,6 +63,23 @@ export default function PhoneSnapshotCard({
   // rendered inside an already-open sheet, so one extra frame costs nothing).
   const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => setHost(document.body), []);
+
+  // See the note above the component: the scroll lock around the sheet cancels every
+  // touchmove and wheel that starts out here. Stop them at the card instead, so the
+  // lock's document listener never sees the ones that belong to this scroller.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const stop = (e: Event) => e.stopPropagation();
+    el.addEventListener("touchmove", stop, { passive: false });
+    el.addEventListener("wheel", stop, { passive: false });
+    return () => {
+      el.removeEventListener("touchmove", stop);
+      el.removeEventListener("wheel", stop);
+    };
+  }, [host]);
+
   if (!host) return null;
 
   return createPortal(
@@ -60,6 +90,7 @@ export default function PhoneSnapshotCard({
       // whose `.wm-sheet__bar` absorbs the bottom inset, and this has neither. See the
       // rule beside `.wm-ph-snap-badge` in globals.css.
       className="card-in wm-ph-snapcard"
+      ref={rootRef}
       style={{
         position: "fixed",
         inset: 0,
