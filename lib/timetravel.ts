@@ -269,6 +269,7 @@ interface Computed {
   title: string;
   at: string | null;
   parentId: string | null;
+  parentChanged: boolean; // it carries a nested / un-nested clause of its own
 }
 
 /**
@@ -330,6 +331,7 @@ export function diffBoardSince(
 
     const kinds: DiffKind[] = [];
     const details: Partial<Record<DiffKind, string>> = {};
+    let parentChanged = false;
     const add = (k: DiffKind, d?: string) => {
       kinds.push(k);
       if (d) details[k] = d;
@@ -357,6 +359,7 @@ export function diffBoardSince(
       if (before.text !== after.text) add("reworded");
       if (before.details !== after.details) add("details");
       if (before.parent_id !== after.parent_id) {
+        parentChanged = true;
         if (after.parent_id) add("nested", `under "${titleOf(after.parent_id)}"`);
         else add("unnested", `out of "${titleOf(before.parent_id as string)}"`);
       }
@@ -384,10 +387,12 @@ export function diffBoardSince(
       details,
       title,
       at,
-      // Where the card hangs NOW. A card PULLED OUT of a parent inside the window is
-      // a board card again and keeps its own line — rolling it up would swallow the
-      // very fact it carries ("un-nested out of …").
+      // Where the card hangs NOW, and whether that changed inside the window. A card
+      // that moved INTO or OUT OF a parent keeps its own line either way — rolling it
+      // up would swallow the very fact it carries ("nested under …") and would count
+      // it as a sub-card of a parent it didn't have at T.
       parentId: after.parent_id,
+      parentChanged,
     });
   }
 
@@ -397,13 +402,42 @@ export function diffBoardSince(
   // Only added/done/archived roll up; a sub-card that was merely reworded is the
   // parent's business, not the ledger's. A sub-card whose parent isn't on the
   // books (deleted, or archived at both ends) is dropped with it.
+
+  // A row survives as a line of its own if it's a board card now, or if it moved
+  // into / out of a parent inside the window (that fact IS its line).
+  const keepsOwnLine = (row: Computed) => row.parentId === null || row.parentChanged;
+
+  // Nesting goes deeper than one level (lib/nesting.ts), so a sub-card's tally
+  // belongs to the nearest ANCESTOR that still has a line — counting it on an
+  // intermediate parent whose own row is rolled away would lose it entirely.
+  // Returns null when the walk leaves the books, or meets a cycle.
+  const ledgerAncestorOf = (row: Computed): string | null => {
+    const seen = new Set<string>();
+    let id = row.parentId;
+    while (id) {
+      if (seen.has(id) || hidden.has(id) || !byId.has(id)) return null;
+      seen.add(id);
+      const parent = computed.get(id);
+      if (!parent) return null;
+      if (keepsOwnLine(parent)) return id;
+      id = parent.parentId;
+    }
+    return null;
+  };
+
+  // Resolved against the whole map before anything is removed from it, so a child
+  // can still see the ancestors it is climbing past.
+  const rolledUp = new Map<string, string | null>();
+  for (const [id, row] of computed) {
+    if (!keepsOwnLine(row)) rolledUp.set(id, ledgerAncestorOf(row));
+  }
+
   const subCounts = new Map<string, DiffSubCounts>();
   const subAt = new Map<string, string>();
-  for (const [id, row] of computed) {
-    const parentId = row.parentId;
-    if (!parentId) continue;
+  for (const [id, parentId] of rolledUp) {
+    const row = computed.get(id) as Computed;
     computed.delete(id);
-    if (hidden.has(parentId) || !byId.has(parentId)) continue;
+    if (!parentId) continue;
     const tally = subCounts.get(parentId) ?? { done: 0, added: 0, archived: 0 };
     for (const k of row.kinds) {
       if (k === "done" || k === "added" || k === "archived") tally[k] += 1;

@@ -333,10 +333,128 @@ eq(
       ev("c2", "moved", "parent", "p1", null, D.inside),
     ],
   ),
-  // c1 became a sub-card of p1, so its line rolls up under the parent (no
-  // added/done/archived to count, so the parent shows nothing); c2 is a board card
-  // again and keeps its own line.
-  ['pulled back out — un-nested out of "Trip"'],
+  // Both cards changed parent inside the window, so both keep their own line —
+  // rolling either up would swallow the very fact it carries.
+  [
+    'book the train — nested under "Trip"',
+    'pulled back out — un-nested out of "Trip"',
+  ],
+);
+
+eq(
+  "a card nested inside the window is not counted as its new parent's sub-card",
+  lines(
+    [
+      card({ id: "np", text: "Move house", list: "focus" }),
+      card({ id: "nc", text: "boxes", parent_id: "np", done: true }),
+    ],
+    [
+      born("np", "Move house", D.beforeT),
+      born("nc", "boxes", D.beforeT),
+      ev("nc", "moved", "parent", null, "np", D.inside),
+      ev("nc", "completed", "done", "false", "true", D.later),
+    ],
+  ),
+  // It was a board card at T: the ledger says what happened TO IT, and the parent
+  // gets no "1 sub-card done" for a card that only just arrived under it.
+  ['boxes — done, nested under "Move house"'],
+);
+
+eq(
+  "the nested kind reaches the counts",
+  diffBoardSince(
+    [
+      card({ id: "np2", text: "Move house", list: "focus" }),
+      card({ id: "nc2", text: "boxes", parent_id: "np2" }),
+    ],
+    [
+      born("np2", "Move house", D.beforeT),
+      born("nc2", "boxes", D.beforeT),
+      ev("nc2", "moved", "parent", null, "np2", D.inside),
+    ],
+    D.T,
+    D.NOW,
+    OPTS,
+  ).summary,
+  [{ kind: "nested", count: 1, phrase: "1 nested" }],
+);
+
+eq(
+  "a sub-card re-parented from one card to another says where it went",
+  lines(
+    [
+      card({ id: "ra", text: "Old home" }),
+      card({ id: "rb", text: "New home" }),
+      card({ id: "rc", text: "the drill", parent_id: "rb" }),
+    ],
+    [
+      born("ra", "Old home", D.beforeT),
+      born("rb", "New home", D.beforeT),
+      born("rc", "the drill", D.beforeT),
+      ev("rc", "moved", "parent", "ra", "rb", D.inside),
+    ],
+  ),
+  ['the drill — nested under "New home"'],
+);
+
+// --- sub-cards nested more than one level deep -----------------------------
+eq(
+  "a grandchild rolls up to the board card, not to a parent that has no line",
+  lines(
+    [
+      card({ id: "g1", text: "Move house", list: "focus" }),
+      card({ id: "g2", text: "Packing", parent_id: "g1" }),
+      card({ id: "g3", text: "boxes", parent_id: "g2", done: true }),
+    ],
+    [
+      born("g1", "Move house", D.beforeT),
+      born("g2", "Packing", D.beforeT),
+      born("g3", "boxes", D.beforeT),
+      ev("g3", "completed", "done", "false", "true", D.inside),
+    ],
+  ),
+  ["Move house — 1 sub-card done"],
+);
+
+const deepItems = [
+  card({ id: "h1", text: "Move house", list: "focus" }),
+  card({ id: "h2", text: "Packing", parent_id: "h1", done: true }),
+  card({ id: "h3", text: "boxes", parent_id: "h2", done: true }),
+];
+const deepEvents = [
+  born("h1", "Move house", D.beforeT),
+  born("h2", "Packing", D.beforeT),
+  born("h3", "boxes", D.beforeT),
+  ev("h2", "completed", "done", "false", "true", D.later),
+  ev("h3", "completed", "done", "false", "true", D.inside),
+];
+
+eq(
+  "both depths count on the board card's line",
+  lines(deepItems, deepEvents),
+  ["Move house — 2 sub-cards done"],
+);
+
+eq(
+  "and the summary counts them as the two cards they are",
+  diffBoardSince(deepItems, deepEvents, D.T, D.NOW, OPTS).summary,
+  [{ kind: "done", count: 2, phrase: "2 done" }],
+);
+
+eq(
+  "a grandchild whose whole branch hangs off a ghost is ignored",
+  lines(
+    [
+      card({ id: "k2", text: "Packing", parent_id: "ghost" }),
+      card({ id: "k3", text: "boxes", parent_id: "k2", done: true }),
+    ],
+    [
+      born("k2", "Packing", D.beforeT),
+      born("k3", "boxes", D.beforeT),
+      ev("k3", "completed", "done", "false", "true", D.inside),
+    ],
+  ),
+  [],
 );
 
 // --- sub-cards roll up -----------------------------------------------------
