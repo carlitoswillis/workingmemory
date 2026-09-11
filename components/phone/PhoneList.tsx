@@ -169,6 +169,9 @@ export default function PhoneList({
   );
 }
 
+// Which of a page's two trays a card is standing in.
+type Tray = "open" | "done";
+
 function Page({
   list,
   cards,
@@ -192,17 +195,88 @@ function Page({
   // you ask for them — a receipt, not a workspace, exactly like Now's "Done today"
   // (PhoneHome.tsx) — and where a done card sits in the list stopped mattering the
   // moment it was tucked away.
+  //
+  // Which means this page owns optimistic completion for exactly the reason Now does:
+  // the two trays are two different parents, so a row split on server truth alone is
+  // UNMOUNTED the instant the revalidation lands — well inside the 900ms window — and
+  // its Undo, its pop and its error go with it. Same two maps as PhoneHome:
+  //
+  //   optimistic — id → the checkbox's local truth, until the server agrees;
+  //   held       — id → the tray it was tapped in, until its collapse finishes.
   const [showDone, setShowDone] = useState(false);
-  const open = cards.filter((c) => !effectiveDone(c, today));
-  const done = cards.filter((c) => effectiveDone(c, today));
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [held, setHeld] = useState<Map<string, Tray>>(new Map());
+  // Where each row is standing right now, read at the moment one is tapped. A ref,
+  // because the callbacks below outlive any single render.
+  const trayRef = useRef<Map<string, Tray>>(new Map());
+
+  const open: Item[] = [];
+  const done: Item[] = [];
+  const placement = new Map<string, Tray>();
+  // The count is derived WITHOUT the pin: `held` keeps a just-tapped row where the
+  // thumb left it for 900ms, but the count is a receipt and has to agree with the tap
+  // in the same frame.
+  let doneCount = 0;
+  for (const card of cards) {
+    const natural: Tray = (optimistic[card.id] ?? effectiveDone(card, today)) ? "done" : "open";
+    if (natural === "done") doneCount++;
+    const tray = held.get(card.id) ?? natural;
+    placement.set(card.id, tray);
+    (tray === "done" ? done : open).push(card);
+  }
+  trayRef.current = placement;
+
+  // A row that has settled back onto the server's answer no longer needs an override,
+  // so the map stays the size of what is actually in flight.
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+      for (const [id, value] of Object.entries(prev)) {
+        const card = cards.find((c) => c.id === id);
+        if (card && effectiveDone(card, today) === value) changed = true;
+        else next[id] = value;
+      }
+      return changed ? next : prev;
+    });
+  }, [cards, today]);
+
+  const onCheckedChange = useCallback((id: string, checked: boolean) => {
+    setOptimistic((prev) => (prev[id] === checked ? prev : { ...prev, [id]: checked }));
+  }, []);
+
+  const onHold = useCallback(
+    (id: string, holding: boolean) => {
+      setHeld((prev) => {
+        const next = new Map(prev);
+        if (holding) {
+          const tray = trayRef.current.get(id);
+          if (tray) next.set(id, tray);
+          else return prev;
+        } else {
+          if (!next.has(id)) return prev;
+          next.delete(id);
+        }
+        return next;
+      });
+    },
+    [], // trayRef is a ref: always current, never a dependency
+  );
 
   const rowProps = useCallback(
     (item: Item) => ({
+      checked: optimistic[item.id] ?? effectiveDone(item, today),
       childItems: childrenByParent.get(item.id),
       today,
       snoozeListId: list.id === snoozeListId ? null : snoozeListId,
+      // A page has a Done tray now, so a ticked row collapses into it rather than
+      // staying put — the same move Now makes.
+      collapseOnDone: true,
+      onCheckedChange,
+      onHold,
+      onSettled: (id: string) => onHold(id, false),
     }),
-    [childrenByParent, today, list.id, snoozeListId],
+    [childrenByParent, today, list.id, snoozeListId, optimistic, onCheckedChange, onHold],
   );
 
   return (
@@ -219,7 +293,7 @@ function Page({
       />
       {cards.length === 0 && <p className="phone-empty">{emptyCopyFor(list.id)}</p>}
 
-      {done.length > 0 && (
+      {(doneCount > 0 || done.length > 0) && (
         <section className="phone-section">
           <button
             type="button"
@@ -228,7 +302,7 @@ function Page({
             onClick={() => setShowDone((v) => !v)}
           >
             <span className="phone-section__title">Done</span>
-            <span className="phone-section__count tabular-nums">{done.length}</span>
+            <span className="phone-section__count tabular-nums">{doneCount}</span>
             <span className={`phone-chevron${showDone ? " is-open" : ""}`} aria-hidden>
               <svg viewBox="0 0 16 16" width="14" height="14">
                 <path
