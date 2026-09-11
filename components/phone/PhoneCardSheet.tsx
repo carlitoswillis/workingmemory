@@ -14,6 +14,7 @@ import {
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
+import PhoneCardMove from "./PhoneCardMove";
 import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
 import {
@@ -518,6 +519,12 @@ function CardBody({
               </button>
             ))}
           </div>
+
+          {/* Inside (re-parent) and Board (move to another board) — track
+              "move-reparent". The Move-to chips above change the card's column; these
+              change what it belongs to. Both live in PhoneCardMove so this file stays
+              about the card. */}
+          <PhoneCardMove item={item} onChanged={onChanged} onLeftBoard={onArchived} />
 
           <button
             type="button"
