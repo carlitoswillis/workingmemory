@@ -38,7 +38,8 @@ export type PhoneSheet =
   | { kind: "review" }
   | { kind: "note" }
   | { kind: "more" }
-  | { kind: "archive" };
+  | { kind: "archive" }
+  | { kind: "lists" };
 
 export type PhoneUI = {
   tab: "now" | "lists" | "find" | "more";

@@ -6,6 +6,7 @@ import PhoneArchive from "./PhoneArchive";
 import PhoneBoards from "./PhoneBoards";
 import PhoneCapture from "./PhoneCapture";
 import PhoneCardSheet from "./PhoneCardSheet";
+import PhoneListsManage from "./PhoneListsManage";
 import PhoneMore from "./PhoneMore";
 import PhoneNote from "./PhoneNote";
 import PhoneReview from "./PhoneReview";
@@ -339,6 +340,8 @@ export function PhoneSheetHost() {
       return <PhoneMore key="more" />;
     case "archive":
       return <PhoneArchive key="archive" />;
+    case "lists":
+      return <PhoneListsManage key="lists" />;
   }
 }
 
