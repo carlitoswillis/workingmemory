@@ -558,18 +558,88 @@ eq(
   [],
 );
 
+// dayT and dayNow always fall in the same Sunday-start week here (June 7-13, 2026,
+// whatever timezone the tests run in), so a tick dated dayT is still THIS period's
+// tick — which is what makes un-checking it a real reopen rather than a rollover.
+const WEEKLY_SUN = "weekly:0";
+
 eq(
   "a repeating card actually un-checked inside the window reads reopened",
   lines(
-    [card({ id: "rep4", text: "stretch", recurrence: "daily", completed_on: null, done: false })],
+    [card({ id: "rep4", text: "laundry", recurrence: WEEKLY_SUN, completed_on: null, done: false })],
     [
-      born("rep4", "stretch", D.beforeT),
+      born("rep4", "laundry", D.beforeT),
       ev("rep4", "completed", "completed_on", null, dayT, D.beforeT),
       ev("rep4", "reopened", "completed_on", dayT, null, D.inside),
     ],
   ),
-  // done at T (checked off for T's own day), not done now, and completed_on moved.
-  ["stretch — reopened"],
+  // still done for the CURRENT period at T, not done now: someone un-checked it.
+  ["laundry — reopened"],
+);
+
+eq(
+  "un-checking a repeating card's stale tick is a rollover, not a reopen",
+  lines(
+    [card({ id: "rep5", text: "stretch", recurrence: "daily", completed_on: null, done: false })],
+    [
+      born("rep5", "stretch", D.beforeT),
+      ev("rep5", "completed", "completed_on", null, dayT, D.beforeT),
+      ev("rep5", "reopened", "completed_on", dayT, null, D.inside),
+    ],
+  ),
+  // T's tick was for T's own day; by now it had already reset itself. Clearing a
+  // date that no longer made the card done reopens nothing.
+  [],
+);
+
+eq(
+  "a repeating card ticked and un-ticked inside the window is not reopened",
+  lines(
+    [card({ id: "rep6", text: "vitamins", recurrence: "daily", completed_on: null, done: false })],
+    [
+      born("rep6", "vitamins", D.beforeT),
+      ev("rep6", "completed", "completed_on", null, dayT, D.beforeT),
+      ev("rep6", "completed", "completed_on", dayT, dayNow, D.inside),
+      ev("rep6", "reopened", "completed_on", dayNow, null, D.later),
+    ],
+  ),
+  // Identical in done-ness to rep3's untouched rollover at both ends — a change
+  // made and undone inside the window must not reach the ledger.
+  [],
+);
+
+// The same pair for a weekly card, which needs a wider window to cross a period:
+// a T two weeks back, whose tick belongs to a week that has since turned over.
+const D2 = {
+  longAgo: "2026-05-20T12:00:00.000Z",
+  T: "2026-05-27T12:00:00.000Z",
+};
+const dayT2 = localDate(D2.T); // May 27-28, 2026 — the week starting Sunday May 24
+
+eq(
+  "a weekly card that rolled into a new week was not reopened",
+  lines(
+    [card({ id: "rep7", text: "laundry", recurrence: WEEKLY_SUN, completed_on: dayT2, done: true, created_at: D2.longAgo })],
+    [born("rep7", "laundry", D2.longAgo), ev("rep7", "completed", "completed_on", null, dayT2, D2.longAgo)],
+    D2.T,
+  ),
+  [],
+);
+
+eq(
+  "a weekly card ticked and un-ticked inside the window is not reopened",
+  lines(
+    [card({ id: "rep8", text: "laundry", recurrence: WEEKLY_SUN, completed_on: null, done: false, created_at: D2.longAgo })],
+    [
+      born("rep8", "laundry", D2.longAgo),
+      ev("rep8", "completed", "completed_on", null, dayT2, D2.longAgo),
+      ev("rep8", "completed", "completed_on", dayT2, dayNow, D.inside),
+      ev("rep8", "reopened", "completed_on", dayNow, null, D.later),
+    ],
+    D2.T,
+  ),
+  // Same two ends as the rollover above — not done this week either way.
+  [],
 );
 
 // --- several kinds on one line, and the order the ledger reads in ----------

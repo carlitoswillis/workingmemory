@@ -240,9 +240,8 @@ const newestFirst = (a: ItemEvent, b: ItemEvent) => ms(b.at) - ms(a.at) || b.id 
 
 // `completed_on` as it stood at `tMs` — reverted the same way reconstructItemAt
 // reverts every other field. reconstructItemAt folds this into effectiveDone and
-// doesn't hand the raw date back, and the diff needs it twice: to judge done-ness
-// against an explicit `today`, and to tell a repeating card that was UNCHECKED from
-// one that merely rolled over into a new period.
+// doesn't hand the raw date back, and the diff needs the raw date at BOTH ends so it
+// can judge done-ness at both against one explicit `today` (see "reopened" below).
 function completedOnAt(item: Item, events: ItemEvent[], tMs: number): string | null {
   let on = item.completed_on ?? null;
   for (const e of events.filter((e) => e.field === "completed_on" && ms(e.at) > tMs).sort(newestFirst)) {
@@ -350,9 +349,22 @@ export function diffBoardSince(
     } else {
       if (archivedThen) add("restored");
       if (!doneThen && doneNow) add("done");
-      // A repeating card that simply rolled into a new period was not "reopened" —
-      // only an actual un-check (completed_on moved) counts.
-      if (doneThen && !doneNow && (!repeats || onThen !== onNow)) add("reopened");
+      // "Reopened" asks one question of both ends of the window: is it still done
+      // TODAY? `doneThen` can't answer it for a repeating card — it is measured as
+      // of T's own calendar day (reconstructItemAt), so a card that merely rolled
+      // into a new period reads done-then/not-done-now purely because the two sides
+      // were judged on different days. Re-judge T's completed_on against the SAME
+      // clock as now, and a rollover falls out by itself — no comparing raw dates,
+      // which a tick made and undone inside the window would perturb into a false
+      // "reopened". Only a card still done for today's period at T, and not done
+      // now, was actually un-checked.
+      const doneThenAsOfToday = repeats
+        ? effectiveDone(
+            { recurrence: item.recurrence, completed_on: onThen, done: before.done },
+            opts.today,
+          )
+        : doneThen;
+      if (doneThenAsOfToday && !doneNow) add("reopened");
       if (before.list !== after.list) {
         add("moved", `from ${labelOf(before.list)} to ${labelOf(after.list)}`);
       }
