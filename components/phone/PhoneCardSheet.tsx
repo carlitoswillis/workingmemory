@@ -86,7 +86,8 @@ const SubRow = PhoneRow as unknown as React.ComponentType<SubRowProps>;
 const DONE_LABEL = "Done";
 
 export default function PhoneCardSheet({ itemId }: { itemId: string }) {
-  const { close, open, pushLevel, goBackLevels } = usePhoneUI();
+  const ui = usePhoneUI();
+  const { close, open, pushLevel, goBackLevels } = ui;
   const { open: shown, dismiss } = useSheetOpen();
   const { boardId, items, lists, listLabels, loading, refresh } = usePhoneBoardData();
   const [, startTransition] = useTransition();
@@ -114,7 +115,24 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   // `loading` so the "not on the board" branch below waits on it too.
   const fetchingArchived =
     !boardItem && !loading && (!archiveFallback || archiveFallback.id !== itemId);
-  const item = boardItem ?? (archiveFallback?.id === itemId ? archiveFallback.item : null);
+  const liveItem = boardItem ?? (archiveFallback?.id === itemId ? archiveFallback.item : null);
+
+  // A close is an ANIMATION. `dismiss()` only starts it; the shell is not told until
+  // `Sheet` reports the exit finished (`onClosed` below). So once this sheet has drawn
+  // a card it must keep drawing one — unmounting the <Sheet> inside that window skips
+  // `onClosed` altogether, and the levels this sheet pushed are never handed back,
+  // which is the dead-entry symptom A1 exists to prevent. The window is routinely hit:
+  // "Archive this card" and PhoneCardMove's move-to-another-board both write and then
+  // dismiss, and the write's revalidate re-renders the shell without the card long
+  // before Vaul's half-second exit has finished. So remember the card as it was and
+  // keep rendering THAT until the sheet is properly closed. Latched in render on
+  // purpose: an effect would always be a frame behind the render that lost the card.
+  const lastItem = useRef<Item | null>(null);
+  if (shown && liveItem) lastItem.current = liveItem;
+  // Only ever a stand-in for the card we were asked for: drilling into a sub-card the
+  // board data doesn't hold yet must still wait for its fetch, not flash the parent.
+  const retained = lastItem.current?.id === itemId ? lastItem.current : null;
+  const item = shown ? (liveItem ?? retained) : retained;
   const kids = useMemo(() => (item ? childrenOf(items, item.id) : []), [items, item]);
   const columns = useMemo(() => movableLists(lists), [lists]);
 
@@ -122,9 +140,15 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   // and the full-width Done control; every sub-card past that is one ordinary 56px
   // row. Three is the cap — past three the peek would be most of the screen, and the
   // full state is the right place for a long list.
+  // Frozen once the sheet is on its way out, for the same reason the card is: the
+  // write that started the close takes the sub-cards with it, and a box that resizes
+  // itself while it slides off the bottom of the screen reads as a glitch.
+  const kidCountRef = useRef(0);
+  if (shown) kidCountRef.current = kids.length;
+  const kidCount = shown ? kids.length : kidCountRef.current;
   const snapPoints = useMemo<SnapPoint[]>(
-    () => [`${180 + 56 * Math.min(kids.length, 3)}px`, CARD_SNAP_POINTS[1]],
-    [kids.length],
+    () => [`${180 + 56 * Math.min(kidCount, 3)}px`, CARD_SNAP_POINTS[1]],
+    [kidCount],
   );
   // Held as a boolean rather than as a snap VALUE, because the peek's value changes
   // with the sub-card count and a stale px string would read as "not expanded".
@@ -171,12 +195,34 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
     close();
   }
 
+  // A sheet that closes itself goes through here rather than calling `dismiss()`
+  // straight, so the fact that a close is in flight is written down. Belt and braces
+  // for the window above: if something tears this component down between the dismiss
+  // and the end of the animation, the levels are handed back from the unmount instead
+  // of being stranded. Gated on an actual dismiss — a plain unmount (the shell going
+  // away, React's development double-mount) must never pop entries nobody asked for.
+  const closingRef = useRef(false);
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
+  function beginClose() {
+    closingRef.current = true;
+    dismiss();
+  }
+  useEffect(
+    () => () => {
+      if (closingRef.current && uiRef.current.sheet?.kind === "card") uiRef.current.close();
+    },
+    [],
+  );
+
   if (!item) {
     // Under <PhoneDataProvider> the board is already here on the first render, so this
     // can only be the archived-or-deleted case. Standing alone the sheets fetch for
     // themselves and `items` is [] for a beat — render nothing rather than flash "gone"
     // at a card that is perfectly fine, which would also hand Vaul the wrong snap
-    // points for the rest of the sheet's life (its setup is mount-only).
+    // points for the rest of the sheet's life (its setup is mount-only). Nothing has
+    // been drawn yet when we get here (`retained` is null), so there is no <Sheet>
+    // mid-animation to tear down.
     if (loading || fetchingArchived) return null;
     return (
       <Sheet open={shown} onOpenChange={onClosed} label="Card" heightSvh={30}>
@@ -213,7 +259,7 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
         onExpand={() => setExpanded(true)}
         onOpenChild={(id) => open({ kind: "card", itemId: id })}
         onChanged={refresh}
-        onArchived={dismiss}
+        onArchived={beginClose}
         run={startTransition}
       />
     </Sheet>
@@ -325,6 +371,21 @@ function CardBody({
   const [editingDetails, setEditingDetails] = useState(false);
   useEffect(() => setEditingDetails(false), [item.id]);
 
+  // Tapping the preview swaps it for the textarea — and the element under the finger
+  // is gone with it, so without this the browser drops focus on <body>: no caret, no
+  // keyboard, and a second tap needed to start typing. Focus it as soon as it exists,
+  // caret at the end of what's already written. The focus also runs the field's own
+  // onFocus, which is what arms the layout-scroll pin before the keyboard arrives.
+  const detailsRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!editingDetails) return;
+    const el = detailsRef.current;
+    if (!el || el === document.activeElement) return; // already typing in it
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [editingDetails]);
+
   const [childText, setChildText] = useState("");
   useEffect(() => setChildText(""), [item.id]);
 
@@ -435,6 +496,7 @@ function CardBody({
           {editingDetails || !details.trim() ? (
             <textarea
               id="wm-ph-card-details"
+              ref={detailsRef}
               className="wm-ph-field"
               // Tall enough that a paragraph is not cut off by its own underline.
               style={{ minHeight: 140 }}

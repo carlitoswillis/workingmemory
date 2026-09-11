@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
 import PhoneArchive from "./PhoneArchive";
 import PhoneBoards from "./PhoneBoards";
@@ -35,6 +35,12 @@ import type { SnapPoint } from "./sheetSnaps.ts";
 // viewport height — so a sheet SHRINKS with the keyboard instead of being pushed off
 // the top of the screen. See the `/* phone sheets */` block in app/globals.css.
 
+// Vaul's own exit, in ms (TRANSITIONS.DURATION in node_modules/vaul/dist/index.mjs —
+// 0.5s, the transition on [data-vaul-drawer] in its stylesheet). The self-dismiss road
+// below is timed to the same clock, so a sheet reports its close at the moment it
+// finishes sliding away whichever way it was closed.
+const EXIT_MS = 500;
+
 export type SheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,6 +74,18 @@ export function Sheet({
   className = "",
   handle = true,
 }: SheetProps) {
+  // Told exactly once per close, from whichever of the two roads below got there
+  // first. Held in a ref, and the callback read out of one too, so the timer below
+  // never fires with a stale handler.
+  const reported = useRef(false);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  const reportClosed = useCallback(() => {
+    if (reported.current) return;
+    reported.current = true;
+    onOpenChangeRef.current(false);
+  }, []);
+
   // Vaul wants a controlled pair when snap points are used; hold our own when the
   // caller doesn't care which snap is active.
   const [ownSnap, setOwnSnap] = useState<SnapPoint | null>(snapPoints?.[0] ?? null);
@@ -102,7 +120,27 @@ export function Sheet({
   useEffect(() => {
     if (open) hasOpened.current = true;
     setShown(open);
-  }, [open]);
+    // THE SECOND ROAD OUT. Vaul's own dismissals (Escape, the overlay, a drag past the
+    // threshold) run through its internal setter, so its `onAnimationEnd(false)` fires
+    // half a second later and the caller is told down there. A sheet that closes
+    // ITSELF — `dismiss()` behind Capture's Done, "Archive this card", a card that has
+    // just left the board — only flips the `open` prop we hand Vaul, and Vaul holds
+    // `open` as a CONTROLLED value (its bundled useControllableState, index.mjs ~480):
+    // a controlled prop changed from outside never runs its onChange, so
+    // `onAnimationEnd` is never called for this road at all.
+    //
+    // That gap is not cosmetic. `onOpenChange(false)` is how PhoneShell learns to drop
+    // the sheet and hand its history entries back, so a self-dismissed sheet used to
+    // vanish from the screen while `ui.sheet` still pointed at it and its levels sat on
+    // the stack — and because PhoneSheetHost keys each sheet on its KIND, every later
+    // tap re-used that same latched-closed instance and opened nothing until a tab tap
+    // or a back gesture. So this road is timed here, on the same exit Vaul uses, and
+    // `reportClosed` makes sure the caller hears about a close exactly once whichever
+    // road it took.
+    if (open || !hasOpened.current) return;
+    const t = setTimeout(reportClosed, EXIT_MS);
+    return () => clearTimeout(t);
+  }, [open, reportClosed]);
 
   // Who to give focus back to. Radix returns focus to its own <Dialog.Trigger>, and
   // these sheets have none — they're opened from the tab bar through app state, not
@@ -160,7 +198,7 @@ export function Sheet({
       autoFocus
       onAnimationEnd={(isOpen) => {
         if (isOpen) onOpenComplete?.();
-        else if (hasOpened.current) onOpenChange(false);
+        else if (hasOpened.current) reportClosed();
       }}
     >
       <Drawer.Portal>
