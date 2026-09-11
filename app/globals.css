@@ -1604,4 +1604,48 @@ textarea.wm-ph-field--title {
 .wm-ph-picker .wm-ph-row[disabled] {
   opacity: 0.45;
 }
+/* ── doorways-history track (card ↔ board doorways, phone) ──────────────────
+   A row's doorway chip (PhoneDoorwayChip.tsx) and the card sheet's flat history
+   list (PhoneCardHistory.tsx). Both reuse the phone sheets' existing tokens —
+   no new colors, no new type scale. */
+.phone-row__doorway {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 9px;
+  border: 1px solid var(--veil);
+  border-radius: 9999px;
+  color: var(--text-lo);
+  font-size: var(--p-meta, 13px);
+}
+a.phone-row__doorway:active {
+  background: var(--surface-2);
+}
+.wm-ph-history {
+  margin-top: 2px;
+}
+.wm-ph-history__item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--veil-soft);
+}
+.wm-ph-history__item:last-child {
+  border-bottom: 0;
+}
+.wm-ph-history__fact {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-hi);
+}
+.wm-ph-history__meta {
+  margin-top: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-lo);
+}
+.wm-ph-history__link {
+  color: var(--text-mid);
+  text-decoration: underline;
+}
 /* /phone sheets */

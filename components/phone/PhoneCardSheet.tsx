@@ -16,6 +16,8 @@ import {
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
+import PhoneCardDoorway from "./PhoneCardDoorway";
+import PhoneCardHistory from "./PhoneCardHistory";
 import PhoneCardMove from "./PhoneCardMove";
 import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
@@ -566,12 +568,21 @@ function CardBody({
             </>
           ) : (
             <>
+              {/* Doorways (spec 2026-08-30): new component, see PhoneCardDoorway.tsx. */}
+              <PhoneCardDoorway
+                item={item}
+                boardId={boardId}
+                childCount={kids.length}
+                onChanged={onChanged}
+              />
+
               {/* Inside (re-parent) and Board (move to another board) — track
                   "move-reparent". The Move-to chips above change the card's column;
                   these change what it belongs to. Both live in PhoneCardMove so this
-                  file stays about the card. An archived card is not offered either:
-                  it is not on the board to be re-parented, and a cross-board move
-                  archives the card here, which has already happened. Restore first. */}
+                  file stays about the card. An archived card is offered neither these
+                  nor the doorway picker: it is not on the board to be re-parented or
+                  opened through, and a cross-board move archives the card here, which
+                  has already happened. Restore first. */}
               <PhoneCardMove item={item} onChanged={onChanged} onLeftBoard={onArchived} />
 
               <button
@@ -594,6 +605,11 @@ function CardBody({
               </p>
             </>
           )}
+
+          {/* History (card ↔ board doorways spec, §"provenance"): new component,
+              see PhoneCardHistory.tsx. An archived card has one too — it is the whole
+              reason the archive keeps the card rather than deleting it. */}
+          <PhoneCardHistory item={item} boardId={boardId} />
         </div>
       )}
     </>

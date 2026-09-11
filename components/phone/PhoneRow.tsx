@@ -6,6 +6,7 @@ import { archiveItemAction, moveItemAction, setDailyDoneAction, toggleDoneAction
 import { effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "../board-context";
+import PhoneDoorwayChip from "./PhoneDoorwayChip";
 import { usePhoneUI } from "./PhoneShell";
 import { M, UNDO_MS, haptic, msOf } from "./phone-motion";
 import {
@@ -405,6 +406,11 @@ export default function PhoneRow({
                 )}
               </span>
             </button>
+
+            {/* Doorways: this card opens into another board (spec 2026-08-30). A
+                sibling of the body button, not nested in it — it navigates away,
+                which the row's own tap must not. */}
+            {item.linked_board_id && <PhoneDoorwayChip item={item} />}
 
             {showUndo ? (
               <button
