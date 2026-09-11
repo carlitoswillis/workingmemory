@@ -1648,4 +1648,85 @@ a.phone-row__doorway:active {
   color: var(--text-mid);
   text-decoration: underline;
 }
+
+/* ── polish track: markdown details, streak strip, sub-card reorder, past card ──── */
+
+/* Details at rest: the field's own hairline and padding, so tapping into edit mode
+   doesn't shift anything under the finger. */
+.wm-ph-details-preview {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 0;
+  border: 0;
+  border-bottom: 1px solid var(--veil-soft);
+  background: transparent;
+  min-height: 44px;
+}
+
+/* Streak history: oldest → now, one box per day or week. Filled = done. */
+.wm-ph-streak-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+.wm-ph-streak-box {
+  height: 8px;
+  width: 8px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--veil);
+  opacity: 0.6;
+}
+.wm-ph-streak-box.is-week {
+  width: 16px;
+}
+.wm-ph-streak-box.is-done {
+  background: var(--done);
+  border-color: var(--done);
+  opacity: 0.9;
+}
+
+/* Sub-card reorder: two 44pt up/down buttons beside the ordinary row. */
+.wm-ph-subrow {
+  display: flex;
+  align-items: stretch;
+}
+.wm-ph-subrow__reorder {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.wm-ph-subrow__move {
+  min-width: 32px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-lo);
+}
+.wm-ph-subrow__move:active {
+  color: var(--text-mid);
+}
+.wm-ph-subrow__move[disabled] {
+  opacity: 0.3;
+}
+.wm-ph-subrow__row {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Time travel's read-only card: same shape as the live sheet, no controls. */
+.wm-ph-snap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--past);
+  color: var(--past);
+  padding: 3px 10px;
+  font-size: 12px;
+}
 /* /phone sheets */

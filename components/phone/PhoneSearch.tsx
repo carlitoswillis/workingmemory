@@ -64,6 +64,8 @@ export default function PhoneSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const boardHits = useMemo(() => searchItems(items, q), [items, q]);
+  // For the sub-card breadcrumb — the same idea as SearchOverlay.tsx ~236-240.
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
   useEffect(() => {
     const query = q.trim();
@@ -208,6 +210,9 @@ export default function PhoneSearch() {
                       <span className="wm-ph-caption" style={{ display: "block", marginTop: 2 }}>
                         {listLabel}
                         {isArchived && ", archived"}
+                        {row.hit.item.parent_id && byId.get(row.hit.item.parent_id) && (
+                          <>, in “{byId.get(row.hit.item.parent_id)!.text}”</>
+                        )}
                       </span>
                     </span>
                   </button>

@@ -6,6 +6,7 @@ import { isSentinelList } from "@/lib/lists";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import type { Item, ItemEvent } from "@/lib/types";
 import { usePhoneUI } from "./PhoneShell";
+import PhoneSnapshotCard from "./PhoneSnapshotCard";
 import { Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
 
@@ -81,7 +82,31 @@ export default function PhoneTimeTravel() {
     return reconstructBoardAt(timeline.items, timeline.events, new Date(current).toISOString());
   }, [timeline, active, current]);
 
-  // Grouped the way the phone reads a board: one list after another, top-level only.
+  // Every card that existed at this moment, by id — the read-only detail sheet and
+  // the parent breadcrumb both resolve through this rather than a second lookup.
+  const byId = useMemo(() => {
+    const m = new Map<string, BoardItemAt>();
+    for (const it of snapshot) m.set(it.id, it);
+    return m;
+  }, [snapshot]);
+
+  // Sub-cards as of then, keyed by their parent — nested under the parent's row
+  // instead of filtered out, so what a card contained at that moment is visible
+  // without a second trip.
+  const childrenByParent = useMemo(() => {
+    const by = new Map<string, BoardItemAt[]>();
+    for (const it of snapshot) {
+      if (!it.parent_id) continue;
+      const arr = by.get(it.parent_id);
+      if (arr) arr.push(it);
+      else by.set(it.parent_id, [it]);
+    }
+    return by;
+  }, [snapshot]);
+
+  // Grouped the way the phone reads a board: one list after another, top-level only
+  // (sub-cards hang off their parent's row, same as the live board never rendering
+  // them as rows of their own).
   const grouped = useMemo(() => {
     const by = new Map<string, BoardItemAt[]>();
     for (const it of snapshot) {
@@ -93,6 +118,17 @@ export default function PhoneTimeTravel() {
     }
     return [...by.entries()];
   }, [snapshot]);
+
+  // The read-only detail sheet's current subject. Unlike PhoneCardSheet's chain,
+  // there's nothing to unwind on an edge-swipe-back — a snapshot is only ever
+  // dismissed by ✕ or by drilling to a different card, and its parent is always
+  // just whatever `parent_id` says, so one id is enough.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openItem = openId ? (byId.get(openId) ?? null) : null;
+  const openParent = openItem?.parent_id ? (byId.get(openItem.parent_id) ?? null) : null;
+  useEffect(() => {
+    if (!active) setOpenId(null);
+  }, [active]);
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && close()} label="Time travel" heightSvh={96}>
@@ -122,21 +158,77 @@ export default function PhoneTimeTravel() {
                 </span>
               </p>
               <ul style={{ marginTop: 6, marginLeft: -16, marginRight: -16 }}>
-                {rows.map((r) => (
-                  <li key={r.id} className="wm-ph-past">
-                    <p
-                      className="wm-ph-body wm-ph-clamp2"
-                      style={r.done ? { color: "var(--text-lo)" } : undefined}
-                    >
-                      {r.text}
-                    </p>
-                  </li>
-                ))}
+                {rows.map((r) => {
+                  const kids = childrenByParent.get(r.id) ?? [];
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        className="wm-ph-past"
+                        style={{ width: "100%", textAlign: "left" }}
+                        onClick={() => setOpenId(r.id)}
+                      >
+                        <p
+                          className="wm-ph-body wm-ph-clamp2"
+                          style={r.done ? { color: "var(--text-lo)" } : undefined}
+                        >
+                          {r.text}
+                        </p>
+                        {kids.length > 0 && (
+                          <p className="wm-ph-caption" style={{ marginTop: 2 }}>
+                            <span className="wm-ph-num">{kids.length}</span> sub-card
+                            {kids.length === 1 ? "" : "s"}
+                          </p>
+                        )}
+                      </button>
+                      {/* Sub-cards as of then, under their parent — never filtered
+                          out, and never their own row on this list either. */}
+                      {kids.length > 0 && (
+                        <ul>
+                          {kids.map((k) => (
+                            <li key={k.id}>
+                              <button
+                                type="button"
+                                className="wm-ph-past"
+                                style={{
+                                  width: "100%",
+                                  textAlign: "left",
+                                  paddingLeft: 28,
+                                  borderLeftColor: "var(--veil)",
+                                }}
+                                onClick={() => setOpenId(k.id)}
+                              >
+                                <p
+                                  className="wm-ph-body wm-ph-clamp2"
+                                  style={k.done ? { color: "var(--text-lo)" } : undefined}
+                                >
+                                  {k.text}
+                                </p>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))
         )}
       </div>
+
+      {openItem && (
+        <PhoneSnapshotCard
+          item={openItem}
+          parent={openParent}
+          listLabels={listLabels}
+          childItems={childrenByParent.get(openItem.id) ?? []}
+          asOf={active ? new Date(current).toISOString() : null}
+          onOpenCard={(id) => setOpenId(id)}
+          onClose={() => setOpenId(null)}
+        />
+      )}
 
       {/* The control, in the thumb zone. */}
       <div className="wm-sheet__bar" style={{ flexDirection: "column", alignItems: "stretch" }}>

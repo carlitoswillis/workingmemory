@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
-import { localToday } from "@/lib/recurrence";
+import { effectiveDone, localToday } from "@/lib/recurrence";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneReorderRows from "./PhoneReorderRows";
+import PhoneRow from "./PhoneRow";
 import { emptyCopyFor, pageIndexFor } from "./phone-logic";
 import { childrenOf } from "./phone-data";
 
@@ -134,6 +135,14 @@ export default function PhoneList({
         ))}
       </div>
 
+      {/* The column's own hint — orientation for a list you're actually using, not
+          furniture on an empty one you already know the point of. */}
+      {pages[index] && (order[pages[index].id]?.length ?? 0) > 0 && (
+        <p className="wm-ph-hint wm-ph-pad" style={{ marginTop: 8 }}>
+          {pages[index].hint}
+        </p>
+      )}
+
       <div className="phone-pager" ref={trackRef}>
         {pages.map((page, i) => (
           <section
@@ -178,6 +187,15 @@ function Page({
   // The drag mechanic itself lives in PhoneReorderRows, which Now's Today section
   // shares — see the note at the top of that file. A page supplies only its cards,
   // the column they belong to, and what each row needs to render.
+  //
+  // Reorder is over the OPEN cards only. The done ones are collapsed to a count until
+  // you ask for them — a receipt, not a workspace, exactly like Now's "Done today"
+  // (PhoneHome.tsx) — and where a done card sits in the list stopped mattering the
+  // moment it was tucked away.
+  const [showDone, setShowDone] = useState(false);
+  const open = cards.filter((c) => !effectiveDone(c, today));
+  const done = cards.filter((c) => effectiveDone(c, today));
+
   const rowProps = useCallback(
     (item: Item) => ({
       childItems: childrenByParent.get(item.id),
@@ -190,14 +208,49 @@ function Page({
   return (
     <>
       <PhoneReorderRows
-        cards={cards}
+        cards={open}
         listId={list.id}
         listLabel={list.label}
         className="phone-rows phone-page__rows"
         rowProps={rowProps}
-        onReorder={onReorder}
+        // The page's stored order is every card on it, so the settled open cards go
+        // back with the done ones still behind them.
+        onReorder={(next) => onReorder([...next, ...done])}
       />
       {cards.length === 0 && <p className="phone-empty">{emptyCopyFor(list.id)}</p>}
+
+      {done.length > 0 && (
+        <section className="phone-section">
+          <button
+            type="button"
+            className="phone-section__toggle"
+            aria-expanded={showDone}
+            onClick={() => setShowDone((v) => !v)}
+          >
+            <span className="phone-section__title">Done</span>
+            <span className="phone-section__count tabular-nums">{done.length}</span>
+            <span className={`phone-chevron${showDone ? " is-open" : ""}`} aria-hidden>
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path
+                  d="M5.5 3.5L10.5 8l-5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          {showDone && (
+            <ul className="phone-rows phone-page__rows">
+              {done.map((item) => (
+                <PhoneRow key={item.id} item={item} {...rowProps(item)} />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </>
   );
 }
