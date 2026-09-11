@@ -100,7 +100,8 @@ The Now feed is the default view; other screens open as bottom sheets:
 - **Sub-card reorder** — up and down buttons on each sub-card inside the expanded sheet.
 - **Today reorder** — long-press a card on Now to reorder today's open cards.
 - **Time Travel** — scrub or jump (1h ago, yesterday, last week) to a past moment and tap a
-  card to see how it was then.
+  card to see how it was then. A "What changed" ledger shows you every difference between the
+  current board and the moment you've scrubbed to.
 - **Lists management** — create, rename, delete, and reorder lists on the board.
 - **Boards management** — create, rename, invite members, remove members, leave, and delete boards.
 

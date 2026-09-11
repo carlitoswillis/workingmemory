@@ -96,6 +96,7 @@ whole board on open. Consequences:
 - Column add / rename / delete / reorder (`phone-app.md:10,171`): Lists management sheet built.
 - Board create / rename / invite / remove member / leave / delete: Boards management sheet built.
 - Restore from archive: built as part of Archive feature in phase 2.
+- Diff ledger for time travel: pure `diffBoardSince` reports every change between a past board state and now.
 
 ## Server actions with zero phone call sites
 setParentAction, archiveItemsAction, unarchiveItemsAction, unarchiveItemAction,

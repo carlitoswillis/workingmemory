@@ -313,6 +313,12 @@ a real structure without losing its looseness.
     feed, card sheet, capture, archive restore, move/doorways, history timeline)
     still pending.
   - **Second pass (2026-09-10):** Lists management and Boards management sheets added to the phone app, enabling full list and board operations from the phone. The desktop panel's history depth now uses the same level-stack architecture as the phone shell, replacing the previous history.state-based approach. Coverage remains tsc/build verified; sheets carry forward the open-items work from the first pass.
+
+**2026-09-10 — Diff mode for time travel.** The time-travel scrubber gained a "What changed" 
+ledger that diffs the board state at a past moment against now: cards added/removed/moved, 
+columns renamed, parent changes. Pure `diffBoardSince(db, boardId, before, after)` in 
+`lib/timetravel.ts` (idempotent, no state, rules: items are compared by id, columns by position 
+and name, sub-card nesting by parent_id) is reusable by desktop's own time-travel UI when needed.
 - **2026-08-02 — Archive from the board, and undo it** (owner: "the desktop view is
   less intuitive for the swipe thing… maybe a right click? give better idea if u have
   it. also maybe we allow multi select? for dragging and archiving?"). Three ways in,
