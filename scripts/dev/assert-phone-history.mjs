@@ -196,6 +196,17 @@ try {
   await page.waitForSelector("#phone-page-focus");
   await page.waitForTimeout(500);
 
+  // A Lists page now tucks its done cards into a collapsed "Done" tray, the way Now
+  // has always tucked away "Done today". The seed's one nested card ("Shelf view")
+  // was completed four days ago, so it lives in that tray — open it, or there is no
+  // row here to open. A done card's sheet is the same sheet, so nothing below this
+  // changes.
+  const doneTray = page.locator("#phone-page-focus .phone-section__toggle");
+  if ((await doneTray.count()) > 0 && (await doneTray.getAttribute("aria-expanded")) !== "true") {
+    await doneTray.click();
+    await page.waitForTimeout(200);
+  }
+
   // The pager keeps every page in one scroll track, so rows are scoped to the page
   // we mean rather than matched across all four.
   const parentRow = page
