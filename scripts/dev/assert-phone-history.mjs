@@ -355,6 +355,69 @@ try {
     `current entry tag ${atClose.tag}`,
   );
 
+  // ---- swapping the sheet KIND unwinds what the outgoing sheet pushed -------
+  // The known edge in the level stack: PhoneSheetHost keys each sheet on its kind, so
+  // opening a different kind unmounts the one that is up — but the levels that sheet
+  // pushed stayed on the stack, holding callbacks that reopen it. Drill into a
+  // sub-card, tap Find, press back: instead of closing Find you were handed the card
+  // you had walked away from, and the entry Find itself stood on was still owed. The
+  // shell now gives those entries back (without running their undos — the sheet they
+  // would restore is gone) before it swaps, so the incoming sheet stands on the base
+  // level and one back gesture closes it.
+  //
+  // The tab is CLICKED THROUGH THE DOM on purpose: the card sheet is snapped, so its
+  // box is the whole window and the real tab bar is behind Vaul's overlay. What is
+  // under test is the shell's bookkeeping, not whether the tab is tappable from here.
+  await parentRow.locator(".phone-row__body").click();
+  await page.waitForSelector(".wm-sheet--card");
+  await page.waitForTimeout(600);
+  await page.locator(".wm-ph-kids .phone-row__body").first().click();
+  await page.waitForSelector(".wm-sheet--card .wm-ph-parent");
+  const atSubcard = await ledger(page);
+  ok(
+    "reopened and drilled in again: two entries are held",
+    atSubcard.ourPushes === atClose.ourPushes + 2,
+    `${atSubcard.ourPushes - atClose.ourPushes} new tagged pushes`,
+  );
+
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll(".phone-tab")].find(
+      (b) => b.getAttribute("aria-label") === "Find",
+    );
+    tab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await page.waitForSelector(".wm-sheet--search");
+  await page.waitForTimeout(900);
+  const atFind = await ledger(page);
+  ok(
+    "tapping Find from a drilled-in card sheet swaps the sheet",
+    (await page.locator(".wm-sheet--card").count()) === 0 &&
+      (await page.locator(".wm-sheet--search").count()) === 1,
+  );
+  ok(
+    "the swap gives the card sheet's own level back, in one jump",
+    atFind.go.length === atSubcard.go.length + 1 &&
+      atFind.go[atFind.go.length - 1] === -1 &&
+      atFind.ourPushes === atSubcard.ourPushes,
+    `go ${JSON.stringify(atFind.go.slice(atSubcard.go.length))}, pushes ${atFind.ourPushes}`,
+  );
+
+  await page.evaluate(() => window.__rawBack());
+  await page.waitForTimeout(900);
+  const atFindBack = await ledger(page);
+  ok(
+    "one back gesture from Find closes Find, and does not reopen the card",
+    (await page.locator(".wm-sheet").count()) === 0,
+    `${await page.locator(".wm-sheet--card").count()} card sheets, ${await page.locator(".wm-sheet--search").count()} search sheets`,
+  );
+  ok(
+    "that gesture cost the app no history call of its own, and lands on the board",
+    atFindBack.go.length === atFind.go.length &&
+      atFindBack.back === atFind.back &&
+      atFindBack.tag === null,
+    `go ${JSON.stringify(atFindBack.go)}, back ${atFindBack.back}, tag ${atFindBack.tag}`,
+  );
+
   // One known, pre-existing warning is filtered: the desktop TimeMachineBar's range
   // `min` is a wall-clock reading (components/TimeMachineBar.tsx:142), so the server's
   // value and the client's differ by the round trip. It belongs to the desktop tree

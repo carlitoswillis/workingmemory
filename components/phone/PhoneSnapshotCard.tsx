@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { BoardItemAt } from "@/lib/timetravel";
 import { Chevron } from "./Sheet";
@@ -9,6 +11,16 @@ import { Chevron } from "./Sheet";
 // sheet — Vaul sheets don't nest cleanly, and this one never needs to drag or snap,
 // only to sit still and be dismissed. z-index 70 clears the sheet's own 61 (see the
 // `/* phone sheets */` block in globals.css).
+//
+// IT IS PORTALLED TO <body>, like the sheets themselves, and it has to be. Rendered
+// where it sits in the tree it is a child of Vaul's drawer, and vaul puts
+// `will-change: transform` on that box — which makes the drawer the CONTAINING BLOCK
+// for any `position: fixed` descendant. `inset: 0` then means "the drawer", not "the
+// screen", so a card meant to cover the device was cropped to the sheet: its head
+// started 4svh down, and on a snapped sheet it would have been translated off the
+// bottom edge along with the drawer. Out here `inset: 0` is the viewport again, and
+// `.wm-ph-snapcard` pays the safe-area insets itself (globals.css) because nothing
+// above it does.
 const Markdown = dynamic(() => import("../Markdown"), {
   ssr: false,
   loading: () => <span className="wm-ph-hint">rendering…</span>,
@@ -33,7 +45,14 @@ export default function PhoneSnapshotCard({
 }) {
   const hasDetails = item.details.trim().length > 0;
 
-  return (
+  // The portal target, taken after mount so the server render and the first client
+  // render agree (there is no document during SSR, and this component is only ever
+  // rendered inside an already-open sheet, so one extra frame costs nothing).
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setHost(document.body), []);
+  if (!host) return null;
+
+  return createPortal(
     <div
       // `wm-ph-snapcard` is what pays for the notch and the home indicator. This is the
       // one overlay in the phone app that covers the whole DEVICE: an ordinary sheet is
@@ -133,6 +152,7 @@ export default function PhoneSnapshotCard({
           As it was{asOf ? ` · ${new Date(asOf).toLocaleString()}` : ""} · read-only
         </p>
       </div>
-    </div>
+    </div>,
+    host,
   );
 }

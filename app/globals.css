@@ -1746,4 +1746,20 @@ a.phone-row__doorway:active {
   padding: 3px 10px;
   font-size: 12px;
 }
+
+/* track: fixes — the phone bug sweep (ai/plans/2026-09-10-phone-lost-features-and-bugs.md).
+   One rule, and it belongs to the snapshot card's move out to <body>.
+
+   The read-only past card is now portalled to document.body instead of rendering
+   inside the drawer, because vaul sets `will-change: transform` on the drawer box and
+   that makes it the containing block for every `position: fixed` child — `inset: 0`
+   meant "the sheet", so a card meant to cover the device was cropped to it. Out at
+   <body> the geometry is right, but it lands under Radix's modal rule: an open dialog
+   sets `pointer-events: none` on <body> and re-enables it only on its own layer, so
+   the portalled card would be visible and completely dead to touch. Turning it back on
+   here is exactly what Radix does for its own layers — the card is the topmost surface
+   (z-index 70 over the sheet's 61), so it is the thing that should be taking taps. */
+.wm-ph-snapcard {
+  pointer-events: auto;
+}
 /* /phone sheets */
