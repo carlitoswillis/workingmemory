@@ -39,7 +39,8 @@ export type PhoneSheet =
   | { kind: "review" }
   | { kind: "note" }
   | { kind: "more" }
-  | { kind: "archive" };
+  | { kind: "archive" }
+  | { kind: "lists" };
 
 /**
  * How `open()` treats a sheet that is already up.

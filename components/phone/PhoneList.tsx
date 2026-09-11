@@ -36,6 +36,38 @@ export default function PhoneList({
   const [index, setIndex] = useState(0);
   const today = localToday();
 
+  // Long-press the segmented header to manage columns (add / rename / delete /
+  // reorder — PhoneListsManage). 500ms / 10px: long enough that swiping the strip
+  // itself never fires it, and a fired press marks itself so the segment's own tap
+  // handler (which jumps pages) doesn't ALSO run on release.
+  const segPress = useRef<{ timer: ReturnType<typeof setTimeout> | null; x: number; y: number; fired: boolean }>(
+    { timer: null, x: 0, y: 0, fired: false },
+  );
+  const cancelSegPress = useCallback(() => {
+    if (segPress.current.timer) clearTimeout(segPress.current.timer);
+    segPress.current.timer = null;
+  }, []);
+  useEffect(() => cancelSegPress, [cancelSegPress]);
+  const onSegPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      segPress.current.fired = false;
+      segPress.current.x = e.clientX;
+      segPress.current.y = e.clientY;
+      segPress.current.timer = setTimeout(() => {
+        segPress.current.fired = true;
+        ui.open({ kind: "lists" });
+      }, 500);
+    },
+    [ui],
+  );
+  const onSegPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!segPress.current.timer) return;
+    if (Math.hypot(e.clientX - segPress.current.x, e.clientY - segPress.current.y) > 10) {
+      cancelSegPress();
+    }
+  }, [cancelSegPress]);
+
   // Cards per page, position-ordered (the server hands `items` over sorted) with the
   // pending reorder folded in so a drop settles under the finger.
   const [order, setOrder] = useState<Record<string, Item[]>>({});
@@ -115,7 +147,17 @@ export default function PhoneList({
 
   return (
     <div className="phone-lists">
-      <div className="phone-seg" role="tablist" aria-label="Lists">
+      <div
+        className="phone-seg"
+        role="tablist"
+        aria-label="Lists"
+        onPointerDown={onSegPointerDown}
+        onPointerMove={onSegPointerMove}
+        onPointerUp={cancelSegPress}
+        onPointerCancel={cancelSegPress}
+        onPointerLeave={cancelSegPress}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         {pages.map((page, i) => (
           <button
             key={page.id}
@@ -128,7 +170,10 @@ export default function PhoneList({
             aria-controls={`phone-page-${page.id}`}
             id={`phone-seg-${page.id}`}
             className={`phone-seg__btn${i === index ? " is-current" : ""}`}
-            onClick={() => goTo(i)}
+            onClick={() => {
+              if (segPress.current.fired) return; // the long-press already opened Lists
+              goTo(i);
+            }}
           >
             {page.label}
           </button>
