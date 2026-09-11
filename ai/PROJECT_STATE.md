@@ -242,6 +242,70 @@ a real structure without losing its looseness.
 
 
 ## completed (to be condensed) (all done)
+- **2026-09-10 — Phone app: history-key wipe root cause + data provider wiring +
+  lost features restored.** Built in four parallel worktree branches over the August
+  rewrite; this entry records the entire batch's completion, scope, and open items.
+  All verified: tsc, `npm test`, `npm run build` (15 node suites with new coverage).
+  - *A1: history-key wipe fix* — subtask completion ran a server action whose
+    `revalidatePath` rewrote the history entry via `replaceState`, which dropped
+    the phone shell's own `wmSheet` and `wmPhoneDepth` keys. Next's back gesture
+    saw no keys, closed the sheet, and its unmount cleanup called `go(-n)` on
+    entries the browser already popped. One gesture ate 2-3 entries; in a PWA with
+    no chrome to recover, users got stuck. **Root fix**: preserve those keys across
+    `replaceState` via an effect in `PhoneShell.tsx` (spread incoming state onto
+    the replacement state before writing, so the keys live). Also widened the close
+    path (skip unmount cleanup if a popstate caused the unmount, single close
+    codepath), and added `data-vaul-no-drag` on `.phone-row__body` to keep small
+    wobbles from dismissing the sheet.
+  - *A2: PhoneDataProvider wiring* — sheets fetched their data through
+    `BoardDataProvider`, a different context, and refetched the whole board on
+    open — every card sheet initially showed "That card isn't on the board any
+    more" until the fetch resolved, and the sheet never saw its own optimistic
+    writes. **Fix**: render `PhoneDataProvider` in `PhoneShell`, gate the not-found
+    branch on `loading`, and pass refresh to sub-card rows so they see their own
+    edits.
+  - *B: lost features restored* — The August rewrite shed several features with no
+    dedicated plan. These are now rebuilt: **Archive** (browse, restore, view
+    archived card), **Move to board** (cross-board reassignment), **Doorways**
+    (link card to board, promote/demote subtrees), **History** (timeline with past
+    snapshots and time-jump chips), **Sub-card reorder** (long-press drag inside
+    the sheet), **Today reorder** (long-press reorder on the primary list),
+    **Streak history strip** (visual week-by-week record), and **markdown details**
+    rendering (no more raw textarea).
+  - *Smaller bugs fixed (A4 batch)* — sub-card badge counts archived children
+    (now uses `childrenOf()` filter); "Add a sub-card" draft survived drilling
+    (reset on `item.id` change); swipe-archive's 900ms undo timer left dangling on
+    tab switch (cleared on unmount); `fire()` created promises outside
+    `startTransition` (moved inside). Pager index clamping (A5 first item) and
+    `Sheet.tsx` overflow cleanup on abrupt unmount (A5 second item, verified by
+    code review; device pass still pending) present in code.
+  - *Coverage story* — The build spans ~1500 lines across seven new component
+    files and touches optimistic-completion state, demotion/promotion subtree
+    walks, board-crossing move transactions, and drag gestures. Two flow scripts
+    exist (`assert-phone-history.mjs`, `assert-phone-flows.mjs`) but exercise only
+    the Capture stay-open Save and history/back-gesture paths; the other six
+    sheets have no headless coverage — tsc/build/unit-test only. No regression
+    test names the A3 fetch-by-id fallback (archived card from Find) explicitly,
+    though the same data flow as A2 covers it implicitly. See open items below.
+  - **README updated** — new "Phone sheets" subsection under Design lists what
+    each sheet does: Card, Archive, Move to board, Opens, History, Sub-card
+    reorder, Today reorder, Time Travel.
+  - *Open items* — All code present and compiles; coverage gaps remain:
+    PhoneArchive, PhoneCardMove, PhoneCardDoorway, PhoneCardHistory,
+    PhoneStreakStrip, PhoneSubCardList reorder, PhoneSnapshotCard, and time-travel
+    jump chips have no headless regression scripts — the ~1500 new lines are
+    tsc/build verified only. A3 (archived card from Find) lacks a dedicated test
+    for the fetch-by-id fallback path. Sheet.tsx's overflow cleanup (A5 second
+    item) is present in code but needs device testing (abrupt unmount via
+    edge-swipe-back). moveCardToBoard is a second intentional cross-board code
+    path alongside the AGENTS.md exception but AGENTS.md was not updated. Done-tray
+    undo persistence (7306f01) touches optimistic-completion state but lacks a unit
+    test for the held/optimistic merge logic itself. Drag gestures (today reorder
+    long-press, sub-card reorder) lack headless simulation — unit tests cover the
+    pure phone-logic functions only. The two plain merge commits (3c608a1, a2d7a57)
+    have no message body describing conflict resolution. Owner device pass (Now
+    feed, card sheet, capture, archive restore, move/doorways, history timeline)
+    still pending.
 - **2026-08-02 — Archive from the board, and undo it** (owner: "the desktop view is
   less intuitive for the swipe thing… maybe a right click? give better idea if u have
   it. also maybe we allow multi select? for dragging and archiving?"). Three ways in,

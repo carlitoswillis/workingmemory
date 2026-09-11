@@ -86,6 +86,22 @@ for the past, elevation as a luminance step and a hairline rather than a shadow.
 The phone idea is one row at every depth — a sub-card is the same row as a top-level card,
 same height, same check target, no indent and no smaller type.
 
+### Phone sheets
+
+The Now feed is the default view; other screens open as bottom sheets:
+
+- **Card sheet** — tap a row to see all its details, sub-cards at any depth, and the
+  "Inside" picker to move it under another card or back to the board.
+- **Archive** — browse the full archive and restore a card to the board.
+- **Move to board** — reassign a card to a different board (via "Move to").
+- **Opens (Doorways)** — link a card to another board, promote or demote sub-cards to
+  become boards themselves, and see what board it came from.
+- **History** — a timeline of changes to a card, with past snapshots and time-jump chips.
+- **Sub-card reorder** — long-press and drag sub-cards inside their parent to change
+  the order.
+- **Today reorder** — reorder cards in the Today list via long-press.
+- **Time Travel** — scrub to any past moment and tap a card to see how it was then.
+
 Current state, backlog and the ops notes worth knowing live in
 [`ai/PROJECT_STATE.md`](ai/PROJECT_STATE.md).
 
