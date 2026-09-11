@@ -7,11 +7,14 @@ import { setLinkedBoard } from "@/lib/doorways";
 import { pokeBoard } from "@/lib/realtime";
 import {
   createBoard,
+  getBoardMembers,
   getMembership,
   inviteMember,
   removeMember,
   renameBoard,
   deleteBoard,
+  type Member,
+  type Role,
 } from "@/lib/boards";
 
 // Board management (shared boards v1). Distinct from app/actions.ts (card CRUD):
@@ -36,6 +39,20 @@ export async function createBoardAction(name: string) {
   const res = createBoard(getMainDb(), userId, name);
   if ("error" in res) return res.error;
   redirect(`/b/${res.id}`);
+}
+
+export type BoardManageData = { myRole: Role | null; me: string; members: Member[] };
+
+// The per-board admin data the phone Boards sheet needs once you tap "Manage" on a
+// row — deliberately NOT bundled into the boards list itself (getUserBoards), which
+// stays a cheap id+name fetch for boards you may never expand. getBoardContext 404s
+// a non-member, so this can only ever answer for a board you actually belong to.
+export async function boardManageDataAction(boardId: string): Promise<BoardManageData | null> {
+  const { db, userId } = getBoardContext(boardId);
+  if (!userId) return null;
+  const members = getBoardMembers(db, boardId);
+  const myRole = members.find((m) => m.userId === userId)?.role ?? null;
+  return { myRole, me: userId, members };
 }
 
 // "New board from this card" (card ↔ board doorways): make a board named after the

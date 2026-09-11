@@ -1842,4 +1842,80 @@ a.phone-row__doorway:active {
   margin-top: 4px;
   padding-top: 14px;
 }
+
+/* ── track "boards": create / rename / invite / remove / leave / delete ─────
+   PhoneBoards.tsx's row (a switch link plus a trailing "Manage" toggle) and
+   PhoneBoardManage.tsx's expanded panel underneath it. The panel reuses the
+   sheet's existing row, field, button and section tokens — no new colors. */
+
+.wm-ph-boardrow {
+  gap: 8px;
+  padding-right: 8px;
+}
+/* The current-board wash used to live on `.wm-ph-row[aria-current]` when the whole
+   row was one <a>; splitting it into a link plus a trailing Manage button moved
+   aria-current onto the link alone (where a11y wants it), so the highlight is
+   re-attached here instead of relying on the plain-row selector. */
+.wm-ph-boardrow:has(> .wm-ph-boardrow__link[aria-current="true"]) {
+  background: var(--now-wash);
+}
+.wm-ph-boardrow__link {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.wm-ph-boardrow__link:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: -2px;
+}
+.wm-ph-boardrow__manage {
+  flex: none;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--text-lo);
+}
+.wm-ph-boardrow__manage[aria-expanded="true"] {
+  color: var(--text-mid);
+}
+
+.wm-ph-board-manage {
+  padding-top: 4px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--veil-soft);
+}
+.wm-ph-board-manage__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wm-ph-board-manage__row .wm-ph-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wm-ph-board-manage__member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--veil-soft);
+}
+.wm-ph-board-manage__member:last-child {
+  border-bottom: 0;
+}
+.wm-ph-board-manage__remove {
+  flex: none;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-lo);
+}
+.wm-ph-board-manage__danger {
+  width: 100%;
+}
 /* /phone sheets */
