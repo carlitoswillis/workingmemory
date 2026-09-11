@@ -11,6 +11,7 @@ import {
   type DoorwayInfo,
 } from "../board-context";
 import { localToday } from "@/lib/recurrence";
+import { PhoneDataProvider, type PhoneBoardValue } from "./phone-data";
 import { pagerLists } from "./phone-logic";
 import PhoneHome from "./PhoneHome";
 import PhoneList from "./PhoneList";
@@ -47,6 +48,13 @@ export type PhoneUI = {
   listId: string | null; // active page in the Lists pager
   setListId(id: string): void;
   kbInset: number; // px, from visualViewport
+  // One browser history entry for one level of depth INSIDE the open sheet (a card
+  // sheet drilled into a sub-card). `onPop` runs when the browser gives that entry
+  // back — by the edge-swipe, the hardware back button, or goBackLevels() below.
+  pushLevel(onPop: () => void): void;
+  // Step back `n` of those levels. Always through the browser, so the gesture and the
+  // in-sheet back arrow are one code path.
+  goBackLevels(n: number): void;
 };
 
 const PhoneUIContext = createContext<PhoneUI | null>(null);
@@ -106,49 +114,116 @@ export default function PhoneShell({
   // the React side.
   const kbInset = useKeyboardInset();
 
-  // A sheet is one history entry deep, so the iOS edge-swipe (and Android back)
-  // dismisses it instead of leaving the app — the same rule Board.tsx's panel depth
-  // follows on desktop. history.state is spread, never replaced, so Next's router
-  // keeps its own bookkeeping.
-  const pushedRef = useRef(false);
+  // ---- history ---------------------------------------------------------------
+  // ONE owner for every history entry the phone app creates, so a back gesture has a
+  // single handler and a single bookkeeper. Each entry we push is a LEVEL: level 1 is
+  // "a sheet is open", levels 2+ are a card sheet drilled into a sub-card. Every level
+  // carries the callback that undoes it, and the browser — never us — decides when
+  // that callback runs.
+  //
+  // The level count lives in a REF and never in history.state. It has to: a server
+  // action's revalidatePath makes Next's App Router call history.replaceState with
+  // only its own router tree, so an entry we pushed can come back stateless at any
+  // moment. Anything that read our depth out of the current entry would then conclude
+  // "no sheet, depth 0" and unwind a stack the browser still holds — which is how one
+  // sub-card tap used to leave an installed PWA on a dead entry until relaunch. We do
+  // still TAG each entry (`wmPhoneLevel`), because the tag is the only way to know how
+  // far a jump we did not issue travelled; when the tag has been wiped the count is
+  // the answer, since a back gesture removes exactly one entry.
+  const levelsRef = useRef<Array<() => void>>([]);
+  // Where a history.go() WE issued is meant to land. Ours are the only jumps that can
+  // cross more than one entry, so this is the whole of that ambiguity.
+  const jumpRef = useRef<number | null>(null);
 
   const setTab = useCallback((t: PhoneUI["tab"]) => {
     if (t === "now" || t === "lists") baseTabRef.current = t;
     setTabState(t);
   }, []);
 
-  const open = useCallback((s: PhoneSheet) => {
-    setSheet(s);
-    if (!pushedRef.current && typeof window !== "undefined") {
-      try {
-        window.history.pushState({ ...window.history.state, wmSheet: true }, "");
-        pushedRef.current = true;
-      } catch {
-        /* history is best-effort; the sheet still opens */
-      }
+  const pushLevel = useCallback((onPop: () => void) => {
+    levelsRef.current = [...levelsRef.current, onPop];
+    if (typeof window === "undefined") return;
+    try {
+      window.history.pushState(
+        { ...window.history.state, wmPhoneLevel: levelsRef.current.length },
+        "",
+      );
+    } catch {
+      /* history is best-effort; the sheet still opens */
     }
   }, []);
 
+  const goToLevel = useCallback((target: number) => {
+    const back = levelsRef.current.length - target;
+    if (back <= 0 || typeof window === "undefined") return;
+    jumpRef.current = target;
+    try {
+      window.history.go(-back);
+    } catch {
+      jumpRef.current = null;
+    }
+  }, []);
+
+  const goBackLevels = useCallback(
+    (n: number) => goToLevel(Math.max(0, levelsRef.current.length - n)),
+    [goToLevel],
+  );
+
+  // Forget the sheet WITHOUT touching history — what a popped level-1 entry means,
+  // because the browser has already taken the entry back.
+  const forgetSheet = useCallback(() => {
+    setSheet(null);
+    setTabState((prev) => (prev === "find" || prev === "more" ? baseTabRef.current : prev));
+  }, []);
+
+  const open = useCallback(
+    (s: PhoneSheet) => {
+      setSheet(s);
+      // One entry for "a sheet is open", however often the sheet's KIND changes while
+      // it is up (More → Note, Find → a card).
+      if (levelsRef.current.length === 0) pushLevel(forgetSheet);
+    },
+    [pushLevel, forgetSheet],
+  );
+
+  // THE close path — the only one. A sheet that closes itself (Save, Archive, the
+  // grip dragged down) lands here too, via Sheet's exit animation, so the entries are
+  // given back exactly once.
   const close = useCallback(() => {
     setSheet(null);
     setTabState(baseTabRef.current);
-    if (pushedRef.current && typeof window !== "undefined") {
-      pushedRef.current = false;
-      try {
-        window.history.back();
-      } catch {
-        /* no-op */
-      }
+    const n = levelsRef.current.length;
+    if (n === 0 || typeof window === "undefined") return;
+    // Drop the callbacks first: the sheet is already gone, so the entries the browser
+    // is about to hand back have nothing left to undo.
+    levelsRef.current = [];
+    jumpRef.current = 0;
+    try {
+      window.history.go(-n);
+    } catch {
+      jumpRef.current = null;
     }
   }, []);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const state = e.state as { wmSheet?: boolean } | null;
-      if (!state?.wmSheet) {
-        pushedRef.current = false;
-        setSheet(null);
-        setTabState((prev) => (prev === "find" || prev === "more" ? baseTabRef.current : prev));
+      const jump = jumpRef.current;
+      jumpRef.current = null;
+      const depth = levelsRef.current.length;
+      if (depth === 0) return; // not ours — Board.tsx or the router owns this one
+      let target: number;
+      if (jump !== null) {
+        target = jump;
+      } else {
+        const tag = (e.state as { wmPhoneLevel?: number } | null)?.wmPhoneLevel;
+        // A tag above our count is a FORWARD step into an entry we no longer stand
+        // behind; leave the stack alone rather than popping a level for it.
+        target = typeof tag === "number" ? Math.max(0, Math.min(tag, depth)) : depth - 1;
+      }
+      while (levelsRef.current.length > target) {
+        const undo = levelsRef.current[levelsRef.current.length - 1];
+        levelsRef.current = levelsRef.current.slice(0, -1);
+        undo();
       }
     };
     window.addEventListener("popstate", onPop);
@@ -156,13 +231,35 @@ export default function PhoneShell({
   }, []);
 
   const ui = useMemo<PhoneUI>(
-    () => ({ tab, setTab, sheet, open, close, listId, setListId, kbInset }),
-    [tab, setTab, sheet, open, close, listId, kbInset],
+    () => ({
+      tab,
+      setTab,
+      sheet,
+      open,
+      close,
+      listId,
+      setListId,
+      kbInset,
+      pushLevel,
+      goBackLevels,
+    }),
+    [tab, setTab, sheet, open, close, listId, kbInset, pushLevel, goBackLevels],
   );
 
   const boardData = useMemo(
     () => ({ boardId, boardName, lists, listLabels, items, actors }),
     [boardId, boardName, lists, listLabels, items, actors],
+  );
+
+  // What every sheet reads (components/phone/phone-data.tsx). Derived from THIS
+  // render's props and never snapshotted, so a router.refresh() — a server action's
+  // revalidate, or the SSE poke Board.tsx debounces — reaches a sheet that is already
+  // open. Without this the sheets took phone-data's standalone branch and refetched
+  // the whole board on every open, which is why a card sheet first rendered "That card
+  // isn't on the board any more".
+  const phoneData = useMemo<PhoneBoardValue>(
+    () => ({ boardId, items, lists: [...lists], listLabels, boards: myBoards }),
+    [boardId, items, lists, listLabels, myBoards],
   );
 
   // Find/More sit over the screen you were on, so the content behind a sheet is the
@@ -174,33 +271,35 @@ export default function PhoneShell({
     <BoardIdProvider value={boardId}>
       <DoorwaysProvider doorways={doorways} myBoards={myBoards}>
         <BoardDataProvider value={boardData}>
-          <PhoneUIContext.Provider value={ui}>
-            <div data-shell="phone" className="phone-shell">
-              {/* Orientation only — nothing here is a target you have to reach. */}
-              <header className="phone-topbar">
-                <p className="phone-eyebrow" suppressHydrationWarning>
-                  {longDate(today)}
-                </p>
-                <h1 className="phone-title">{screen === "now" ? "Now" : "Lists"}</h1>
-              </header>
+          <PhoneDataProvider value={phoneData}>
+            <PhoneUIContext.Provider value={ui}>
+              <div data-shell="phone" className="phone-shell">
+                {/* Orientation only — nothing here is a target you have to reach. */}
+                <header className="phone-topbar">
+                  <p className="phone-eyebrow" suppressHydrationWarning>
+                    {longDate(today)}
+                  </p>
+                  <h1 className="phone-title">{screen === "now" ? "Now" : "Lists"}</h1>
+                </header>
 
-              <main className="phone-content">
-                {screen === "now" ? (
-                  <PhoneHome
-                    items={items}
-                    todayListId={todayListId}
-                    today={today}
-                    snoozeListId={snoozeListId}
-                  />
-                ) : (
-                  <PhoneList items={items} pages={pages} snoozeListId={snoozeListId} />
-                )}
-              </main>
+                <main className="phone-content">
+                  {screen === "now" ? (
+                    <PhoneHome
+                      items={items}
+                      todayListId={todayListId}
+                      today={today}
+                      snoozeListId={snoozeListId}
+                    />
+                  ) : (
+                    <PhoneList items={items} pages={pages} snoozeListId={snoozeListId} />
+                  )}
+                </main>
 
-              <PhoneTabs />
-              <PhoneSheetHost />
-            </div>
-          </PhoneUIContext.Provider>
+                <PhoneTabs />
+                <PhoneSheetHost />
+              </div>
+            </PhoneUIContext.Provider>
+          </PhoneDataProvider>
         </BoardDataProvider>
       </DoorwaysProvider>
     </BoardIdProvider>

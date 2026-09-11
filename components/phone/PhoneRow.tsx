@@ -315,6 +315,11 @@ export default function PhoneRow({
               aria-label={rowAriaLabel(item.text, { checked: state.checked, streak, repeats })}
               onClick={toggle}
               className="phone-check"
+              // Inside a card sheet this row IS the sheet's drag surface. A thumb
+              // ticking a sub-card at the peek wobbles 6-14px downward, which Vaul
+              // reads as a dismiss — the card vanishes mid-tap. Both controls opt out
+              // of the drag; the grip and the head still move the sheet.
+              data-vaul-no-drag
             >
               <span
                 className={`phone-check__glyph${state.checked ? " is-on" : ""}${
@@ -354,6 +359,7 @@ export default function PhoneRow({
               onClick={() => (onOpen ? onOpen(item.id) : ui.open({ kind: "card", itemId: item.id }))}
               {...dragHandleProps}
               aria-label={openLabel}
+              data-vaul-no-drag
             >
               <span className="phone-row__main">
                 <span className="phone-row__title">{item.text}</span>

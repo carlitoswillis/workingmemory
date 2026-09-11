@@ -27,15 +27,16 @@ import {
 import { childrenOf, findItem, movableLists, usePhoneBoardData } from "./phone-data";
 import { CARD_SNAP_POINTS, isExpanded, type SnapPoint } from "./sheetSnaps.ts";
 
-// `dense` and `onOpen` are PhoneRow props owned by the rows package; this cast keeps
-// the file compiling against either revision of that file. A sub-card row is a row
-// with no swipe and no ⋯ — the actions belong to the card you opened, not to the one
-// you are glancing at inside it.
+// `dense`, `onOpen` and `onCheckedChange` are PhoneRow props owned by the rows
+// package; this cast keeps the file compiling against either revision of that file. A
+// sub-card row is a row with no swipe and no ⋯ — the actions belong to the card you
+// opened, not to the one you are glancing at inside it.
 type SubRowProps = {
   item: Item;
   today?: string;
   dense?: boolean;
   onOpen?: (id: string) => void;
+  onCheckedChange?: (id: string, checked: boolean) => void;
 };
 const SubRow = PhoneRow as unknown as React.ComponentType<SubRowProps>;
 
@@ -56,18 +57,23 @@ const SubRow = PhoneRow as unknown as React.ComponentType<SubRowProps>;
 //
 // HISTORY DEPTH. Board.tsx mirrors its open-card depth onto the history stack so an
 // iOS edge-swipe-back steps sub-card → parent → board instead of leaving the app.
-// The same contract holds here, with the same shape but its OWN state key
-// (`wmPhoneDepth`): each level this sheet drills into pushes one entry, back pops
-// one level, and closing unwinds them all. Board.tsx's popstate handler is untouched
-// and still reads `wmDepth`, which we preserve on every push — the two coexist
-// because a phone never has the desktop panel open at the same time.
+// The same contract holds here — but this sheet does not touch `history` itself.
+// PhoneShell owns every entry the phone app pushes (see its `pushLevel` /
+// `goBackLevels`), so there is exactly one popstate handler, one bookkeeper and one
+// close path. This file's only job is the CHAIN of cards it has drilled through:
+// drilling in pushes a level whose undo puts the chain (and the sheet) back on the
+// card we came from; the back arrow asks the shell to step one level, which is the
+// same code path the edge-swipe takes. Nothing here reads the current history entry,
+// because a server action's revalidate can wipe it at any moment.
+// Board.tsx's own `wmDepth` handler is untouched and unreachable from here: the
+// desktop panel is never open while the phone shell is the live tree.
 
 const DONE_LABEL = "Done";
 
 export default function PhoneCardSheet({ itemId }: { itemId: string }) {
-  const { close, open } = usePhoneUI();
+  const { close, open, pushLevel, goBackLevels } = usePhoneUI();
   const { open: shown, dismiss } = useSheetOpen();
-  const { boardId, items, lists, listLabels, refresh } = usePhoneBoardData();
+  const { boardId, items, lists, listLabels, loading, refresh } = usePhoneBoardData();
   const [, startTransition] = useTransition();
 
   const item = findItem(items, itemId);
@@ -88,93 +94,52 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   const snap = expanded ? snapPoints[1] : snapPoints[0];
   const setSnap = (p: SnapPoint | null) => setExpanded(isExpanded(p, snapPoints));
 
-  // ---- history depth -------------------------------------------------------------
-  // `stack` is the chain of cards this sheet has drilled through, bottom first. It's
-  // a ref, not state, because the popstate handler must read the CURRENT chain and
-  // popstate fires outside React's update cycle.
-  const stack = useRef<string[]>([]);
-  // The same chain, as state, because the back affordance and the parent's name are
-  // rendered from it and a ref never re-renders.
+  // ---- the drill-in chain --------------------------------------------------------
+  // The cards this sheet has drilled through, bottom first. A ref as well as state:
+  // the shell's level callbacks read the CURRENT chain and run outside React's update
+  // cycle, while the back affordance and the parent's name render from it.
+  const stack = useRef<string[]>([itemId]);
   const [chain, setChain] = useState<string[]>([itemId]);
   const openRef = useRef(open);
-  const closeRef = useRef(close);
   openRef.current = open;
-  closeRef.current = close;
 
-  useEffect(() => {
-    stack.current = [itemId];
-    window.history.pushState({ ...window.history.state, wmPhoneDepth: 1 }, "");
-
-    const onPop = (e: PopStateEvent) => {
-      const depth = ((e.state as { wmPhoneDepth?: number } | null)?.wmPhoneDepth) ?? 0;
-      const st = stack.current;
-      if (st.length === 0) return; // already unwinding on close
-      if (depth <= 0) {
-        stack.current = [];
-        setChain([]);
-        closeRef.current();
-        return;
-      }
-      if (depth < st.length) {
-        stack.current = st.slice(0, depth);
-        setChain(stack.current);
-        openRef.current({ kind: "card", itemId: stack.current[depth - 1] });
-      }
-    };
-    window.addEventListener("popstate", onPop);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      // Closed some other way (the shell swapped sheets): give the entries back so
-      // the next back-gesture leaves the app rather than replaying dead depths.
-      const n = stack.current.length;
-      stack.current = [];
-      if (n > 0) window.history.go(-n);
-    };
-    // Mount-only: the effect owns the whole sheet's history lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Drilling into a sub-card (or back out via an in-sheet control) re-syncs the chain.
   useEffect(() => {
     const st = stack.current;
-    if (st.length === 0 || st[st.length - 1] === itemId) return;
+    if (st[st.length - 1] === itemId) return; // mount, or a level we just unwound to
     const at = st.indexOf(itemId);
     if (at >= 0) {
-      const back = st.length - 1 - at;
-      stack.current = st.slice(0, at + 1);
-      setChain(stack.current);
-      if (back > 0) window.history.go(-back);
-    } else {
-      stack.current = [...st, itemId];
-      setChain(stack.current);
-      window.history.pushState(
-        { ...window.history.state, wmPhoneDepth: stack.current.length },
-        "",
-      );
+      // Something outside the sheet asked for a card we are already standing on top
+      // of. Let the browser unwind the entries; their callbacks put the chain right.
+      goBackLevels(st.length - 1 - at);
+      return;
     }
+    stack.current = [...st, itemId];
+    setChain(stack.current);
     setExpanded(false); // a new card opens at the peek
-  }, [itemId]);
+    pushLevel(() => {
+      stack.current = st;
+      setChain(st);
+      openRef.current({ kind: "card", itemId: st[st.length - 1] });
+    });
+  }, [itemId, pushLevel, goBackLevels]);
 
-  // Two halves, because closing a sheet and giving its history entries back are
-  // different moments. `dismiss()` starts the exit animation; `Sheet` calls this back
-  // once it's finished, and only then does the shell forget the sheet.
-  function dropHistory() {
-    const n = stack.current.length;
-    stack.current = [];
-    if (n > 0) window.history.go(-n);
-  }
-  function dismissSheet() {
-    dropHistory();
-    dismiss();
-  }
+  // ONE close path. A sheet that closes itself (Archive) calls `dismiss()`, which only
+  // starts the exit animation; `Sheet` calls `onClosed` back once it has finished, and
+  // that is the single place the shell is told — so the entries are given back exactly
+  // once, whether the close came from in here, from the grip, or from Escape. The old
+  // pair (a `dropHistory()` here AND the shell's own back()) popped twice.
   function onClosed(next: boolean) {
     if (next) return;
-    dropHistory();
     close();
   }
 
   if (!item) {
-    // The card was archived or deleted out from under the sheet.
+    // Under <PhoneDataProvider> the board is already here on the first render, so this
+    // can only be the archived-or-deleted case. Standing alone the sheets fetch for
+    // themselves and `items` is [] for a beat — render nothing rather than flash "gone"
+    // at a card that is perfectly fine, which would also hand Vaul the wrong snap
+    // points for the rest of the sheet's life (its setup is mount-only).
+    if (loading) return null;
     return (
       <Sheet open={shown} onOpenChange={onClosed} label="Card" heightSvh={30}>
         <div className="wm-sheet__scroll">
@@ -206,11 +171,11 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
         boardId={boardId}
         expanded={expanded}
         parentTitle={chain.length > 1 ? (parent?.text ?? "the card above") : null}
-        onBack={() => window.history.go(-1)}
+        onBack={() => goBackLevels(1)}
         onExpand={() => setExpanded(true)}
         onOpenChild={(id) => open({ kind: "card", itemId: id })}
         onChanged={refresh}
-        onArchived={dismissSheet}
+        onArchived={dismiss}
         run={startTransition}
       />
     </Sheet>
@@ -403,7 +368,16 @@ function CardBody({
       {!expanded && kids.length > 0 && kids.length <= 3 && (
         <ul className="wm-ph-kids">
           {kids.map((k) => (
-            <SubRow key={k.id} item={k} today={today} dense onOpen={onOpenChild} />
+            <SubRow
+              key={k.id}
+              item={k}
+              today={today}
+              dense
+              onOpen={onOpenChild}
+              // A sub-card's own write has to reach the sheet that is showing it: the
+              // meta line's count, and the peek's height, are both read off `kids`.
+              onCheckedChange={onChanged}
+            />
           ))}
         </ul>
       )}
@@ -449,7 +423,14 @@ function CardBody({
           </p>
           <ul style={{ marginLeft: -16, marginRight: -16 }}>
             {kids.map((k) => (
-              <SubRow key={k.id} item={k} today={today} dense onOpen={onOpenChild} />
+              <SubRow
+                key={k.id}
+                item={k}
+                today={today}
+                dense
+                onOpen={onOpenChild}
+                onCheckedChange={onChanged}
+              />
             ))}
             {kids.length === 0 && (
               <li className="wm-ph-hint wm-ph-pad">Nothing inside this one yet.</li>

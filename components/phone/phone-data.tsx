@@ -49,6 +49,12 @@ export function PhoneDataProvider({
   return <PhoneDataContext.Provider value={value}>{children}</PhoneDataContext.Provider>;
 }
 
+// Under a provider there is nothing to refetch: the board arrives as props, so a
+// mutation's own revalidatePath re-renders the tree that owns it and the new rows
+// reach the sheet on the next render. Handing back a state setter instead would
+// re-render every sheet for nothing.
+const NO_REFRESH = () => {};
+
 const EMPTY: PhoneBoardValue = {
   boardId: null,
   items: [],
@@ -78,7 +84,7 @@ export function usePhoneBoardData(): PhoneBoardData {
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
-  if (provided) return { ...provided, loading: false, refresh };
+  if (provided) return { ...provided, loading: false, refresh: NO_REFRESH };
   return { ...(fetched ?? { ...EMPTY, boardId }), loading: fetched === null, refresh };
 }
 
