@@ -8,6 +8,7 @@
 // stored boolean), the Lists pager index maths, and reorder position reassignment.
 
 import {
+  applyPendingOrder,
   applyReorder,
   deriveNowSections,
   emptyCopyFor,
@@ -16,6 +17,7 @@ import {
   localDayOf,
   pageIndexFor,
   pagerLists,
+  pendingOrderSettled,
   reassignPositions,
   rowAriaLabel,
   rowHeldInPlace,
@@ -353,6 +355,71 @@ ok("uneven spacing survives a reorder", reassignPositions(
   { id: "b", list: "focus", position: 5 },
   { id: "a", list: "focus", position: 900 },
 ]);
+
+// --- a pending drop on Now, which is derived rather than stored ---------------
+
+const ids = (list: readonly { id: string }[]) => list.map((c) => c.id);
+const now = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+ok("no pending drop leaves the board's own order alone", ids(applyPendingOrder(now, null)), [
+  "a",
+  "b",
+  "c",
+]);
+ok("an empty intent is no intent", ids(applyPendingOrder(now, [])), ["a", "b", "c"]);
+ok("the drop is re-applied to a fresh derivation", ids(applyPendingOrder(now, ["c", "a", "b"])), [
+  "c",
+  "a",
+  "b",
+]);
+ok(
+  "a card the drag never saw keeps its own slot",
+  // The drag ordered a and c; b arrived since and sits between them, so it stays
+  // second while a and c swap around it.
+  ids(applyPendingOrder(now, ["c", "a"])),
+  ["c", "b", "a"],
+);
+ok(
+  "a card that has left the screen simply drops out",
+  ids(applyPendingOrder([{ id: "a" }, { id: "c" }], ["c", "b", "a"])),
+  ["c", "a"],
+);
+ok("an intent about nothing on screen changes nothing", ids(applyPendingOrder(now, ["x", "y"])), [
+  "a",
+  "b",
+  "c",
+]);
+ok("a duplicated id is refused rather than losing a card", ids(applyPendingOrder(now, ["a", "a"])), [
+  "a",
+  "b",
+  "c",
+]);
+ok("reordering an empty section is safe", applyPendingOrder([], ["a"]), []);
+ok("the source list is never mutated", (() => {
+  const src = [{ id: "a" }, { id: "b" }];
+  applyPendingOrder(src, ["b", "a"]);
+  return ids(src);
+})(), ["a", "b"]);
+
+ok("nothing pending is already settled", pendingOrderSettled(now, null), true);
+ok("the board hasn't caught up yet", pendingOrderSettled(now, ["c", "a", "b"]), false);
+ok("the board agrees, so the intent can go", pendingOrderSettled(now, ["a", "b", "c"]), true);
+ok(
+  "it agrees about the cards the drag named, ignoring the rest",
+  pendingOrderSettled(now, ["a", "c"]),
+  true,
+);
+ok(
+  "…and disagrees when those two are the wrong way round",
+  pendingOrderSettled(now, ["c", "a"]),
+  false,
+);
+ok(
+  "a card that left the screen doesn't hold the intent open",
+  pendingOrderSettled([{ id: "a" }, { id: "b" }], ["a", "b", "gone"]),
+  true,
+);
+ok("none of them on screen at all is settled", pendingOrderSettled(now, ["x"]), true);
 
 console.log(failures === 0 ? "\nall phone-logic tests passed" : `\n${failures} failing`);
 process.exit(failures === 0 ? 0 : 1);
