@@ -23,8 +23,9 @@
 //
 // What is asserted, keyboard up and keyboard down, at 375x812 with touch:
 //   Capture — the writing surface keeps real height, the Save bar is fully on
-//     screen and never overlaps the textarea, Save closes the sheet, and the card
-//     is on the board AND still there after a reload.
+//     screen and never overlaps the textarea, Save keeps the sheet open with a
+//     running count (Done is what closes it), and the card is on the board AND
+//     still there after a reload.
 //   Find   — the field stays pinned at the top of the sheet, the results list keeps
 //     real height, the first row is inside the visible viewport and is what a tap
 //     at its centre actually hits, and tapping it opens that card's sheet.
@@ -280,7 +281,23 @@ try {
   await page.locator('.wm-sheet--capture .wm-sheet__bar button:text-is("Save")').click();
   await page.evaluate(() => window.__kbUp(false));
   await page.waitForTimeout(2500);
-  ok("capture: Save closes the sheet", (await page.locator(".wm-sheet").count()) === 0);
+  // Capture stays open after a Save now, so several thoughts in a row cost one open
+  // instead of one each. Save leaves the sheet up with a running count of what it has
+  // taken; Done — the label the ghost button wears once something has been saved — is
+  // what dismisses it.
+  const stillOpen = (await page.locator(".wm-sheet--capture").count()) === 1;
+  const countLabel = stillOpen
+    ? ((await page.locator(".wm-sheet--capture .wm-sheet__head .wm-ph-num").textContent()) ?? "")
+        .trim()
+    : "";
+  ok(
+    "capture: Save keeps the sheet open, and says what it took",
+    stillOpen && countLabel === "1",
+    `${stillOpen ? "open" : "closed"}, count "${countLabel}"`,
+  );
+  await page.locator('.wm-sheet--capture .wm-sheet__bar button:text-is("Done")').click();
+  await page.waitForTimeout(900);
+  ok("capture: Done closes the sheet", (await page.locator(".wm-sheet").count()) === 0);
 
   const onBoard = () =>
     page.$$eval(".phone-row", (els, m) => els.some((e) => e.textContent.includes(m)), MARK);
