@@ -37,7 +37,8 @@ export type PhoneSheet =
   | { kind: "time" }
   | { kind: "review" }
   | { kind: "note" }
-  | { kind: "more" };
+  | { kind: "more" }
+  | { kind: "archive" };
 
 export type PhoneUI = {
   tab: "now" | "lists" | "find" | "more";
