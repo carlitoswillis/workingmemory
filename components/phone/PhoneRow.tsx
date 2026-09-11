@@ -127,6 +127,23 @@ export default function PhoneRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
+  // Clear the archive timer on unmount; the archive has already been started, so commit
+  // it immediately rather than silently cancelling the intent.
+  useEffect(() => {
+    return () => {
+      if (archiveTimer.current) {
+        clearTimeout(archiveTimer.current);
+        archiveTimer.current = null;
+        // Commit the archive immediately rather than cancelling the undo window
+        setArchivePending(false);
+        startTransition(() => {
+          archiveItemAction(boardId, item.id).catch(() => {});
+        });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Streak folds the optimistic checkbox in before counting, so the number moves with
   // the glyph rather than after the round-trip.
   const dayset = daysWithLiveCheck(
@@ -153,10 +170,10 @@ export default function PhoneRow({
   }, [streak]);
 
   function fire(next: boolean) {
-    const promise = repeats
-      ? setDailyDoneAction(boardId, item.id, next ? day : null)
-      : toggleDoneAction(boardId, item.id, next);
     startTransition(() => {
+      const promise = repeats
+        ? setDailyDoneAction(boardId, item.id, next ? day : null)
+        : toggleDoneAction(boardId, item.id, next);
       promise.catch(() => apply({ type: "failed", message: "Couldn’t save — tap to retry" }));
     });
   }

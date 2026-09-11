@@ -5,6 +5,7 @@ import type { Item } from "@/lib/types";
 import { effectiveDone } from "@/lib/recurrence";
 import PhoneRow from "./PhoneRow";
 import { deriveNowSections, type NowSection } from "./phone-logic";
+import { childrenOf } from "./phone-data";
 
 // Now — the home screen, and the reason the app opens where it does. Three sections
 // in ONE vertical scroll: what you said you'd do today, what repeats and is still
@@ -39,13 +40,15 @@ export default function PhoneHome({
   const [showDone, setShowDone] = useState(false);
 
   // Sub-cards never render as rows; they're counted on their parent.
+  // Use childrenOf to ensure archived children are not counted (matches the sheet).
   const childrenByParent = useMemo(() => {
     const by = new Map<string, Item[]>();
+    const parents = new Set<string>();
     for (const it of items) {
-      if (!it.parent_id) continue;
-      const arr = by.get(it.parent_id);
-      if (arr) arr.push(it);
-      else by.set(it.parent_id, [it]);
+      if (it.parent_id) parents.add(it.parent_id);
+    }
+    for (const parentId of parents) {
+      by.set(parentId, childrenOf(items, parentId));
     }
     return by;
   }, [items]);

@@ -29,6 +29,7 @@ import { usePhoneUI } from "./PhoneShell";
 import PhoneRow from "./PhoneRow";
 import { M, msOf } from "./phone-motion";
 import { applyReorder, emptyCopyFor, pageIndexFor, reassignPositions } from "./phone-logic";
+import { childrenOf } from "./phone-data";
 
 // Lists — one horizontal pager over the board's other columns, with a sticky
 // segmented header that syncs both ways: tap a segment to jump, swipe to step to the
@@ -61,13 +62,15 @@ export default function PhoneList({
   // Sub-cards are not rows on a Lists page — they hang off their parent, exactly as
   // they do on Now, so a parent here carries the same "2/3 sub-cards" affordance and
   // the same tap into its sheet. Same map shape as PhoneHome's.
+  // Use childrenOf to ensure archived children are not counted (matches the sheet).
   const childrenByParent = useMemo(() => {
     const by = new Map<string, Item[]>();
+    const parents = new Set<string>();
     for (const it of items) {
-      if (!it.parent_id) continue;
-      const arr = by.get(it.parent_id);
-      if (arr) arr.push(it);
-      else by.set(it.parent_id, [it]);
+      if (it.parent_id) parents.add(it.parent_id);
+    }
+    for (const parentId of parents) {
+      by.set(parentId, childrenOf(items, parentId));
     }
     return by;
   }, [items]);
@@ -113,9 +116,13 @@ export default function PhoneList({
 
   // …and tell the shell, so a sheet ("capture into this list") knows where you are.
   useEffect(() => {
-    const page = pages[index];
+    // Clamp index if pages have shrunk
+    const clampedIndex = Math.min(index, Math.max(0, pages.length - 1));
+    if (clampedIndex !== index) setIndex(clampedIndex);
+
+    const page = pages[clampedIndex];
     if (page && page.id !== ui.listId) ui.setListId(page.id);
-    segRefs.current[index]?.scrollIntoView({ inline: "center", block: "nearest" });
+    segRefs.current[clampedIndex]?.scrollIntoView({ inline: "center", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, pages]);
 

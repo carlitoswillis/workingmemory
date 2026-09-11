@@ -283,6 +283,7 @@ function CardBody({
   useEffect(() => setDetails(item.details ?? ""), [item.id, item.details]);
 
   const [childText, setChildText] = useState("");
+  useEffect(() => setChildText(""), [item.id]);
 
   const doneName = `${item.text}${streak > 0 ? `, ${streak} ${rec.kind === "weekly" ? "week" : "day"} streak` : ""}, ${done ? "done" : "not done"}${rec.kind !== "none" ? " today" : ""}`;
 

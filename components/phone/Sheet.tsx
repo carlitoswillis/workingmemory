@@ -79,6 +79,13 @@ export function Sheet({
     if (open && snapPoints && activeSnapPoint === undefined) setOwnSnap(snapPoints[0] ?? null);
   }, [open, snapPoints, activeSnapPoint]);
 
+  // Clear overflow on unmount in case an abrupt close (edge-swipe back) skipped the blur
+  useEffect(() => {
+    return () => {
+      document.documentElement.style.removeProperty("overflow");
+    };
+  }, []);
+
   // The sheet is mounted only while it's the active sheet, so `open` arrives already
   // true. Two things go wrong if that's handed straight to Vaul: the OPEN animation
   // never plays (the drawer's first render is its final state), and the CLOSE never
