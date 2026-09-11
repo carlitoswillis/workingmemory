@@ -485,8 +485,29 @@ eq(
 eq(
   "the roll-up counts, on the parent entry",
   diffBoardSince(rollupItems, rollupEvents, D.T, D.NOW, OPTS).entries[0].subCounts,
-  { done: 2, added: 1, archived: 0 },
+  { done: 2, added: 1, archived: 0, reopened: 0, restored: 0 },
 );
+
+// A sub-card reopened inside the window is a change the parent's line must carry.
+{
+  const items = [
+    card({ id: "P2", text: "Garden", list: "focus" }),
+    card({ id: "r1", text: "weed", parent_id: "P2", done: false }),
+  ];
+  const events = [
+    born("P2", "Garden", D.beforeT),
+    born("r1", "weed", D.beforeT),
+    ev("r1", "completed", "done", "false", "true", D.beforeT),
+    ev("r1", "reopened", "done", "true", "false", D.inside),
+  ];
+  const d = diffBoardSince(items, events, D.T, D.NOW, OPTS);
+  eq(
+    "a reopened sub-card rolls up as a count, not into thin air",
+    d.entries.map((e) => e.phrase),
+    ["1 sub-card reopened"],
+  );
+  eq("and the reopened count reaches the summary", d.counts.reopened, 1);
+}
 
 eq(
   "the summary counts rolled-up sub-cards as the cards they are",

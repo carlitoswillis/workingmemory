@@ -283,12 +283,12 @@ export default function PhoneTimeTravel() {
                         // board) at T, so there is no past card behind this line —
                         // same rule the "Board then" list uses to decide what shows.
                         <div className="wm-ph-row wm-ph-row--ledger" style={{ opacity: 0.7 }}>
-                          <span style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <p className="wm-ph-body wm-ph-clamp2">{entry.title}</p>
                             <p className="wm-ph-caption" style={{ marginTop: 2 }}>
                               {entry.phrase}
                             </p>
-                          </span>
+                          </div>
                         </div>
                       )}
                     </li>

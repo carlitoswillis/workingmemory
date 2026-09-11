@@ -193,16 +193,27 @@ export interface DiffSubCounts {
   done: number;
   added: number;
   archived: number;
+  reopened: number;
+  restored: number;
 }
+export const SUB_COUNT_KINDS = ["added", "done", "reopened", "archived", "restored"] as const;
+export type SubCountKind = (typeof SUB_COUNT_KINDS)[number];
+export const EMPTY_SUB_COUNTS: DiffSubCounts = {
+  done: 0,
+  added: 0,
+  archived: 0,
+  reopened: 0,
+  restored: 0,
+};
 
-// "2 sub-cards done" — the roll-up clauses for a parent's line, in kind order.
+// "2 sub-cards done" — the roll-up clauses for a parent's line, in kind order. A
+// sub-card reopened or restored inside the window is a change too; without its
+// own count it would vanish from the ledger.
 export function subCountPhrases(s: DiffSubCounts): string[] {
   const out: string[] = [];
   const n = (count: number, what: string) =>
     `${count} sub-card${count === 1 ? "" : "s"} ${what}`;
-  if (s.added) out.push(n(s.added, "added"));
-  if (s.done) out.push(n(s.done, "done"));
-  if (s.archived) out.push(n(s.archived, "archived"));
+  for (const k of SUB_COUNT_KINDS) if (s[k]) out.push(n(s[k], DIFF_KIND_PHRASE[k]));
   return out;
 }
 
@@ -450,9 +461,9 @@ export function diffBoardSince(
     const row = computed.get(id) as Computed;
     computed.delete(id);
     if (!parentId) continue;
-    const tally = subCounts.get(parentId) ?? { done: 0, added: 0, archived: 0 };
+    const tally = subCounts.get(parentId) ?? { ...EMPTY_SUB_COUNTS };
     for (const k of row.kinds) {
-      if (k === "done" || k === "added" || k === "archived") tally[k] += 1;
+      if ((SUB_COUNT_KINDS as readonly string[]).includes(k)) tally[k as SubCountKind] += 1;
     }
     subCounts.set(parentId, tally);
     const prev = subAt.get(parentId);
@@ -489,11 +500,7 @@ export function diffBoardSince(
   const counts = Object.fromEntries(DIFF_KINDS.map((k) => [k, 0])) as Record<DiffKind, number>;
   for (const e of entries) {
     for (const k of e.kinds) counts[k] += 1;
-    if (e.subCounts) {
-      counts.added += e.subCounts.added;
-      counts.done += e.subCounts.done;
-      counts.archived += e.subCounts.archived;
-    }
+    if (e.subCounts) for (const k of SUB_COUNT_KINDS) counts[k] += e.subCounts[k];
   }
 
   return {
