@@ -36,16 +36,7 @@ import {
 } from "@/app/actions";
 import { createBoardFromCardAction } from "@/app/boards/actions";
 import type { Provenance } from "@/lib/doorways";
-import {
-  WEEKDAYS,
-  addDays,
-  describeRecurrence,
-  effectiveDone,
-  formatRecurrence,
-  localToday,
-  parseRecurrence,
-  periodStart,
-} from "@/lib/recurrence";
+import { WEEKDAYS, addDays, describeRecurrence, effectiveDone, formatRecurrence, localToday, parseRecurrence, periodStart } from "@/lib/recurrence";
 import { daysWithLiveCheck, prevDay, streakFor } from "@/lib/streaks";
 import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
@@ -77,6 +68,10 @@ function describe(
         }
         const was = boardOf(e.old_value ?? "");
         return was ? `Unlinked from board “${was}”` : "Unlinked from a board";
+      }
+      if (e.field === "recurrence") {
+        const r = parseRecurrence(e.new_value);
+        return r.kind === "none" ? "No longer repeats" : `Now repeats: ${describeRecurrence(r)}`;
       }
       return e.field === "details" ? "Edited details" : "Reworded";
     case "moved":

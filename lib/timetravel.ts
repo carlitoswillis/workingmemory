@@ -261,10 +261,8 @@ function completedOnAt(item: Item, events: ItemEvent[], tMs: number): string | n
   return on;
 }
 
-// Same walk for `recurrence`. No trigger writes these events today (lib/schema.ts
-// tracks text/details/list/done/completed_on/archived/parent/linked_board), so this
-// reads as "unchanged" on every real board — it is here so the kind is already
-// wired the day the trigger lands, and costs one filter over a card's events.
+// Same walk for `recurrence` (items_log_recurrence_v2 in lib/schema.ts writes
+// type 'edited', field 'recurrence', old and new raw values).
 function recurrenceAt(item: Item, events: ItemEvent[], tMs: number): string {
   let r = item.recurrence;
   for (const e of events.filter((e) => e.field === "recurrence" && ms(e.at) > tMs).sort(newestFirst)) {

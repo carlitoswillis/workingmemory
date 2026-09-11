@@ -1,5 +1,6 @@
 "use client";
 
+import { describeRecurrence, parseRecurrence } from "@/lib/recurrence";
 import { useEffect, useState } from "react";
 import type { Item, ItemEvent } from "@/lib/types";
 import type { Provenance } from "@/lib/doorways";
@@ -45,6 +46,10 @@ function describe(
         }
         const was = boardOf(e.old_value ?? "");
         return was ? `Unlinked from board "${was}"` : "Unlinked from a board";
+      }
+      if (e.field === "recurrence") {
+        const r = parseRecurrence(e.new_value);
+        return r.kind === "none" ? "No longer repeats" : `Now repeats: ${describeRecurrence(r)}`;
       }
       return e.field === "details" ? "Edited details" : "Reworded";
     case "moved":

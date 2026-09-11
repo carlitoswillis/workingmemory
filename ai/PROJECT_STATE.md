@@ -314,11 +314,20 @@ a real structure without losing its looseness.
     still pending.
   - **Second pass (2026-09-10):** Lists management and Boards management sheets added to the phone app, enabling full list and board operations from the phone. The desktop panel's history depth now uses the same level-stack architecture as the phone shell, replacing the previous history.state-based approach. Coverage remains tsc/build verified; sheets carry forward the open-items work from the first pass.
 
-**2026-09-10 — Diff mode for time travel.** The time-travel scrubber gained a "What changed" 
-ledger that diffs the board state at a past moment against now: cards added/removed/moved, 
-columns renamed, parent changes. Pure `diffBoardSince(db, boardId, before, after)` in 
-`lib/timetravel.ts` (idempotent, no state, rules: items are compared by id, columns by position 
-and name, sub-card nesting by parent_id) is reusable by desktop's own time-travel UI when needed.
+**2026-09-10 — Diff mode for time travel.** The phone's Time travel sheet has a
+"Board then / What changed" toggle. "What changed" is a ledger of what happened between
+the scrubbed moment and now: one line per card, kind phrases after the title (added,
+done, reopened, archived, restored, moved from X to Y, reworded, details edited, nested,
+un-nested, recurrence changed), sub-cards rolled up into the parent's line as counts,
+and a summary line. Pure `diffBoardSince(items, events, tIso, nowIso, { listLabels,
+today })` in `lib/timetravel.ts` builds it by comparing each card's state at T
+(`reconstructItemAt`) with its state now, so a change made and undone cancels, three
+rewordings read once, and a repeating card's daily ticks never become rows. The note
+and weekly review are excluded. Desktop can reuse the function. The same day the
+journal gained `items_log_recurrence_v2` (type edited, field recurrence), so a card's
+history reads "Now repeats: Every day" and the ledger's recurrence kind fires;
+`lib/journal.test.ts` covers the trigger.
+
 - **2026-08-02 — Archive from the board, and undo it** (owner: "the desktop view is
   less intuitive for the swipe thing… maybe a right click? give better idea if u have
   it. also maybe we allow multi select? for dragging and archiving?"). Three ways in,

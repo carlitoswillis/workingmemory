@@ -278,6 +278,17 @@ begin
   insert into item_events (item_id, type, field, old_value, new_value, actor_id, at)
   values (new.id, 'reopened', 'archived', 'true', 'false', new.touched_by, ${ISO_NOW});
 end;
+
+-- Recurrence: none / daily / weekly:N. Logged as an edit so a card's history reads
+-- "Now repeats every day" and time travel's ledger can say "recurrence changed".
+-- Added 2026-09-10 with the phone diff mode; a NEW trigger name, so
+-- create-if-not-exists picks it up on every existing DB, no drop.
+create trigger if not exists items_log_recurrence_v2 after update of recurrence on items
+when new.recurrence is not old.recurrence
+begin
+  insert into item_events (item_id, type, field, old_value, new_value, actor_id, at)
+  values (new.id, 'edited', 'recurrence', old.recurrence, new.recurrence, new.touched_by, ${ISO_NOW});
+end;
 `;
 
 // Additive migration for DBs created before a schema addition: `create table if not
