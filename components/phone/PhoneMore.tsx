@@ -30,6 +30,7 @@ const ROWS: { kind: PhoneSheet["kind"]; label: string; hint: string }[] = [
   { kind: "note", label: "Note", hint: "Carries over, day to day" },
   { kind: "time", label: "Time travel", hint: "The board as it was" },
   { kind: "boards", label: "Boards", hint: "Switch board" },
+  { kind: "archive", label: "Archive", hint: "Browse and restore" },
 ];
 
 export default function PhoneMore() {

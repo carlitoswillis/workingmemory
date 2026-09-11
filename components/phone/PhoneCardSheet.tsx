@@ -6,10 +6,12 @@ import {
   archiveItemAction,
   editDetailsAction,
   editItemAction,
+  getItemAction,
   moveItemAction,
   setDailyDoneAction,
   setRecurrenceAction,
   toggleDoneAction,
+  unarchiveItemAction,
 } from "@/app/actions";
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
@@ -76,7 +78,30 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
   const { boardId, items, lists, listLabels, loading, refresh } = usePhoneBoardData();
   const [, startTransition] = useTransition();
 
-  const item = findItem(items, itemId);
+  // A3: an archived card is never in `items` (lib/queries.ts's board query excludes
+  // archived rows), so opening one from Find or the Archive sheet has nothing to find
+  // here. Fetch it by id — the same call Find already makes before it opens this sheet
+  // — and use that only once the board data has had its say, so a card that really is
+  // on the board is never shadowed by a stale fetch for a different id.
+  const boardItem = findItem(items, itemId);
+  const [archiveFallback, setArchiveFallback] = useState<{ id: string; item: Item | null } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (boardItem || loading) return;
+    let alive = true;
+    getItemAction(boardId, itemId).then((it) => {
+      if (alive) setArchiveFallback({ id: itemId, item: it });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [boardItem, loading, boardId, itemId]);
+  // True only while the fetch above is in flight for THIS id — kept apart from
+  // `loading` so the "not on the board" branch below waits on it too.
+  const fetchingArchived =
+    !boardItem && !loading && (!archiveFallback || archiveFallback.id !== itemId);
+  const item = boardItem ?? (archiveFallback?.id === itemId ? archiveFallback.item : null);
   const kids = useMemo(() => (item ? childrenOf(items, item.id) : []), [items, item]);
   const columns = useMemo(() => movableLists(lists), [lists]);
 
@@ -139,7 +164,7 @@ export default function PhoneCardSheet({ itemId }: { itemId: string }) {
     // themselves and `items` is [] for a beat — render nothing rather than flash "gone"
     // at a card that is perfectly fine, which would also hand Vaul the wrong snap
     // points for the rest of the sheet's life (its setup is mount-only).
-    if (loading) return null;
+    if (loading || fetchingArchived) return null;
     return (
       <Sheet open={shown} onOpenChange={onClosed} label="Card" heightSvh={30}>
         <div className="wm-sheet__scroll">
@@ -519,24 +544,47 @@ function CardBody({
             ))}
           </div>
 
-          <button
-            type="button"
-            className="wm-ph-btn"
-            style={{ marginTop: 20 }}
-            onClick={() => {
-              run(() => {
-                archiveItemAction(boardId, item.id);
-                onChanged();
-              });
-              onArchived();
-            }}
-          >
-            Archive this card
-          </button>
-          <p className="wm-ph-hint" style={{ marginTop: 8 }}>
-            Archived cards keep their whole history, and come back from Archive on the
-            desktop board.
-          </p>
+          {item.archived ? (
+            <>
+              <button
+                type="button"
+                className="wm-ph-btn"
+                style={{ marginTop: 20 }}
+                onClick={() => {
+                  run(() => {
+                    unarchiveItemAction(boardId, item.id);
+                    onChanged();
+                  });
+                }}
+              >
+                Restore this card
+              </button>
+              <p className="wm-ph-hint" style={{ marginTop: 8 }}>
+                Restore puts it back on the board, in {listLabels[item.list] ?? item.list}.
+              </p>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="wm-ph-btn"
+                style={{ marginTop: 20 }}
+                onClick={() => {
+                  run(() => {
+                    archiveItemAction(boardId, item.id);
+                    onChanged();
+                  });
+                  onArchived();
+                }}
+              >
+                Archive this card
+              </button>
+              <p className="wm-ph-hint" style={{ marginTop: 8 }}>
+                Archived cards keep their whole history. Find them again from More →
+                Archive.
+              </p>
+            </>
+          )}
         </div>
       )}
     </>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
+import PhoneArchive from "./PhoneArchive";
 import PhoneBoards from "./PhoneBoards";
 import PhoneCapture from "./PhoneCapture";
 import PhoneCardSheet from "./PhoneCardSheet";
@@ -298,6 +299,8 @@ export function PhoneSheetHost() {
       return <PhoneNote key="note" />;
     case "more":
       return <PhoneMore key="more" />;
+    case "archive":
+      return <PhoneArchive key="archive" />;
   }
 }
 
