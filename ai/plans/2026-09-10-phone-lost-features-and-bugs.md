@@ -88,13 +88,14 @@ whole board on open. Consequences:
   rapid multi-add.
 
 ## C. Dropped on purpose per the plan (owner to confirm each)
-- Column add / rename / delete / reorder (`phone-app.md:10,171`).
-- Board create / rename / invite / remove member / leave / delete
-  (`PhoneBoards.tsx:9-16` comment only; the plan text does not name these).
 - Hold-to-nest drag gesture (`phone-app.md:66`).
 - Multi-select, bulk archive, undo for moves (`phone-app.md:10`).
 - Time-travel prev/next steppers (`phone-app.md:32`).
-- Restore from archive (code comment `PhoneCardSheet.tsx:554-557` only).
+
+## Built 2026-09-10, second pass
+- Column add / rename / delete / reorder (`phone-app.md:10,171`): Lists management sheet built.
+- Board create / rename / invite / remove member / leave / delete: Boards management sheet built.
+- Restore from archive: built as part of Archive feature in phase 2.
 
 ## Server actions with zero phone call sites
 setParentAction, archiveItemsAction, unarchiveItemsAction, unarchiveItemAction,
@@ -105,9 +106,10 @@ createBoardAction, renameBoardAction, deleteBoardAction, inviteMemberAction,
 removeMemberAction, leaveBoardAction.
 
 ## Proposed order
-1. A1 + A2 together (same files, same history/data plumbing). Opus.
-2. A3 + archive browse/restore (B). Sonnet.
-3. Today reorder + move-to-board / re-parent (B). Opus for the gesture.
-4. A4, A5 mechanical fixes. Sonnet.
-5. Doorways, history, markdown, streak strip, time-travel detail. Sonnet.
-6. Anything in C the owner wants back.
+1. A1 + A2 together (same files, same history/data plumbing). Opus. **BUILT.**
+2. A3 + archive browse/restore (B). Sonnet. **BUILT.**
+3. Today reorder + move-to-board / re-parent (B). Opus for the gesture. **BUILT.**
+4. A4, A5 mechanical fixes. Sonnet. **BUILT.**
+5. Doorways, history, markdown, streak strip, time-travel detail. Sonnet. **BUILT.**
+6. Lists management + Boards management (C, second pass). **BUILT.**
+7. Anything else in C the owner wants back.
