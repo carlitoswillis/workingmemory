@@ -35,7 +35,12 @@ export default function PhoneSnapshotCard({
 
   return (
     <div
-      className="card-in"
+      // `wm-ph-snapcard` is what pays for the notch and the home indicator. This is the
+      // one overlay in the phone app that covers the whole DEVICE: an ordinary sheet is
+      // a shorter bottom-anchored box whose head sits well clear of the status bar and
+      // whose `.wm-sheet__bar` absorbs the bottom inset, and this has neither. See the
+      // rule beside `.wm-ph-snap-badge` in globals.css.
+      className="card-in wm-ph-snapcard"
       style={{
         position: "fixed",
         inset: 0,

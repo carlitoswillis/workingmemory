@@ -1432,6 +1432,9 @@ textarea.wm-ph-field--title {
   outline: 2px solid var(--now);
   outline-offset: 2px;
 }
+.wm-ph-chip[disabled] {
+  opacity: 0.45;
+}
 .wm-ph-chip[aria-pressed="true"],
 .wm-ph-chip[aria-checked="true"] {
   border-color: var(--now-line);
@@ -1718,7 +1721,21 @@ a.phone-row__doorway:active {
   min-width: 0;
 }
 
-/* Time travel's read-only card: same shape as the live sheet, no controls. */
+/* Time travel's read-only card: same shape as the live sheet, no controls — but it
+   is the only overlay here that covers the whole screen, so it carries the safe-area
+   insets itself. Ordinary sheets never needed them on .wm-sheet__head: a sheet is a
+   bottom-anchored box shorter than the viewport, so its head is nowhere near the
+   status bar and its .wm-sheet__bar already pays the bottom inset. This one has no
+   bar and no gap at the top, so in an installed app (viewport-fit=cover, no browser
+   chrome) the back arrow, the title and the badge would sit under the Dynamic Island
+   and the last sub-card under the home indicator. Same shape as .phone-topbar. */
+.wm-ph-snapcard > .wm-sheet__head {
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+}
+.wm-ph-snapcard > .wm-sheet__scroll {
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
 .wm-ph-snap-badge {
   display: inline-flex;
   align-items: center;

@@ -23,6 +23,21 @@ import { usePhoneBoardData } from "./phone-data";
 // per-board) event log ships once via timelineDataAction, and every scrub position is
 // resolved locally by lib/timetravel.ts — no round-trip per tick.
 
+// The relative jumps, as on the desktop bar (TimeMachineBar.tsx's chips). Dragging is
+// how you browse; these are how you ASK — "where was this an hour ago" is a question,
+// not a search, and freehand-dragging a scrubber to a specific hour on a 375px track
+// is the wrong instrument for it. A jump lands on the same soft-snapped moment the
+// scrubber would, and is clamped to the board's first recorded change, because there
+// is nothing to show before that.
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const JUMPS = [
+  { label: "1h ago", back: HOUR },
+  { label: "6h ago", back: 6 * HOUR },
+  { label: "Yesterday", back: DAY },
+  { label: "Last week", back: 7 * DAY },
+];
+
 const fmtMoment = (ms: number) =>
   new Date(ms).toLocaleString(undefined, {
     weekday: "short",
@@ -232,6 +247,22 @@ export default function PhoneTimeTravel() {
 
       {/* The control, in the thumb zone. */}
       <div className="wm-sheet__bar" style={{ flexDirection: "column", alignItems: "stretch" }}>
+        <div className="wm-ph-chips" role="group" aria-label="Jump back">
+          {JUMPS.map((j) => {
+            const target = Math.max(minMs, now - j.back);
+            return (
+              <button
+                key={j.label}
+                type="button"
+                className="wm-ph-chip"
+                disabled={timeline == null}
+                onClick={() => setValueMs(snap(target))}
+              >
+                {j.label}
+              </button>
+            );
+          })}
+        </div>
         <input
           type="range"
           className="wm-ph-scrub"
