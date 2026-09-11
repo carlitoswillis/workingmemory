@@ -267,6 +267,62 @@ export function reassignPositions<T extends { id: string; position: number }>(
   return updates;
 }
 
+// A drag that has already happened, re-applied to whatever the board says now.
+//
+// Now is not a column: its Today section is DERIVED every render (an optimistic
+// checkbox on any row, a `held` pin, an SSE poke all rebuild it), so a dropped card
+// cannot simply be parked in a state slot the way a Lists page parks it — the next
+// derivation would snap it back to where it was dragged from and the drop would look
+// like it failed. Holding the intent as ids instead survives every one of those
+// rebuilds: the cards named in `ids` are laid back out in that order, in the slots
+// they collectively occupy right now, and anything the drag never saw keeps its own
+// slot. Cards that have since left the screen simply drop out.
+export function applyPendingOrder<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[] | null,
+): T[] {
+  const out = items.slice();
+  if (!ids || ids.length === 0) return out;
+  const named = new Set(ids);
+  const slots: number[] = [];
+  for (let i = 0; i < out.length; i++) {
+    if (named.has(out[i].id)) slots.push(i);
+  }
+  if (slots.length === 0) return out;
+  const byId = new Map(slots.map((i) => [out[i].id, out[i]] as const));
+  const ordered: T[] = [];
+  for (const id of ids) {
+    const item = byId.get(id);
+    if (item) ordered.push(item);
+  }
+  // A duplicate id would leave the two lengths apart; refuse rather than lose a card.
+  if (ordered.length !== slots.length) return out;
+  slots.forEach((slot, n) => {
+    out[slot] = ordered[n];
+  });
+  return out;
+}
+
+// Has the board caught up with a pending drag? True once the cards it named appear in
+// the order it asked for — or once none of them is on this screen any more. That is
+// when the intent can be dropped, so a card moved somewhere else later isn't dragged
+// back by an order nobody asked for twice.
+export function pendingOrderSettled<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[] | null,
+): boolean {
+  if (!ids || ids.length === 0) return true;
+  const named = new Set(ids);
+  const present: string[] = [];
+  for (const item of items) {
+    if (named.has(item.id)) present.push(item.id);
+  }
+  if (present.length === 0) return true;
+  const stillHere = new Set(present);
+  const wanted = ids.filter((id) => stillHere.has(id));
+  return present.length === wanted.length && present.every((id, i) => id === wanted[i]);
+}
+
 // The same move applied locally, so the list settles under the finger instead of
 // waiting for the server.
 export function applyReorder<T extends { id: string; position: number }>(

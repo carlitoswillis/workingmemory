@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "@/lib/types";
 import { effectiveDone } from "@/lib/recurrence";
 import PhoneRow from "./PhoneRow";
-import { deriveNowSections, type NowSection } from "./phone-logic";
+import PhoneReorderRows from "./PhoneReorderRows";
+import {
+  applyPendingOrder,
+  deriveNowSections,
+  pendingOrderSettled,
+  type NowSection,
+} from "./phone-logic";
 import { childrenOf } from "./phone-data";
 
 // Now — the home screen, and the reason the app opens where it does. Three sections
@@ -19,6 +25,16 @@ import { childrenOf } from "./phone-data";
 //
 //   optimistic — id → the checkbox's local truth, until the server agrees;
 //   held       — id → the section it was tapped in, until its collapse finishes.
+//
+// Today's open cards are also REORDERABLE by long press, on the same mechanic a Lists
+// page uses (PhoneReorderRows). The other two sections are not: "Due today" is ordered
+// by what repeats and "Done today" is a receipt, neither of which is a queue you get
+// to arrange. A third map carries a drop that the server hasn't confirmed yet —
+//
+//   pendingIds — the ids a drag put in order, until the board agrees.
+//
+// …because unlike a Lists page, Today is derived on every render, so a dropped card
+// has nowhere to sit; see applyPendingOrder in phone-logic.ts.
 
 export default function PhoneHome({
   items,
@@ -38,6 +54,8 @@ export default function PhoneHome({
   const sectionRef = useRef<Map<string, NowSection>>(new Map());
   const [held, setHeld] = useState<Map<string, NowSection>>(new Map());
   const [showDone, setShowDone] = useState(false);
+  // A drop the board hasn't confirmed yet, as ids. Cleared the moment it has.
+  const [pendingIds, setPendingIds] = useState<string[] | null>(null);
 
   // Sub-cards never render as rows; they're counted on their parent.
   // Use childrenOf to ensure archived children are not counted (matches the sheet).
@@ -84,6 +102,19 @@ export default function PhoneHome({
     [view, today, todayListId],
   );
 
+  // Today's rows, with an unconfirmed drop folded back in. Everything else on this
+  // screen reads `sections` directly — only this one section is arrangeable.
+  const todayCards = useMemo(
+    () => applyPendingOrder(sections.today, pendingIds),
+    [sections.today, pendingIds],
+  );
+
+  // Retire the drop once the board lists those cards the way the drag asked — the same
+  // bargain the optimistic checkbox strikes below, so nothing stays pending forever.
+  useEffect(() => {
+    if (pendingIds && pendingOrderSettled(sections.today, pendingIds)) setPendingIds(null);
+  }, [sections.today, pendingIds]);
+
   // A row that has settled back onto the server's answer no longer needs an override.
   const onCheckedChange = useCallback((id: string, checked: boolean) => {
     setOptimistic((prev) => (prev[id] === checked ? prev : { ...prev, [id]: checked }));
@@ -128,8 +159,9 @@ export default function PhoneHome({
     });
   }, [items, today]);
 
+  // Everything a row needs except its own identity — PhoneReorderRows supplies `item`
+  // along with the drag wiring, and the two plain sections pass it themselves.
   const rowProps = (item: Item) => ({
-    item,
     checked: optimistic[item.id] ?? effectiveDone(item, today),
     childItems: childrenByParent.get(item.id),
     today,
@@ -143,14 +175,17 @@ export default function PhoneHome({
   return (
     <div className="phone-scroll">
       <Section title="Today" count={counts.today.length}>
-        {sections.today.length === 0 ? (
+        {todayCards.length === 0 ? (
           <Empty>Nothing claimed for today.</Empty>
         ) : (
-          <ul className="phone-rows">
-            {sections.today.map((item) => (
-              <PhoneRow key={item.id} {...rowProps(item)} />
-            ))}
-          </ul>
+          // Long-press a row to put the day in the order you mean to work it.
+          <PhoneReorderRows
+            cards={todayCards}
+            listId={todayListId}
+            listLabel="Today"
+            rowProps={rowProps}
+            onReorder={(next) => setPendingIds(next.map((c) => c.id))}
+          />
         )}
       </Section>
 
@@ -160,7 +195,7 @@ export default function PhoneHome({
         ) : (
           <ul className="phone-rows">
             {sections.due.map((item) => (
-              <PhoneRow key={item.id} {...rowProps(item)} />
+              <PhoneRow key={item.id} item={item} {...rowProps(item)} />
             ))}
           </ul>
         )}
@@ -192,7 +227,7 @@ export default function PhoneHome({
         {showDone && (
           <ul className="phone-rows">
             {sections.done.map((item) => (
-              <PhoneRow key={item.id} {...rowProps(item)} />
+              <PhoneRow key={item.id} item={item} {...rowProps(item)} />
             ))}
           </ul>
         )}
