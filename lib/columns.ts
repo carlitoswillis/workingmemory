@@ -75,6 +75,29 @@ export function listExists(db: Database.Database, boardId: string | null, id: st
     .get(id, boardId);
 }
 
+// Where a capture lands when the column it asked for is not live on this board. A
+// phone sheet can ask for a column id it remembered from before the data arrived,
+// and a board that archived its seeded Brain Dump and made a new one has that
+// label under a uuid — so: the column requested, if live; else the live column
+// labelled Brain Dump; else the seeded id; else the first live column. Null only
+// on a board with no columns at all, which ensureLists makes impossible.
+export function captureLandingList(
+  db: Database.Database,
+  boardId: string | null,
+  requested: string,
+): string | null {
+  if (listExists(db, boardId, requested)) return requested;
+  ensureLists(db, boardId);
+  const live = getLists(db, boardId).filter((l) => !isSentinelList(l.id));
+  const brainDump = DEFAULT_LISTS[DEFAULT_LISTS.length - 1];
+  return (
+    live.find((l) => l.label === brainDump.label)?.id ??
+    live.find((l) => l.id === brainDump.id)?.id ??
+    live[0]?.id ??
+    null
+  );
+}
+
 function liveCount(db: Database.Database, boardId: string | null): number {
   return (
     db

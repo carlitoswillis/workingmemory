@@ -286,14 +286,14 @@ try {
   // taken; Done — the label the ghost button wears once something has been saved — is
   // what dismisses it.
   const stillOpen = (await page.locator(".wm-sheet--capture").count()) === 1;
-  const countLabel = stillOpen
-    ? ((await page.locator(".wm-sheet--capture .wm-sheet__head .wm-ph-num").textContent()) ?? "")
+  const caption = stillOpen
+    ? ((await page.locator(".wm-sheet--capture .wm-sheet__head .wm-ph-caption").textContent()) ?? "")
         .trim()
     : "";
   ok(
-    "capture: Save keeps the sheet open, and says what it took",
-    stillOpen && countLabel === "1",
-    `${stillOpen ? "open" : "closed"}, count "${countLabel}"`,
+    "capture: Save keeps the sheet open, and says where the thought went",
+    stillOpen && caption === "Saved to Today",
+    `${stillOpen ? "open" : "closed"}, caption "${caption}"`,
   );
   await page.locator('.wm-sheet--capture .wm-sheet__bar button:text-is("Done")').click();
   await page.waitForTimeout(900);

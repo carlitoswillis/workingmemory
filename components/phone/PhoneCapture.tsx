@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { addItemAction } from "@/app/actions";
+import { addItemAction, type AddItemResult } from "@/app/actions";
 import { DEFAULT_LISTS } from "@/lib/lists";
 import { usePhoneUI } from "./PhoneShell";
 import { Sheet, fieldFocusProps, useSheetOpen } from "./Sheet";
@@ -51,6 +51,23 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
     columns[0]?.id ??
     BRAIN_DUMP;
   const [target, setTarget] = useState<string>(listId ?? fallback);
+  // The chosen column has to be one this board actually has. Under the fallback
+  // fetch the strip is empty on the first render and `target` is a remembered id;
+  // once the columns arrive, an id that isn't among them (an archived Brain Dump,
+  // say) snaps to the fallback rather than riding along to the server.
+  useEffect(() => {
+    if (columns.length === 0) return;
+    if (!columns.some((l) => l.id === target)) setTarget(fallback);
+  }, [columns, target, fallback]);
+  // What the last Save did, said in the head: where the thought went, or that it
+  // did not go and is back in the box.
+  const [notice, setNotice] = useState<
+    { kind: "saved"; list: string } | { kind: "failed"; error: string } | null
+  >(null);
+  const noticeLabel =
+    notice?.kind === "saved"
+      ? (lists.find((l) => l.id === notice.list)?.label ?? "the board")
+      : null;
 
   // Brain Dump is the LAST column, so on a phone the selected chip starts off the
   // right-hand edge of the strip and the sheet looks like it has no list chosen at
@@ -83,12 +100,24 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
   function save() {
     const t = text.trim();
     if (!t) return;
+    const chosen = target;
     setText("");
-    setAdded((n) => n + 1);
     taRef.current?.focus();
     startTransition(() => {
-      addItemAction(boardId, t, target);
-      refresh();
+      const settle = (r: AddItemResult) => {
+        if (r.ok) {
+          setAdded((n) => n + 1);
+          setNotice({ kind: "saved", list: r.list });
+          refresh();
+          return;
+        }
+        // Put the words back, ahead of anything typed since.
+        setNotice({ kind: "failed", error: r.error });
+        setText((cur) => (cur.trim() ? `${t}\n${cur}` : t));
+      };
+      addItemAction(boardId, t, chosen).then(settle, () =>
+        settle({ ok: false, error: "The save didn’t reach the server." }),
+      );
     });
   }
 
@@ -109,9 +138,20 @@ export default function PhoneCapture({ listId }: { listId?: string }) {
         <p className="wm-ph-title" style={{ flex: 1 }}>
           Capture
         </p>
-        {added > 0 && (
-          <p className="wm-ph-caption">
-            <span className="wm-ph-num">{added}</span> added
+        {notice?.kind === "saved" && (
+          <p className="wm-ph-caption" role="status">
+            Saved to {noticeLabel}
+            {added > 1 && (
+              <>
+                {" · "}
+                <span className="wm-ph-num">{added}</span> so far
+              </>
+            )}
+          </p>
+        )}
+        {notice?.kind === "failed" && (
+          <p className="wm-ph-caption" role="alert">
+            Not saved. {notice.error} Your words are back below.
           </p>
         )}
       </div>

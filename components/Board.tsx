@@ -488,7 +488,9 @@ export default function Board({
     const next: Grouped = { ...c, [listId]: [...(c[listId] ?? []), temp] };
     itemsRef.current = next;
     setItemsByList(next);
-    startTransition(() => addItemAction(boardId, t, listId));
+    startTransition(() => {
+      void addItemAction(boardId, t, listId);
+    });
   }
 
   // Optimistic cross-list move (the CardPanel dropdown; drag already does its own). Move

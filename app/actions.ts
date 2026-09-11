@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getUserBoards } from "@/lib/boards";
 import {
   addList,
+  captureLandingList,
   deleteList,
   ensureLists,
   getListLabels,
@@ -59,19 +60,31 @@ function revalidateBoard(boardId: string | null) {
   pokeBoard(boardId);
 }
 
-export async function addItemAction(boardId: string | null, text: string, list: string) {
+export type AddItemResult = { ok: true; list: string } | { ok: false; error: string };
+
+// A capture is never dropped on the floor. The phone sheet clears its box the
+// moment you tap Save, so a silent `return` here is a lost thought: a column that
+// is gone lands in Brain Dump (captureLandingList), and a board at its cap says so,
+// so the sheet can put the words back.
+export async function addItemAction(
+  boardId: string | null,
+  text: string,
+  list: string,
+): Promise<AddItemResult> {
   let t = text.trim();
-  if (!t) return;
+  if (!t) return { ok: false, error: "Nothing to save." };
   const { db, userId, boardId: bid } = getBoardContext(boardId);
-  if (!listExists(db, bid, list)) return;
+  const landing = captureLandingList(db, bid, list);
+  if (!landing) return { ok: false, error: "This board has no column to save into." };
   if (DEMO_MODE) {
-    if (addBlocked(db, bid)) return;
+    if (addBlocked(db, bid)) return { ok: false, error: "This board is at its item cap." };
     t = clampDemoText(t);
   }
   db.prepare(
     "insert into items (id, text, list, position, user_id, board_id, touched_by) values (?, ?, ?, ?, ?, ?, ?)",
-  ).run(randomUUID(), t, list, Date.now(), userId, bid, userId);
+  ).run(randomUUID(), t, landing, Date.now(), userId, bid, userId);
   revalidateBoard(bid);
+  return { ok: true, list: landing };
 }
 
 // Add a sub-card under `parentId`. The child is a real item (so it gets history,

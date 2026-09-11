@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
 import {
   addList,
+  captureLandingList,
   deleteList,
   ensureLists,
   getLists,
@@ -89,6 +90,18 @@ ok("deleted column's label still resolves", getListLabels(db, U)["backlog"], "Ba
 for (const l of getLists(db, U).slice(1)) deleteList(db, U, l.id);
 ok("one column remains", getLists(db, U).length, 1);
 ok("last column can't be deleted", "error" in deleteList(db, U, getLists(db, U)[0].id), true);
+
+// --- where a capture lands ------------------------------------------------------
+// One live column left (the seeded "today"); everything else is archived.
+{
+  const only = getLists(db, U)[0].id;
+  ok("a live column is used as asked", captureLandingList(db, U, only), only);
+  ok("an unknown column lands in the first live one", captureLandingList(db, U, "nope"), only);
+  const bd = addList(db, U, "Brain Dump");
+  const bdId = "id" in bd ? bd.id : "";
+  ok("an archived Brain Dump id lands in the live Brain Dump", captureLandingList(db, U, "braindump"), bdId);
+  ok("a sentinel list lands in Brain Dump", captureLandingList(db, U, "note"), bdId);
+}
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);

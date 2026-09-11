@@ -43,7 +43,9 @@ export default function QuickCapture({
     if (!t || !listId) return;
     setText("");
     setAdded((n) => n + 1);
-    startTransition(() => addItemAction(boardId, t, listId));
+    startTransition(() => {
+      void addItemAction(boardId, t, listId);
+    });
     inputRef.current?.focus();
   }
 
