@@ -411,6 +411,86 @@ try {
     `head at ${card.head.top} of ${card.visibleHeight}`,
   );
 
+  // ---- Time travel: "What changed" ------------------------------------------
+  // The diff ledger (lib/timetravel.ts#diffBoardSince) between a scrubbed moment
+  // and now, behind a two-way toggle beside the existing scrubber/jump chips.
+  // Tick a card first rather than trust the demo seed's own timing: the seed's
+  // one event inside the last hour is a CREATE sitting right where "1h ago"
+  // snaps to it, which (correctly) reads as "already existed at T" — zero
+  // change. Ticking something older guarantees a change strictly after T
+  // regardless of exactly where the jump lands.
+  // Find left the card sheet's peek open, sitting right over the tab bar — a tap on
+  // "Now" would land on the sheet, not the tab, until it's dismissed.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(700);
+  await page.locator(".phone-tab", { hasText: "Now" }).click();
+  await page.waitForTimeout(400);
+  // A named seed card (days old), not the MARK card this run just created — ticking
+  // MARK would make its own "added" the change, and an added-within-the-window card
+  // has no past self to open, which the row-tap assertion below needs to exist for.
+  const seedRow = page.locator(".phone-row", { hasText: "quarterly estimated taxes" });
+  await seedRow.waitFor();
+  await seedRow.locator(".phone-check").click();
+  await page.waitForTimeout(1500); // the write + the row's own collapse animation
+
+  await page.locator(".phone-tab", { hasText: "More" }).click();
+  await page.waitForSelector(".wm-sheet--ledger");
+  await page.locator(".wm-ph-row", { hasText: "Time travel" }).click();
+  await page.waitForSelector(".wm-sheet--time");
+  await page.waitForTimeout(500);
+
+  await page.locator('.wm-ph-diffseg__btn:text-is("What changed")').click();
+  await page.waitForTimeout(200);
+  ok(
+    "time travel: 'What changed' while live shows the hint to scrub or jump",
+    (await page
+      .locator(".wm-sheet--time .wm-ph-hint")
+      .filter({ hasText: "Move the scrubber" })
+      .count()) === 1,
+  );
+
+  await page.locator('.wm-ph-chip:text-is("1h ago")').click();
+  await page.waitForTimeout(400);
+
+  const diffRows = page.locator(".wm-sheet--time .wm-ph-row--ledger");
+  const diffRowCount = await diffRows.count();
+  ok(
+    "time travel diff: jumping back shows at least one ledger row",
+    diffRowCount >= 1,
+    `${diffRowCount} rows`,
+  );
+  const summaryText =
+    ((await page.locator(".wm-sheet--time .wm-ph-diff-summary").textContent()) ?? "").trim();
+  ok(
+    "time travel diff: the summary names a kind",
+    /\d+ (done|added|archived|reopened|restored|moved|reworded|details edited|nested|un-nested|recurrence changed)/.test(
+      summaryText,
+    ),
+    summaryText,
+  );
+
+  // The row we know has a T to open (a days-old seed card, unlike a card the
+  // window itself created) — first() would be fine on most runs, but not when the
+  // seed's own near-the-hour event also lands in the window and sorts ahead of
+  // "done" as an "added" line with no past self.
+  const openableRow = diffRows.filter({ hasText: "quarterly estimated taxes" });
+  await openableRow.waitFor();
+  await openableRow.click();
+  await page.waitForTimeout(600);
+  ok(
+    "time travel diff: tapping a ledger row opens the past card",
+    (await page.locator(".wm-ph-snapcard").count()) === 1,
+  );
+
+  await page.evaluate(() => window.history.back());
+  await page.waitForTimeout(600);
+  ok(
+    "time travel diff: one back returns to the ledger, not the whole sheet",
+    (await page.locator(".wm-ph-snapcard").count()) === 0 &&
+      (await page.locator(".wm-sheet--time").count()) === 1 &&
+      (await diffRows.count()) >= 1,
+  );
+
   ok("no page errors on the phone path", pageErrors.length === 0, pageErrors.join(" | "));
   ok("no 4xx/5xx on the phone path", httpErrors.length === 0, httpErrors.join(" | "));
   await context.close();

@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timelineDataAction } from "@/app/actions";
 import { isSentinelList } from "@/lib/lists";
-import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
+import { localToday } from "@/lib/recurrence";
+import {
+  diffBoardSince,
+  nothingChangedPhrase,
+  reconstructBoardAt,
+  type BoardDiff,
+  type BoardItemAt,
+} from "@/lib/timetravel";
 import type { Item, ItemEvent } from "@/lib/types";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneSnapshotCard from "./PhoneSnapshotCard";
@@ -54,6 +61,10 @@ export default function PhoneTimeTravel() {
   const [timeline, setTimeline] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
   const [now] = useState(() => Date.now());
   const [valueMs, setValueMs] = useState<number | null>(null); // null = live
+  // "Board then" vs "What changed" — a view of the same scrubbed moment, not a
+  // second control. Plain state: the sheet remounts fresh every time it opens
+  // (PhoneSheetHost), which is exactly "persists for the sheet's life only".
+  const [mode, setMode] = useState<"then" | "diff">("then");
 
   useEffect(() => {
     let alive = true;
@@ -134,6 +145,20 @@ export default function PhoneTimeTravel() {
     return [...by.entries()];
   }, [snapshot]);
 
+  // "What changed": the ledger between the scrubbed moment and now. Same inputs the
+  // snapshot above reconstructs from — diffBoardSince does its own before/after
+  // reconstruction internally, so this is the only other place the timeline is read.
+  const diff: BoardDiff | null = useMemo(() => {
+    if (!timeline || !active) return null;
+    return diffBoardSince(
+      timeline.items,
+      timeline.events,
+      new Date(current).toISOString(),
+      new Date(now).toISOString(),
+      { listLabels, today: localToday() },
+    );
+  }, [timeline, active, current, now, listLabels]);
+
   // ---- the read-only detail card, and its history -------------------------------
   // Drilling into a past card is a step FORWARD, so it owes the browser an entry:
   // without one, the single back gesture that should have put the snapshot away closed
@@ -184,17 +209,95 @@ export default function PhoneTimeTravel() {
   }, [active, closeSnapshot]);
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && close()} label="Time travel" heightSvh={96}>
+    <Sheet
+      open={open}
+      onOpenChange={(o) => !o && close()}
+      label="Time travel"
+      heightSvh={96}
+      className="wm-sheet--time"
+    >
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
-        <p className="wm-ph-caption">{active ? "As it was" : "Time travel"}</p>
+        <p className="wm-ph-caption">
+          {active ? (mode === "diff" ? "What changed" : "As it was") : "Time travel"}
+        </p>
         <p className="wm-ph-title wm-ph-num">
           {timeline == null ? "Loading the timeline…" : active ? fmtMoment(current) : "Now"}
         </p>
+        <div className="wm-ph-diffseg" role="radiogroup" aria-label="Time travel view">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === "then"}
+            className="wm-ph-diffseg__btn"
+            onClick={() => setMode("then")}
+          >
+            Board then
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === "diff"}
+            className="wm-ph-diffseg__btn"
+            onClick={() => setMode("diff")}
+          >
+            What changed
+          </button>
+        </div>
       </div>
 
       {/* The board, read-only, behind the control. Nothing in here is a button. */}
       <div className="wm-sheet__scroll">
-        {!active ? (
+        {mode === "diff" ? (
+          !active ? (
+            <p className="wm-ph-hint">Move the scrubber, or jump back, to see what changed.</p>
+          ) : !diff || diff.entries.length === 0 ? (
+            <p className="wm-ph-hint">{nothingChangedPhrase(fmtMoment(current))}</p>
+          ) : (
+            <>
+              <p className="wm-ph-diff-summary">
+                Since {fmtMoment(current)}: {diff.summary.map((s) => s.phrase).join(", ")}
+              </p>
+              <ul style={{ marginLeft: -16, marginRight: -16 }}>
+                {diff.entries.map((entry) => {
+                  const canOpen = byId.has(entry.id);
+                  return (
+                    <li key={entry.id}>
+                      {canOpen ? (
+                        <button
+                          type="button"
+                          className="wm-ph-row wm-ph-row--ledger"
+                          aria-label={`${entry.title}. ${entry.phrase}`}
+                          onClick={() => openSnapshot(entry.id)}
+                        >
+                          <span aria-hidden style={{ flex: 1, minWidth: 0 }}>
+                            <span className="wm-ph-body wm-ph-clamp2" style={{ display: "block" }}>
+                              {entry.title}
+                            </span>
+                            <span className="wm-ph-caption" style={{ display: "block", marginTop: 2 }}>
+                              {entry.phrase}
+                            </span>
+                          </span>
+                        </button>
+                      ) : (
+                        // Nothing to open: the card didn't exist (or wasn't on the
+                        // board) at T, so there is no past card behind this line —
+                        // same rule the "Board then" list uses to decide what shows.
+                        <div className="wm-ph-row wm-ph-row--ledger" style={{ opacity: 0.7 }}>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <p className="wm-ph-body wm-ph-clamp2">{entry.title}</p>
+                            <p className="wm-ph-caption" style={{ marginTop: 2 }}>
+                              {entry.phrase}
+                            </p>
+                          </span>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )
+        ) : !active ? (
           <p className="wm-ph-hint">
             Drag the scrubber to rewind. The board redraws as it was at that moment,
             reading only, so nothing you see here can be changed.

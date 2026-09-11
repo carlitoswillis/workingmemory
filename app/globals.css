@@ -1932,4 +1932,48 @@ a.phone-row__doorway:active {
 .wm-ph-board-manage__danger {
   width: 100%;
 }
+
+/* ── time travel: "What changed" diff mode (PhoneTimeTravel.tsx) ─────────────
+   The Board-then / What-changed toggle wants the .phone-seg / .wm-ph-chip look
+   (a pill track, the current segment lifted onto the sheet's own surface) but
+   fixed at two EQUAL-WIDTH segments rather than a scrolling strip — this is a
+   mode switch, not a list of lists, so it never scrolls and needs no edge
+   fade. The ledger rows below reuse .wm-ph-row/--ledger as-is (PhoneArchive.tsx,
+   PhoneSearch.tsx): title, then one caption line of comma-joined facts — the
+   same row grammar as everywhere else, just fed diff phrases instead of a
+   snippet. */
+.wm-ph-diffseg {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--surface-2);
+  border: 1px solid var(--veil-soft);
+}
+.wm-ph-diffseg__btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9999px;
+  background: none;
+  font-size: var(--p-meta, 13px);
+  font-weight: var(--p-medium, 510);
+  color: var(--text-lo);
+}
+.wm-ph-diffseg__btn[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--text-hi);
+  box-shadow: 0 0 0 1px var(--veil);
+}
+
+/* The ledger's one-line total ("Since Wed, 3:15 PM: 2 done, 1 added"). Sits
+   where a section label would, one step down from the moment in the head. */
+.wm-ph-diff-summary {
+  padding: 2px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-mid);
+}
 /* /phone sheets */
