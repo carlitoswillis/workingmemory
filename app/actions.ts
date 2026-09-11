@@ -17,6 +17,7 @@ import { DEMO_MODE, getBoardContext, getMainDb } from "@/lib/db";
 import {
   demoteToCard,
   getProvenance,
+  moveCardToBoard,
   promoteSubtree,
   setLinkedBoard,
   type Provenance,
@@ -196,6 +197,24 @@ export async function demoteToCardAction(
   if ("error" in res) return res.error;
   revalidateBoard(bid);
   pokeBoard(res.sourceBoardId);
+  return null;
+}
+
+// Move one card (and everything inside it) to another board — the phone card sheet's
+// "Board" rows, and the verb the desktop only had as promote-a-whole-doorway. Scoped
+// exactly like its neighbours: getBoardContext verifies the HOME board, and the lib
+// function verifies membership of the TARGET before it can even be named. Both boards
+// are poked: the card left one and arrived on the other.
+export async function moveCardToBoardAction(
+  boardId: string | null,
+  id: string,
+  targetBoardId: string,
+): Promise<string | null> {
+  const { db, userId, boardId: bid } = getBoardContext(boardId);
+  const res = moveCardToBoard(db, bid, { id, targetBoardId, actorId: userId });
+  if ("error" in res) return res.error;
+  revalidateBoard(bid);
+  pokeBoard(res.targetBoardId);
   return null;
 }
 

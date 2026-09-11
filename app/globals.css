@@ -1583,4 +1583,25 @@ textarea.wm-ph-field--title {
     background: var(--surface-2);
   }
 }
+
+/* ── move / re-parent (track "move-reparent") ─────────────────────────────── */
+
+/* A picker made of ledger rows, inside a sheet whose scroller carries the 16px
+   gutter (the card sheet, unlike the `--ledger` sheets). The rows carry their own
+   gutter, so the list reaches back out through it and the hairlines run edge to
+   edge — the same negative-margin trick the sub-card list uses. NOT its own
+   scroller: a scrollable box inside a drag-to-dismiss sheet gives one downward
+   swipe two meanings. */
+.wm-ph-picker {
+  margin-left: -16px;
+  margin-right: -16px;
+}
+/* The row that is already true ("On the board", or the card this one is inside) is
+   stated, not offered: the same wash the board switcher's current row wears. */
+.wm-ph-picker .wm-ph-row[aria-pressed="true"] {
+  background: var(--now-wash);
+}
+.wm-ph-picker .wm-ph-row[disabled] {
+  opacity: 0.45;
+}
 /* /phone sheets */

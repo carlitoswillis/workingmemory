@@ -14,6 +14,7 @@ import {
   demoteToCard,
   getDoorwayMeta,
   getProvenance,
+  moveCardToBoard,
   promoteSubtree,
   setLinkedBoard,
 } from "./doorways.ts";
@@ -345,6 +346,81 @@ ok("the note stays on its own board, unarchived", [row("cnote").board_id, row("c
   "bCode",
   0,
 ]);
+
+// --- moving ONE card to another board (phone card sheet's "Board" rows) ---------
+// Promotion's seam, aimed by hand: archived here, recreated there, sub-cards along
+// for the ride, `converted_from` holding the two halves together.
+addItem("rent", "Renew the lease", "today", "bHome");
+addItem("rent-a", "Find the old contract", "today", "bHome", "rent");
+addItem("rent-b", "Email the agent", "today", "bHome", "rent-a");
+
+ok(
+  "a board the caller isn't on is 404-shaped here too",
+  moveCardToBoard(db, "bHome", { id: "rent", targetBoardId: "bSecret", actorId: "u1" }),
+  { error: "No such board." },
+);
+ok(
+  "moving a card to the board it is already on is refused",
+  moveCardToBoard(db, "bHome", { id: "rent", targetBoardId: "bHome", actorId: "u1" }),
+  { error: "That card is already on this board." },
+);
+ok(
+  "the daily note never leaves its board",
+  moveCardToBoard(db, "bHome", { id: "note", targetBoardId: "bMovies", actorId: "u1" }),
+  { error: "The daily note belongs to its own board." },
+);
+ok("a refused move leaves the card where it was", row("rent").archived, 0);
+
+ok(
+  "the card and its whole sub-tree move",
+  moveCardToBoard(db, "bHome", { id: "rent", targetBoardId: "bMovies", actorId: "u1" }),
+  { ok: true, moved: 3, targetBoardId: "bMovies" },
+);
+ok("the original is archived on the home board, not re-homed", [
+  row("rent").board_id,
+  row("rent").archived,
+], ["bHome", 1]);
+ok("…and so is everything that was inside it", [row("rent-a").archived, row("rent-b").archived], [
+  1, 1,
+]);
+
+const moved = db
+  .prepare("select id, text, list, parent_id, board_id, archived from items where converted_from = ?")
+  .get("rent") as {
+  id: string;
+  text: string;
+  list: string;
+  parent_id: string | null;
+  board_id: string;
+  archived: number;
+};
+ok("the card arrives on the target board, live and top-level", [
+  moved.text,
+  moved.board_id,
+  moved.parent_id,
+  moved.archived,
+], ["Renew the lease", "bMovies", null, 0]);
+ok("…in that board's backlog, the landing column", moved.list, "backlog");
+const copyOf = (id: string) =>
+  db.prepare("select id, parent_id, board_id from items where converted_from = ?").get(id) as {
+    id: string;
+    parent_id: string | null;
+    board_id: string;
+  };
+ok("the sub-card arrives nested under the new card", [copyOf("rent-a").parent_id, copyOf("rent-a").board_id], [
+  moved.id,
+  "bMovies",
+]);
+ok(
+  "the grandchild keeps its place in the tree",
+  copyOf("rent-b").parent_id,
+  copyOf("rent-a").id,
+);
+ok(
+  "an archived card can't be moved again",
+  moveCardToBoard(db, "bHome", { id: "rent", targetBoardId: "bMovies", actorId: "u1" }),
+  { error: "That card is archived." },
+);
 
 // --- time travel: the link is an EVENT, never a reconstructed field (plan §4) ----
 const events = db.prepare("select * from item_events order by id").all() as {

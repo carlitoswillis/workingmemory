@@ -16,6 +16,7 @@ import {
 import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
+import PhoneCardMove from "./PhoneCardMove";
 import PhoneRow from "./PhoneRow";
 import { usePhoneUI } from "./PhoneShell";
 import {
@@ -565,6 +566,14 @@ function CardBody({
             </>
           ) : (
             <>
+              {/* Inside (re-parent) and Board (move to another board) — track
+                  "move-reparent". The Move-to chips above change the card's column;
+                  these change what it belongs to. Both live in PhoneCardMove so this
+                  file stays about the card. An archived card is not offered either:
+                  it is not on the board to be re-parented, and a cross-board move
+                  archives the card here, which has already happened. Restore first. */}
+              <PhoneCardMove item={item} onChanged={onChanged} onLeftBoard={onArchived} />
+
               <button
                 type="button"
                 className="wm-ph-btn"

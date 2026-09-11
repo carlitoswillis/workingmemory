@@ -404,6 +404,72 @@ export function demoteToCard(
 }
 
 /**
+ * MOVE ONE CARD TO ANOTHER BOARD — promotion's machinery, aimed by hand.
+ *
+ * Promotion moves a doorway's whole sub-tree to the board the card opens; this moves
+ * a single card (with everything inside it) to a board you name, with no doorway
+ * involved. Same seam, same guarantees, for the same reason: `items` has no board_id
+ * trigger and every read filters `board_id is ?`, so re-homing the rows would make
+ * the old board's timeline lie about a card that was there all along. So the card is
+ * ARCHIVED here — journaled by the archived trigger, still browsable in this board's
+ * Archive — and RECREATED there, with `converted_from` pointing back at the original.
+ *
+ * It lands as a top-level card in the target's Backlog (or its first column): a
+ * parent that lives on another board is not a parent any more. A doorway link does
+ * not ride along, exactly as it doesn't across promote/demote — the recreated card is
+ * an ordinary card, and pointing it at a board again is one explicit act.
+ *
+ * Refusals are user-facing strings, and a board the caller isn't a member of reads as
+ * "No such board." rather than confirming it exists (the shared-boards rule).
+ */
+export function moveCardToBoard(
+  db: Database.Database,
+  boardId: string | null,
+  opts: { id: string; targetBoardId: string; actorId: string | null },
+): { ok: true; moved: number; targetBoardId: string } | { error: string } {
+  const { id, targetBoardId, actorId } = opts;
+  if (targetBoardId === boardId) return { error: "That card is already on this board." };
+  const card = getCard(db, boardId, id);
+  if (!card) return { error: "That card is no longer on this board." };
+  if (card.archived) return { error: "That card is archived." };
+  if (isSentinelList(card.list)) {
+    return {
+      error:
+        card.list === NOTE_LIST
+          ? "The daily note belongs to its own board."
+          : "The weekly review belongs to its own board.",
+    };
+  }
+  if (!actorId || !getMembership(db, targetBoardId, actorId)) return { error: "No such board." };
+
+  const roots = db
+    .prepare(`select ${SUBTREE_COLS} from items where id = ? and board_id is ? and archived = 0`)
+    .all(id, boardId) as SubtreeRow[];
+  if (roots.length === 0) return { error: "That card is no longer on this board." };
+  const descendants = liveSubtree(db, boardId, id);
+
+  const list = landingList(db, targetBoardId);
+  if (!list) return { error: "That board has no column to land in." };
+  const start = maxPosition(db, targetBoardId, "list = ? and parent_id is null", list);
+
+  let moved = 0;
+  db.transaction(() => {
+    archiveRows(db, boardId, [...roots, ...descendants].map((r) => r.id), actorId);
+    moved = recreate(db, {
+      roots,
+      descendants,
+      destBoardId: targetBoardId,
+      destList: list,
+      destParentId: null,
+      startPosition: start,
+      actorId,
+    });
+  })();
+
+  return { ok: true, moved, targetBoardId };
+}
+
+/**
  * Follow a `converted_from` pointer back to the card this one continues from.
  *
  * The source lives on the OTHER board (archived there), so this is deliberately not
