@@ -60,7 +60,16 @@ export default function PhoneListsManage() {
     const before = order.find((l) => l.id === id);
     if (!name || !before || name === before.label) return;
     setOrder((prev) => prev.map((l) => (l.id === id ? { ...l, label: name } : l)));
-    startTransition(() => renameListAction(boardId, id, name));
+    setRowError(null);
+    startTransition(async () => {
+      const err = await renameListAction(boardId, id, name).catch(
+        () => "The rename didn’t reach the server.",
+      );
+      if (!err) return;
+      // Put the old label back and say why.
+      setOrder((prev) => prev.map((l) => (l.id === id ? { ...l, label: before.label } : l)));
+      setRowError({ id, text: err });
+    });
   }
 
   function move(id: string, dir: -1 | 1) {

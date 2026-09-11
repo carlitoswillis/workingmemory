@@ -1786,11 +1786,13 @@ a.phone-row__doorway:active {
 .wm-ph-listmgr__reorder {
   flex: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  gap: 2px;
 }
+/* Two 44pt targets side by side: stacked at 22px each they were half the rule. */
 .wm-ph-listmgr__move {
   width: 44px;
-  height: 22px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

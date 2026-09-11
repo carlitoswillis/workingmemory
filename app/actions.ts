@@ -400,9 +400,18 @@ export async function addListAction(boardId: string | null, label: string): Prom
   return null;
 }
 
-export async function renameListAction(boardId: string | null, id: string, label: string) {
+// Returns the refusal, or null: a rename that the server drops (an empty name, a
+// column that is no longer live) must not leave the new label on the phone's screen.
+export async function renameListAction(
+  boardId: string | null,
+  id: string,
+  label: string,
+): Promise<string | null> {
   const { db, boardId: bid } = getBoardContext(boardId);
-  if (renameList(db, bid, id, label)) revalidateBoard(bid);
+  if (!label.trim()) return "Give the column a name.";
+  if (!renameList(db, bid, id, label)) return "That column is no longer on the board.";
+  revalidateBoard(bid);
+  return null;
 }
 
 export async function deleteListAction(boardId: string | null, id: string): Promise<string | null> {

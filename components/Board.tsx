@@ -320,7 +320,9 @@ export default function Board({
     });
   }
   function renameColumn(id: string, label: string) {
-    startTransition(() => renameListAction(boardId, id, label));
+    startTransition(() => {
+      void renameListAction(boardId, id, label);
+    });
   }
   function deleteColumn(id: string) {
     startTransition(async () => setNotice(await deleteListAction(boardId, id)));
