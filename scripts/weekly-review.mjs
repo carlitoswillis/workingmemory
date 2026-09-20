@@ -184,13 +184,13 @@ function runCli(bin, args, stdin, timeoutMs = 240000) {
             : `${bin} failed to start: ${e.message}`,
       }),
     );
-    child.on("close", (code) =>
-      finish(
-        code === 0
-          ? { text: out }
-          : { error: `${bin} exited ${code}${err.trim() ? `: ${err.trim()}` : ""}` },
-      ),
-    );
+    // `claude` prints some failures ("Not logged in · Please run /login") to
+    // STDOUT, so an empty stderr is not an empty explanation.
+    child.on("close", (code) => {
+      if (code === 0) return finish({ text: out });
+      const why = (err.trim() || out.trim()).slice(0, 600);
+      finish({ error: `${bin} exited ${code}${why ? `: ${why}` : ""}` });
+    });
 
     child.stdin.on("error", () => {}); // a child that exits early closes the pipe
     child.stdin.end(stdin);
