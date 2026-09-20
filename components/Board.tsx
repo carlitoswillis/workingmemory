@@ -1021,7 +1021,7 @@ export default function Board({
       />
 
       {snapshot ? (
-        <div className={`memory-mode ${RAIL}`}>
+        <div className={RAIL} data-snapcol>
           <SnapshotNoteColumn
             body={snapshot.find((i) => i.list === NOTE_LIST && !i.parent_id)?.details ?? ""}
           />
@@ -1269,11 +1269,11 @@ export default function Board({
 function SnapshotNoteColumn({ body }: { body: string }) {
   return (
     <section
-      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3"
+      className="flex flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3"
       style={{ borderLeft: "2px solid var(--past)" }}
     >
       <div className="mb-3 px-1.5 pt-1">
-        <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-mid)]">
+        <h2 className="font-display text-[15px] font-medium italic tracking-tight text-[var(--text-hi)]">
           Note
         </h2>
       </div>
@@ -1282,7 +1282,7 @@ function SnapshotNoteColumn({ body }: { body: string }) {
           {body}
         </p>
       ) : (
-        <p className="px-1.5 font-display text-xs italic text-[var(--text-lo)]">— blank then —</p>
+        <p className="px-1.5 font-display text-sm italic text-[var(--text-mid)]">— blank then —</p>
       )}
     </section>
   );
@@ -1295,15 +1295,15 @@ function SnapshotReviewColumn({ body }: { body: string }) {
   if (!body.trim()) return null;
   return (
     <section
-      className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3 lg:!max-w-[300px]"
+      className="flex flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3 lg:!max-w-[300px]"
       style={{ borderLeft: "2px solid var(--past)" }}
     >
       <div className="mb-3 px-1.5 pt-1">
-        <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-mid)]">
+        <h2 className="font-display text-[15px] font-medium italic tracking-tight text-[var(--text-hi)]">
           Weekly review
         </h2>
       </div>
-      <p className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-1 text-[13px] leading-relaxed text-[var(--text-mid)]">
+      <p className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-1 text-sm leading-relaxed text-[var(--text-mid)]">
         {body}
       </p>
     </section>
@@ -1326,10 +1326,10 @@ function SnapshotColumn({
   const open = items.filter((i) => !i.done);
   const done = items.filter((i) => i.done);
   return (
-    <section className="flex min-h-[220px] flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3">
+    <section className="flex flex-col rounded-2xl border border-[var(--veil-soft)] bg-[var(--wash)] p-3">
       <div className="mb-3 px-1.5 pt-1">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-display text-[15px] font-medium tracking-tight text-[var(--text-mid)]">
+          <h2 className="font-display text-[15px] font-medium italic tracking-tight text-[var(--text-hi)]">
             {list.label}
           </h2>
           <span className="text-[11px] tabular-nums text-[var(--text-lo)]">{open.length || ""}</span>
@@ -1347,25 +1347,25 @@ function SnapshotColumn({
               className="flex w-full items-start gap-2 rounded-lg border border-[var(--veil-soft)] border-l-2 border-l-[var(--past)] bg-[var(--surface)] py-1.5 pl-2 pr-1.5 text-left text-[13.5px] leading-snug transition-colors hover:bg-[var(--surface-2)]"
               title={item.details.trim() ? `${item.text}\n\n${item.details}` : item.text}
             >
-              <span className={`min-w-0 flex-1 break-words ${item.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-mid)]"}`}>
+              <span className={`min-w-0 flex-1 break-words ${item.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"}`}>
                 {item.text}
               </span>
               {kids.length > 0 && (
                 <span
-                  className="mt-[1px] shrink-0 rounded-full border border-[var(--veil)] px-1.5 py-[1px] text-[10px] leading-none tabular-nums text-[var(--text-lo)]"
+                  className="mt-[3px] shrink-0 text-[11px] leading-none tabular-nums text-[var(--text-lo)]"
                   title={`${kidsDone} of ${kids.length} sub-cards done then`}
                 >
                   ↳ {kidsDone}/{kids.length}
                 </span>
               )}
               {hasDetails && (
-                <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--past)" }} aria-hidden />
+                <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--text-lo)" }} aria-hidden />
               )}
             </button>
           );
         })}
         {items.length === 0 && (
-          <p className="px-1.5 font-display text-xs italic text-[var(--text-lo)]">— empty then —</p>
+          <p className="px-1.5 font-display text-sm italic text-[var(--text-mid)]">— empty then —</p>
         )}
       </div>
     </section>

@@ -12,7 +12,9 @@ import {
 } from "../board-context";
 import { localToday } from "@/lib/recurrence";
 import { useLevelStack } from "../useLevelStack";
+import Dateline from "../Dateline";
 import { PhoneDataProvider, type PhoneBoardValue } from "./phone-data";
+import { PhoneTimelineProvider, markersOf, usePhoneTimeline } from "./phone-timeline";
 import { pagerLists } from "./phone-logic";
 import PhoneHome from "./PhoneHome";
 import PhoneList from "./PhoneList";
@@ -243,13 +245,25 @@ export default function PhoneShell({
         <BoardDataProvider value={boardData}>
           <PhoneDataProvider value={phoneData}>
             <PhoneUIContext.Provider value={ui}>
+              <PhoneTimelineProvider>
               <div data-shell="phone" className="phone-shell">
-                {/* Orientation only — nothing here is a target you have to reach. */}
+                {/* On Now, the top of the screen IS the dateline: the date, the
+                    moment you are standing on, and a ruler of every real change with
+                    the amber "now" dot at its right-hand end. The band is one 44px
+                    tap — not a scrubber you could nudge while scrolling — and it
+                    opens the sheet, where the ruler is draggable and in the thumb
+                    zone. On Lists it stays what it always was: orientation only. */}
                 <header className="phone-topbar">
-                  <p className="phone-eyebrow" suppressHydrationWarning>
-                    {longDate(today)}
-                  </p>
-                  <h1 className="phone-title">{screen === "now" ? "Now" : "Lists"}</h1>
+                  {screen === "now" ? (
+                    <PhoneNowDateline today={today} onOpen={() => ui.open({ kind: "time" })} />
+                  ) : (
+                    <>
+                      <p className="phone-eyebrow" suppressHydrationWarning>
+                        {longDate(today)}
+                      </p>
+                      <h1 className="phone-title">Lists</h1>
+                    </>
+                  )}
                 </header>
 
                 <main className="phone-content">
@@ -268,6 +282,7 @@ export default function PhoneShell({
                 <PhoneTabs />
                 <PhoneSheetHost />
               </div>
+              </PhoneTimelineProvider>
             </PhoneUIContext.Provider>
           </PhoneDataProvider>
         </BoardDataProvider>
@@ -278,6 +293,29 @@ export default function PhoneShell({
 
 // "Friday 4 September" — the one piece of orientation the top of the screen owes you.
 // Built from the YYYY-MM-DD parts (never Date.parse of a bare date, which is UTC).
+// The Now screen's head. The ruler is a readout you tap, not a slider you drag:
+// a 44px band inside a vertically-scrolling list, a draggable thumb would be a
+// mis-scrub waiting to happen, and the sheet it opens has the same ruler where
+// the thumb can actually reach it. Until the event log lands the band is just the
+// track and the dot — a hairline with an amber end, never a loading bar.
+function PhoneNowDateline({ today, onOpen }: { today: string; onOpen: () => void }) {
+  const { timeline } = usePhoneTimeline();
+  const [now] = useState(() => Date.now());
+  const markers = useMemo(() => markersOf(timeline, now), [timeline, now]);
+  return (
+    <Dateline
+      size="phone"
+      eyebrow={longDate(today)}
+      moment="Now"
+      nowMs={now}
+      minMs={markers[0] ?? now}
+      markers={markers}
+      valueMs={null}
+      onTap={onOpen}
+    />
+  );
+}
+
 function longDate(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   const date = new Date(y, (m ?? 1) - 1, d ?? 1);

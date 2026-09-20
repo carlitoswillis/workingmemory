@@ -1,22 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Dateline from "./Dateline";
 
-// A fluid rewind control. Instead of only typing an exact date/time, you scrub a
-// timeline whose ticks are the real moments your board changed: drag the handle
-// (it soft-snaps to the nearest change on release), step change-to-change with the
-// arrows, or jump with a relative chip. The exact-time input is still here, tucked
-// into "exact time…". The board re-renders live as you move — reconstruction is local.
+// The desktop dateline. The moment you are looking at is the title of the page —
+// "Now" in Fraunces roman, the date in Fraunces italic once you rewind — and the
+// ruler of real changes under it is the control: drag it (it soft-snaps to the
+// nearest real change on release), step change-to-change with ← →, or jump with a
+// relative chip. The exact-time input is still here, tucked into "exact time…".
+// The board re-renders live as you move — reconstruction is local.
+//
+// What used to be here and is not any more: a rounded box around the whole thing,
+// a 13px "Time machine" / "Remembering" label, two 24×24 ‹ › steppers, a "drag to
+// rewind" hint, and a second 12px readout of the moment in the corner. The moment
+// is stated once, at 36px, and everything else is the ruler.
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
 const fmtMoment = (ms: number) =>
   new Date(ms).toLocaleString(undefined, {
+    weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  });
+
+const fmtToday = (ms: number) =>
+  new Date(ms).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 
 // Value for the <input type="datetime-local"> (local wall-clock, no timezone suffix).
@@ -82,108 +97,36 @@ export default function TimeMachineBar({
     [nowMs],
   );
 
-  const pct = (ms: number) => ((Math.min(nowMs, Math.max(minMs, ms)) - minMs) / range) * 100;
-
   return (
-    <div
-      className={`mb-5 rounded-2xl border px-3.5 py-2.5 transition-colors ${
-        active
-          ? "border-[var(--past-line)] bg-[var(--past-wash)]"
-          : "border-[var(--veil-soft)] bg-[var(--wash)]"
-      }`}
-    >
-      <div className="flex flex-wrap items-center gap-2.5">
-        <span className="font-display text-[13px] italic text-[var(--text-mid)]">
-          {active ? "Remembering" : "Time machine"}
-        </span>
+    <div className="mb-8">
+      <Dateline
+        size="desktop"
+        eyebrow={active ? "As it was" : fmtToday(nowMs)}
+        moment={active ? fmtMoment(current) : "Now"}
+        nowMs={nowMs}
+        minMs={minMs}
+        markers={markers}
+        valueMs={valueMs}
+        disabled={loading}
+        onPick={onPick}
+        onSnap={(ms) => onPick(snap(ms))}
+        onStep={stepTo}
+      />
 
-        {/* Step change-to-change */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => stepTo(-1)}
-            disabled={loading || markers.length === 0}
-            title="Previous change"
-            className="grid h-6 w-6 place-items-center rounded-md border border-[var(--veil)] text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)] disabled:opacity-40"
-          >
-            ‹
-          </button>
-          <button
-            onClick={() => stepTo(1)}
-            disabled={loading || !active}
-            title="Next change"
-            className="grid h-6 w-6 place-items-center rounded-md border border-[var(--veil)] text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)] disabled:opacity-40"
-          >
-            ›
-          </button>
-        </div>
-
-        {/* The scrubber: a track with a tick per real change. */}
-        <div className="relative min-w-[180px] flex-1 py-2">
-          <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-[var(--veil)]" />
-          {/* filled portion up to the current moment */}
-          <div
-            className="pointer-events-none absolute top-1/2 left-0 h-px -translate-y-1/2"
-            style={{ width: `${pct(current)}%`, background: active ? "var(--past)" : "var(--veil)" }}
-          />
-          {markers.map((m, i) => (
-            <span
-              key={i}
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2"
-              style={{
-                left: `${pct(m)}%`,
-                background: active && m <= current ? "var(--past)" : "var(--text-lo)",
-                opacity: 0.6,
-              }}
-            />
-          ))}
-          <input
-            type="range"
-            min={minMs}
-            max={nowMs}
-            step={Math.max(1000, Math.round(range / 1000))}
-            value={current}
-            disabled={loading}
-            onChange={(e) => onPick(Number(e.target.value))}
-            onPointerUp={(e) => onPick(snap(Number((e.target as HTMLInputElement).value)))}
-            onKeyUp={(e) => onPick(snap(Number((e.target as HTMLInputElement).value)))}
-            className="tm-range relative w-full cursor-pointer appearance-none bg-transparent"
-            aria-label="Rewind the board"
-          />
-        </div>
-
-        {active ? (
-          <button
-            onClick={onLive}
-            className="rounded-lg px-3 py-1 text-xs font-medium text-[var(--bg-0)] transition-opacity hover:opacity-90"
-            style={{ background: "var(--now)" }}
-          >
-            ← Back to now
-          </button>
-        ) : (
-          <span className="text-xs text-[var(--text-lo)]">
-            {loading ? "loading timeline…" : "drag to rewind"}
-          </span>
-        )}
-      </div>
-
-      {/* Relative jumps + exact-time fallback + the resolved moment. */}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {/* Relative jumps, the exact-time fallback, and the way back. */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         {chips.map((c) => (
           <button
             key={c.label}
             onClick={() => onPick(Math.max(minMs, c.ms))}
             disabled={loading}
-            className="rounded-full border border-[var(--veil-soft)] px-2.5 py-0.5 text-[11px] text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)] disabled:opacity-40"
+            className="wm-dl-chip"
           >
             {c.label}
           </button>
         ))}
 
-        <button
-          onClick={() => setExactOpen((v) => !v)}
-          className="rounded-full px-2 py-0.5 text-[11px] text-[var(--text-lo)] hover:text-[var(--text-mid)]"
-        >
+        <button onClick={() => setExactOpen((v) => !v)} className="wm-dl-quiet">
           exact time…
         </button>
         {exactOpen && (
@@ -195,14 +138,15 @@ export default function TimeMachineBar({
               const ms = e.target.value ? new Date(e.target.value).getTime() : NaN;
               if (Number.isFinite(ms)) onPick(ms);
             }}
-            className="rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-2 py-0.5 text-[11px] text-[var(--text-mid)] focus:border-[var(--now)] focus:outline-none"
+            className="wm-dl-exact"
           />
         )}
 
         {active && (
-          <span className="ml-auto font-display text-xs italic text-[var(--past)]">
-            as it was · {fmtMoment(current)}
-          </span>
+          <button onClick={onLive} className="wm-dl-return ml-auto">
+            <span className="wm-dl-return__dot" aria-hidden />
+            Back to now
+          </button>
         )}
       </div>
     </div>

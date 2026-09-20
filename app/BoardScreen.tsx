@@ -63,24 +63,15 @@ export default function BoardScreen({
       <div data-shell="desktop">
     <main className="mx-auto max-w-[1640px] px-6 py-10 sm:px-10">
       {demo && (
-        <div
-          className="mb-6 flex items-center gap-2.5 rounded-lg border px-4 py-2.5 text-sm"
-          style={{
-            borderColor: "var(--veil)",
-            background: "var(--surface)",
-            color: "var(--text-lo)",
-          }}
-        >
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: "var(--past)" }}
-            aria-hidden
-          />
+        /* Demo chrome, not content: no box. A bordered, filled card here was the
+           only such shape in the page's top third, so it — not the moment — won
+           first fixation. Plain text at the body size, and the then-blue dot is
+           gone: that colour means "the past" on this page and nothing else. */
+        <div className="mb-6 max-w-[74ch] text-[13.5px] leading-[19px]" style={{ color: "var(--text-lo)" }}>
           <p>
             This is a <span className="text-[var(--text-mid)]">demo board</span> — yours
-            alone, pre-loaded with three weeks of history so the{" "}
-            <span className="text-[var(--text-mid)]">time machine</span> has a past to
-            scrub through. Edit anything; it resets after a day of inactivity.{" "}
+            alone, pre-loaded with three weeks of history, so there is a past to scrub
+            through. Edit anything; it resets after a day of inactivity.{" "}
             <a href="/signup" className="underline text-[var(--text-mid)]">
               Create an account
             </a>{" "}
@@ -88,24 +79,14 @@ export default function BoardScreen({
           </p>
         </div>
       )}
-      <header className="mb-9 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {/* A running head, not a title. The page's title is the moment you are looking
+          at, stated once by the dateline below at 36px; the product's name is what
+          you read when you want to know which app this is. */}
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--now)" }}
-              aria-hidden
-            />
-            <h1 className="font-display text-3xl font-medium leading-none tracking-tight text-[var(--text-hi)]">
-              Working Memory
-            </h1>
-          </div>
-          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-[var(--text-lo)]">
-            What&apos;s on your mind now —{" "}
-            <span className="font-display italic text-[var(--text-mid)]">
-              and everything it used to be.
-            </span>
-          </p>
+          <h1 className="font-display text-[15px] font-medium leading-[21px] tracking-tight text-[var(--text-hi)]">
+            Working Memory
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {userId && bid && (

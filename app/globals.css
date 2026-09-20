@@ -162,39 +162,249 @@ body {
   animation: pop 0.2s ease-out;
 }
 
-.memory-mode {
-  filter: saturate(0.5) brightness(0.96);
-  transition: filter 0.45s ease;
+/* ── The Dateline (components/Dateline.tsx) ──────────────────────────
+   The moment is the title of the screen; the ruler of real changes is the control.
+   Roman = now, italic = then — one axis in one family, at display size, doing the
+   work a filter, a wash, a label and a hint used to share. Both shells use the same
+   object at two sizes, so "where am I in time" is one thing to learn, not two. */
+.wm-dateline {
+  display: flex;
+  flex-direction: column;
+}
+.wm-dateline__eyebrow {
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--text-lo);
+}
+.wm-dateline__moment {
+  margin-top: 4px;
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: -0.01em;
+  color: var(--text-hi);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The signature gesture: the same word, rewound. */
+.wm-dateline__moment--then {
+  font-style: italic;
+}
+.wm-dateline--desktop .wm-dateline__moment {
+  font-size: 36px;
+  line-height: 40px;
+}
+/* The phone head is sized in the row's own metric, not in pixels: the container
+   takes the body size the rows take, and the moment is 1.73x of it (26px at the
+   15px ladder). The ratio is the hierarchy, so it holds at every Dynamic Type
+   size instead of inverting once the rows outgrow a fixed cap. */
+.wm-dateline--phone {
+  font-size: var(--p-body);
+}
+.wm-dateline--phone .wm-dateline__moment {
+  margin-top: 2px;
+  font-size: 1.73em;
+  line-height: 1.1;
+}
+/* Dynamic Type: the container adopts the system body metric, so the moment scales
+   with it and stays 1.73x the rows. It wraps rather than clipping — at accessibility
+   sizes a date is content, and an ellipsis would delete it. */
+@supports (-webkit-touch-callout: none) {
+  .wm-dateline--phone {
+    font: -apple-system-body;
+    font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  }
+  .wm-dateline--phone .wm-dateline__moment {
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
 }
 
-/* Time-machine scrubber: a small, matte handle riding the change-tick track. */
-.tm-range {
-  height: 16px;
+/* The ruler: a hairline track, one 1×8px tick per real change, the then-blue
+   filling up to a 12px amber "now" dot. The band is 44px so the whole of it is a
+   target on a phone; the drawn parts are 12px of that, centred. */
+.wm-ruler {
+  position: relative;
+  height: 44px;
+  margin-top: 4px;
 }
-.tm-range::-webkit-slider-thumb {
+.wm-ruler__track,
+.wm-ruler__fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 1px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.wm-ruler__track {
+  right: 0;
+  background: var(--veil-soft);
+}
+.wm-ruler__fill {
+  background: var(--past);
+}
+.wm-ruler__tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  background: var(--text-lo);
+  pointer-events: none;
+}
+/* A tick standing on the filled part of the track is cut out of it rather than
+   drawn on it: --past and --text-lo are the same value in grayscale (0.2 L* apart
+   in light, 2.6 in dark), so a caption-coloured tick vanishes into the fill in
+   exactly the stretch you are scrubbing. Knocked out, it reads at 4.7:1 (light) /
+   5.5:1 (dark) — and the ruler's past reads as notches cut into a bar. */
+.wm-ruler__tick--onfill {
+  background: var(--ruler-ground, var(--bg-1));
+}
+/* The sheet's bar is one step up from the board; the knockout follows its ground. */
+.wm-sheet__bar .wm-ruler {
+  --ruler-ground: var(--surface);
+}
+.wm-ruler__thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--now);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+/* The input is invisible: it exists for the drag, the arrows and the screen
+   reader. What you see is drawn above, so a native thumb never shows up twice. */
+.wm-ruler__input,
+.wm-ruler__tap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   -webkit-appearance: none;
   appearance: none;
-  height: 14px;
-  width: 14px;
-  border-radius: 9999px;
-  background: var(--now);
-  border: 2px solid var(--bg-0);
-  cursor: grab;
 }
-.tm-range:active::-webkit-slider-thumb {
-  cursor: grabbing;
+.wm-ruler__input {
+  cursor: pointer;
 }
-.tm-range::-moz-range-thumb {
-  height: 12px;
-  width: 12px;
-  border-radius: 9999px;
-  background: var(--now);
-  border: 2px solid var(--bg-0);
-  cursor: grab;
+.wm-ruler__input:disabled {
+  cursor: default;
 }
-.tm-range::-webkit-slider-runnable-track,
-.tm-range::-moz-range-track {
+.wm-ruler__input::-webkit-slider-runnable-track {
+  height: 44px;
   background: transparent;
+}
+.wm-ruler__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+}
+.wm-ruler__input::-moz-range-track {
+  height: 44px;
+  background: transparent;
+}
+.wm-ruler__input::-moz-range-thumb {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+}
+.wm-ruler__input:focus-visible,
+.wm-ruler__tap:focus-visible {
+  outline: 2px solid var(--now);
+  outline-offset: 2px;
+}
+
+/* The desktop dateline's row of asks: relative jumps, the exact-time fallback, and
+   the way back. All one size — 13.5px, the size the rail's own rows are, because
+   15px against 13.5px is an 11% step and 11% reads as a mistake, not a level. All
+   hairline pills — nothing here is filled,
+   because the only filled thing on the page is the ruler's amber "now" dot. */
+.wm-dl-chip,
+.wm-dl-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--veil-soft);
+  background: transparent;
+  color: var(--text-mid);
+  font-size: 13.5px;
+  line-height: 19px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.wm-dl-chip:hover {
+  border-color: var(--text-lo);
+  color: var(--text-hi);
+}
+.wm-dl-chip:disabled {
+  opacity: 0.4;
+}
+/* The way back is the same pill, not a filled button: leaving the past should not
+   outrank being in it. Amber says "now" once, as an 8px dot — the same object as
+   the ruler's thumb. */
+.wm-dl-return {
+  border-color: var(--now-line);
+  color: var(--text-hi);
+}
+.wm-dl-return:hover {
+  border-color: var(--now);
+}
+.wm-dl-return__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--now);
+}
+.wm-dl-quiet {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-lo);
+  font-size: 13.5px;
+}
+.wm-dl-quiet:hover {
+  color: var(--text-mid);
+}
+.wm-dl-exact {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--veil-soft);
+  background: var(--bg-0);
+  color: var(--text-mid);
+  font-size: 13.5px;
+}
+.wm-dl-exact:focus {
+  border-color: var(--now);
+  outline: none;
+}
+
+/* One section-label system on the time surface: 11px, 590, sentence case, quiet.
+   Not tracked-out caps — caps at 11px are the loudest quiet thing on a page. */
+.wm-dl-label {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 590;
+  letter-spacing: 0.02em;
+  color: var(--text-lo);
 }
 
 /* ── Rendered markdown (card details, past details, later: AI review) ──────
@@ -1442,7 +1652,7 @@ textarea.wm-ph-field--title {
   border: 1px solid var(--veil);
   background: transparent;
   color: var(--text-mid);
-  font-size: 13px;
+  font-size: 15px;
   white-space: nowrap;
   transition: transform 90ms cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -1544,48 +1754,6 @@ textarea.wm-ph-field--title {
 
 /* ── time travel (§2 G) ───────────────────────────────────────────────────── */
 
-.wm-ph-scrub {
-  width: 100%;
-  height: 44px;
-  background: transparent;
-  -webkit-appearance: none;
-  appearance: none;
-  touch-action: pan-x;
-}
-.wm-ph-scrub::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--veil);
-}
-.wm-ph-scrub::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--veil);
-}
-/* A 44px thumb: the whole point of the phone scrubber, versus the desktop bar's
-   24px steppers (§2, rejected alternatives). */
-.wm-ph-scrub::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 44px;
-  height: 44px;
-  margin-top: -20px;
-  border-radius: 999px;
-  border: 1px solid var(--past-line);
-  background: var(--surface-2);
-}
-.wm-ph-scrub::-moz-range-thumb {
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--past-line);
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-.wm-ph-scrub:focus-visible {
-  outline: 2px solid var(--now);
-  outline-offset: 4px;
-}
-
 /* The read-only board behind the scrubber. The same flat ledger as everywhere else
    — a rewound card is still a card — with one 2px blue rule at the left edge to say
    which pole of the timeline you are standing on. Not a stack of rounded tiles: the
@@ -1594,9 +1762,16 @@ textarea.wm-ph-field--title {
   display: block;
   min-height: 44px;
   padding: 10px 16px 10px 14px;
-  border-left: 2px solid var(--past);
+  /* Transparent by default so the row never shifts when the rule appears. */
+  border-left: 2px solid transparent;
   border-bottom: 1px solid var(--veil-soft);
-  background: var(--past-wash);
+  background: transparent;
+}
+/* The blue rule is a claim about time. It is only true once you have actually
+   rewound — at thumb = now these rows ARE the present, and saying "then" about
+   them is the one thing this surface must never do. */
+.wm-ph-past--then {
+  border-left-color: var(--past);
 }
 
 /* Hover is a mouse idea; on a touch screen it sticks after a tap (§5). */
@@ -1762,10 +1937,11 @@ a.phone-row__doorway:active {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  border: 1px solid var(--past);
-  color: var(--past);
-  padding: 3px 10px;
-  font-size: 12px;
+  border: 1px solid var(--veil);
+  color: var(--text-mid);
+  padding: 4px 10px;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 /* track: fixes — the phone bug sweep (ai/plans/2026-09-10-phone-lost-features-and-bugs.md).
@@ -1963,38 +2139,97 @@ a.phone-row__doorway:active {
    PhoneSearch.tsx): title, then one caption line of comma-joined facts — the
    same row grammar as everywhere else, just fed diff phrases instead of a
    snippet. */
+/* Two hairline pills, sized to their words — the same object the desktop's jump
+   chips are. A filled full-width track made the mode switch the largest, loudest
+   shape in a head whose job is to carry the moment; nothing on this surface is
+   filled except the ruler's 12px amber dot. Current = ink label + a darker
+   hairline, which is the contrast pair the rest of the surface already uses. */
 .wm-ph-diffseg {
   display: flex;
-  gap: 3px;
-  margin-top: 4px;
-  padding: 3px;
-  border-radius: 9999px;
-  background: var(--surface-2);
-  border: 1px solid var(--veil-soft);
+  flex-wrap: wrap;
+  width: auto;
+  align-self: flex-start;
+  margin-top: 16px;
+  gap: 8px;
 }
 .wm-ph-diffseg__btn {
-  flex: 1 1 0;
+  flex: none;
   min-height: 44px;
-  padding: 0 10px;
-  border: 0;
+  padding: 0 14px;
+  border: 1px solid var(--veil-soft);
   border-radius: 9999px;
   background: none;
-  font-size: var(--p-meta, 13px);
-  font-weight: var(--p-medium, 510);
+  font-size: 15px;
+  font-weight: 400;
   color: var(--text-lo);
+  white-space: nowrap;
 }
 .wm-ph-diffseg__btn[aria-checked="true"] {
-  background: var(--surface);
+  border-color: var(--text-lo);
   color: var(--text-hi);
-  box-shadow: 0 0 0 1px var(--veil);
 }
 
 /* The ledger's one-line total ("Since Wed, 3:15 PM: 2 done, 1 added"). Sits
    where a section label would, one step down from the moment in the head. */
 .wm-ph-diff-summary {
-  padding: 2px 0 14px;
-  font-size: 13px;
+  padding: 8px 0 16px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-hi);
+}
+/* A ledger line with nothing behind it: quieter by ink, not by a 0.7 veil over
+   text that was already --text-mid. */
+.wm-ph-row--shut,
+.wm-ph-row--shut .wm-ph-body {
+  color: var(--text-lo);
+}
+/* The one sentence a time view can be reduced to — "nothing changed", "empty then".
+   Same register as the moment above it: Fraunces italic, at the reading size. */
+.wm-ph-then-line {
+  margin-top: 24px;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text-mid);
+}
+/* A past card's name. One step above the rows it contains (20 over 15), so the
+   card you drilled into is the title of the screen you are on. */
+.wm-ph-snaptitle {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 400;
+  color: var(--text-hi);
+}
+
+/* Where a past view ends: one line, at the caption size, with the moment itself in
+   the same italic the head states it in. */
+.wm-ph-footnote {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--veil-soft);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-mid);
+}
+.wm-ph-footnote__moment {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+}
+/* The way back: the same unfilled pill the desktop uses, at the phone's button
+   height. Amber says "now" once, as the 8px dot — the ruler's thumb, handheld. */
+.wm-ph-btn--return {
+  border-color: var(--now-line);
+  background: transparent;
+  color: var(--text-hi);
+  font-weight: 400;
+}
+/* The sheet whose title is a date. Its head owes the moment room to breathe and
+   nothing else: no caption, no control, no second readout. */
+.wm-sheet--time .wm-sheet__head {
+  padding-bottom: 16px;
+}
+.wm-sheet--time .wm-sheet__bar {
+  gap: 8px;
 }
 /* /phone sheets */

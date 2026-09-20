@@ -3,6 +3,16 @@
 import dynamic from "next/dynamic";
 import type { BoardItemAt } from "@/lib/timetravel";
 
+// One footer string, one date format, everywhere the past is shown.
+const fmtMoment = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
 // Shared, code-split markdown renderer — only pulled in when a past card panel opens.
 const Markdown = dynamic(() => import("./Markdown"), {
   ssr: false,
@@ -37,12 +47,12 @@ export default function SnapshotCardPanel({
       <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="memory-mode card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
+        className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
       >
         {parent && (
           <button
             onClick={() => onOpenCard(parent.id)}
-            className="mb-3 flex max-w-full items-center gap-1 self-start truncate rounded-md px-1 py-0.5 text-xs text-[var(--text-lo)] hover:text-[var(--text-mid)]"
+            className="mb-3 flex max-w-full items-center gap-1 self-start truncate rounded-md px-1 py-0.5 text-[11px] leading-4 text-[var(--text-lo)] hover:text-[var(--text-mid)]"
             title={`Back to “${parent.text}”`}
           >
             <span aria-hidden>↰</span>
@@ -52,7 +62,7 @@ export default function SnapshotCardPanel({
 
         <div className="mb-5 flex items-center justify-between gap-3">
           <span
-            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] leading-4 ${
               item.done
                 ? "border-[var(--done)] text-[var(--done)]"
                 : "border-[var(--veil)] text-[var(--text-mid)]"
@@ -85,28 +95,22 @@ export default function SnapshotCardPanel({
         <h2 className="px-1 font-display text-xl font-medium leading-snug text-[var(--text-hi)]">
           {item.text}
         </h2>
-        <p className="mt-1 px-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-          {listLabels[item.list] ?? item.list}
-        </p>
+        <p className="wm-dl-label mt-1 px-1">{listLabels[item.list] ?? item.list}</p>
 
         {/* Details (display only) */}
-        <label className="mt-4 mb-1 block px-1 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-          Details
-        </label>
+        <label className="wm-dl-label mt-8 mb-2 block px-1">Details</label>
         {hasDetails ? (
           <div className="rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5">
             <Markdown source={item.details} />
           </div>
         ) : (
-          <p className="px-1 font-display text-sm italic text-[var(--text-lo)]">— no details then —</p>
+          <p className="px-1 font-display text-sm italic text-[var(--text-mid)]">— no details then —</p>
         )}
 
         {/* Sub-cards as of then */}
-        <div className="mt-5">
-          <div className="mb-1 flex items-baseline justify-between px-1">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-              Sub-cards
-            </label>
+        <div className="mt-8">
+          <div className="mb-2 flex items-baseline justify-between px-1">
+            <label className="wm-dl-label">Sub-cards</label>
             {childItems.length > 0 && (
               <span className="text-[11px] tabular-nums text-[var(--text-lo)]">
                 {subDone}/{childItems.length} done
@@ -135,22 +139,24 @@ export default function SnapshotCardPanel({
                       </svg>
                     )}
                   </span>
-                  <span className={child.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-mid)]"}>
+                  <span className={child.done ? "text-[var(--text-lo)] line-through" : "text-[var(--text-hi)]"}>
                     {child.text}
                   </span>
                   {child.details.trim() && (
-                    <span className="mt-[6px] ml-auto h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--past)" }} aria-hidden />
+                    <span className="mt-[6px] ml-auto h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--text-lo)" }} aria-hidden />
                   )}
                 </button>
               ))}
             </div>
           ) : (
-            <p className="px-1 font-display text-xs italic text-[var(--text-lo)]">— none then —</p>
+            <p className="px-1 font-display text-sm italic text-[var(--text-mid)]">— none then —</p>
           )}
         </div>
 
-        <p className="mt-6 border-t border-[var(--veil-soft)] pt-4 font-display text-[11px] italic text-[var(--past)]">
-          as it was · {asOf ? new Date(asOf).toLocaleString() : ""} · read-only
+        <p className="mt-8 border-t border-[var(--veil-soft)] pt-4 text-[11px] leading-4 text-[var(--text-mid)]">
+          As it was ·{" "}
+          <span className="font-display italic">{asOf ? fmtMoment(asOf) : "now"}</span> ·
+          read-only
         </p>
       </aside>
     </div>

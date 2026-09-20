@@ -28,7 +28,7 @@ const PushSettings = dynamic(() => import("./PushSettings"), { ssr: false });
 const ROWS: { kind: PhoneSheet["kind"]; label: string; hint: string }[] = [
   { kind: "review", label: "Weekly review", hint: "Written from your history" },
   { kind: "note", label: "Note", hint: "Carries over, day to day" },
-  { kind: "time", label: "Time travel", hint: "The board as it was" },
+  { kind: "time", label: "As it was", hint: "Rewind the board" },
   { kind: "boards", label: "Boards", hint: "Switch or manage boards" },
   { kind: "lists", label: "Lists", hint: "Add, rename, reorder" },
   { kind: "archive", label: "Archive", hint: "Browse and restore" },

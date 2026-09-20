@@ -12,10 +12,12 @@ import {
   type BoardItemAt,
 } from "@/lib/timetravel";
 import type { Item, ItemEvent } from "@/lib/types";
+import Dateline, { Ruler } from "../Dateline";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneSnapshotCard from "./PhoneSnapshotCard";
 import { Sheet, useSheetOpen } from "./Sheet";
 import { usePhoneBoardData } from "./phone-data";
+import { markersOf, usePhoneTimeline } from "./phone-timeline";
 
 // Time travel gets its OWN MODE SCREEN on the phone (§2 G), not the desktop
 // TimeMachineBar squeezed under the board. That bar's ‹ › steppers are 24×24 — under
@@ -45,6 +47,15 @@ const JUMPS = [
   { label: "Last week", back: 7 * DAY },
 ];
 
+// Live, the head says what day it is, exactly as the Now screen's does. "As it was"
+// over the word "Now" was a contradiction the first render caught.
+const fmtToday = (ms: number) =>
+  new Date(ms).toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
 const fmtMoment = (ms: number) =>
   new Date(ms).toLocaleString(undefined, {
     weekday: "short",
@@ -56,9 +67,11 @@ const fmtMoment = (ms: number) =>
 
 export default function PhoneTimeTravel() {
   const { close, pushLevel, goBackLevels } = usePhoneUI();
-  const { open, dismiss } = useSheetOpen();
+  const { open } = useSheetOpen();
   const { boardId, listLabels } = usePhoneBoardData();
-  const [timeline, setTimeline] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
+  const shared = usePhoneTimeline();
+  const [own, setOwn] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
+  const timeline = shared.provided ? shared.timeline : own;
   const [now] = useState(() => Date.now());
   const [valueMs, setValueMs] = useState<number | null>(null); // null = live
   // "Board then" vs "What changed" — a view of the same scrubbed moment, not a
@@ -67,20 +80,17 @@ export default function PhoneTimeTravel() {
   const [mode, setMode] = useState<"then" | "diff">("then");
 
   useEffect(() => {
+    if (shared.provided) return; // the shell already fetched it
     let alive = true;
-    timelineDataAction(boardId).then((d) => alive && setTimeline(d));
+    timelineDataAction(boardId).then((d) => alive && setOwn(d));
     return () => {
       alive = false;
     };
-  }, [boardId]);
+  }, [boardId, shared.provided]);
 
-  // Every distinct moment the board actually changed: the scrubber's snap points.
-  const markers = useMemo(() => {
-    if (!timeline) return [] as number[];
-    const set = new Set<number>();
-    for (const e of timeline.events) set.add(new Date(e.at).getTime());
-    return [...set].filter((m) => m <= now).sort((a, b) => a - b);
-  }, [timeline, now]);
+  // Every distinct moment the board actually changed: the ruler's ticks and the
+  // scrubber's snap points.
+  const markers = useMemo(() => markersOf(timeline, now), [timeline, now]);
 
   const minMs = markers[0] ?? now;
   const range = Math.max(1, now - minMs);
@@ -103,10 +113,13 @@ export default function PhoneTimeTravel() {
     return bestD <= threshold ? best : ms;
   }
 
+  // Reconstructed at `current` whether or not you have moved: with the thumb at the
+  // right-hand end that IS the board as it is, so the sheet opens onto the board you
+  // were just looking at rather than onto a paragraph explaining the scrubber.
   const snapshot: BoardItemAt[] = useMemo(() => {
-    if (!timeline || !active) return [];
+    if (!timeline) return [];
     return reconstructBoardAt(timeline.items, timeline.events, new Date(current).toISOString());
-  }, [timeline, active, current]);
+  }, [timeline, current]);
 
   // Every card that existed at this moment, by id — the read-only detail sheet and
   // the parent breadcrumb both resolve through this rather than a second lookup.
@@ -149,7 +162,7 @@ export default function PhoneTimeTravel() {
   // snapshot above reconstructs from — diffBoardSince does its own before/after
   // reconstruction internally, so this is the only other place the timeline is read.
   const diff: BoardDiff | null = useMemo(() => {
-    if (!timeline || !active) return null;
+    if (!timeline) return null;
     return diffBoardSince(
       timeline.items,
       timeline.events,
@@ -157,7 +170,7 @@ export default function PhoneTimeTravel() {
       new Date(now).toISOString(),
       { listLabels, today: localToday() },
     );
-  }, [timeline, active, current, now, listLabels]);
+  }, [timeline, current, now, listLabels]);
 
   // ---- the read-only detail card, and its history -------------------------------
   // Drilling into a past card is a step FORWARD, so it owes the browser an entry:
@@ -216,13 +229,21 @@ export default function PhoneTimeTravel() {
       heightSvh={96}
       className="wm-sheet--time"
     >
-      <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
-        <p className="wm-ph-caption">
-          {active ? (mode === "diff" ? "What changed" : "As it was") : "Time travel"}
-        </p>
-        <p className="wm-ph-title wm-ph-num">
-          {timeline == null ? "Loading the timeline…" : active ? fmtMoment(current) : "Now"}
-        </p>
+      {/* The head IS the readout: eyebrow, then the moment at 26px — roman while the
+          thumb sits at now, italic the instant you rewind. The ruler itself lives in
+          the bar below, where your thumb already is; stating it twice was the
+          duplicate readout this redesign deleted from the desktop. */}
+      <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 0 }}>
+        <Dateline
+          size="phone"
+          ruler={false}
+          eyebrow={mode === "diff" ? "What changed" : active ? "As it was" : fmtToday(now)}
+          moment={active ? fmtMoment(current) : "Now"}
+          nowMs={now}
+          minMs={minMs}
+          markers={markers}
+          valueMs={valueMs}
+        />
         <div className="wm-ph-diffseg" role="radiogroup" aria-label="Time travel view">
           <button
             type="button"
@@ -248,10 +269,8 @@ export default function PhoneTimeTravel() {
       {/* The board, read-only, behind the control. Nothing in here is a button. */}
       <div className="wm-sheet__scroll">
         {mode === "diff" ? (
-          !active ? (
-            <p className="wm-ph-hint">Move the scrubber, or jump back, to see what changed.</p>
-          ) : !diff || diff.entries.length === 0 ? (
-            <p className="wm-ph-hint">{nothingChangedPhrase(fmtMoment(current))}</p>
+          !diff || diff.entries.length === 0 ? (
+            <p className="wm-ph-then-line">{nothingChangedPhrase(fmtMoment(current))}</p>
           ) : (
             <>
               <p className="wm-ph-diff-summary">
@@ -282,7 +301,7 @@ export default function PhoneTimeTravel() {
                         // Nothing to open: the card didn't exist (or wasn't on the
                         // board) at T, so there is no past card behind this line —
                         // same rule the "Board then" list uses to decide what shows.
-                        <div className="wm-ph-row wm-ph-row--ledger" style={{ opacity: 0.7 }}>
+                        <div className="wm-ph-row wm-ph-row--ledger wm-ph-row--shut">
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p className="wm-ph-body wm-ph-clamp2">{entry.title}</p>
                             <p className="wm-ph-caption" style={{ marginTop: 2 }}>
@@ -297,16 +316,11 @@ export default function PhoneTimeTravel() {
               </ul>
             </>
           )
-        ) : !active ? (
-          <p className="wm-ph-hint">
-            Drag the scrubber to rewind. The board redraws as it was at that moment,
-            reading only, so nothing you see here can be changed.
-          </p>
         ) : grouped.length === 0 ? (
-          <p className="wm-ph-hint">The board was empty then.</p>
+          <p className="wm-ph-then-line">{active ? "— the board was empty then —" : "— the board is empty —"}</p>
         ) : (
           grouped.map(([list, rows]) => (
-            <section key={list} style={{ marginTop: 18 }}>
+            <section key={list} style={{ marginTop: 32 }}>
               <p className="wm-ph-sect" style={{ padding: 0, display: "flex", gap: 8 }}>
                 <span>{listLabels[list] ?? list}</span>
                 <span className="wm-ph-num" style={{ color: "var(--text-lo)" }}>
@@ -320,7 +334,7 @@ export default function PhoneTimeTravel() {
                     <li key={r.id}>
                       <button
                         type="button"
-                        className="wm-ph-past"
+                        className={`wm-ph-past${active ? " wm-ph-past--then" : ""}`}
                         style={{ width: "100%", textAlign: "left" }}
                         onClick={() => openSnapshot(r.id)}
                       >
@@ -345,13 +359,8 @@ export default function PhoneTimeTravel() {
                             <li key={k.id}>
                               <button
                                 type="button"
-                                className="wm-ph-past"
-                                style={{
-                                  width: "100%",
-                                  textAlign: "left",
-                                  paddingLeft: 28,
-                                  borderLeftColor: "var(--veil)",
-                                }}
+                                className={`wm-ph-past${active ? " wm-ph-past--then" : ""}`}
+                                style={{ width: "100%", textAlign: "left", paddingLeft: 32 }}
                                 onClick={() => openSnapshot(k.id)}
                               >
                                 <p
@@ -404,27 +413,23 @@ export default function PhoneTimeTravel() {
             );
           })}
         </div>
-        <input
-          type="range"
-          className="wm-ph-scrub"
-          min={minMs}
-          max={now}
-          step={Math.max(1000, Math.round(range / 1000))}
-          value={current}
+        <Ruler
+          size="phone"
+          nowMs={now}
+          minMs={minMs}
+          markers={markers}
+          valueMs={valueMs}
           disabled={timeline == null}
-          onChange={(e) => setValueMs(Number(e.target.value))}
-          onPointerUp={(e) => setValueMs(snap(Number((e.target as HTMLInputElement).value)))}
-          onKeyUp={(e) => setValueMs(snap(Number((e.target as HTMLInputElement).value)))}
-          aria-label="Rewind the board"
-          aria-valuetext={active ? fmtMoment(current) : "Now"}
+          onPick={(ms) => setValueMs(ms)}
+          onSnap={(ms) => setValueMs(snap(ms))}
+          valueText={active ? fmtMoment(current) : "Now"}
         />
-        <button
-          type="button"
-          className={`wm-ph-btn ${active ? "wm-ph-btn--primary" : ""}`}
-          onClick={() => (active ? setValueMs(null) : dismiss())}
-        >
-          {active ? "Return to now" : "Close"}
-        </button>
+        {active && (
+          <button type="button" className="wm-ph-btn wm-ph-btn--return" onClick={() => setValueMs(null)}>
+            <span className="wm-dl-return__dot" aria-hidden />
+            Return to now
+          </button>
+        )}
       </div>
     </Sheet>
   );

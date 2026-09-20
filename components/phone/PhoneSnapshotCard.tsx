@@ -2,6 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+// The one footer string, the one date format — the same sentence the desktop's
+// past card ends on.
+const fmtMoment = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 import dynamic from "next/dynamic";
 import type { BoardItemAt } from "@/lib/timetravel";
 import { Chevron } from "./Sheet";
@@ -116,12 +127,14 @@ export default function PhoneSnapshotCard({
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
           {parent && <p className="wm-ph-parent wm-ph-clamp2">{parent.text}</p>}
-          <p className="wm-ph-title wm-ph-clamp2">{item.text}</p>
+          <p className="wm-ph-snaptitle wm-ph-clamp2">{item.text}</p>
           <p className="wm-ph-caption" style={{ marginTop: 3 }}>
             {listLabels[item.list] ?? item.list}
           </p>
         </div>
-        <span className="wm-ph-snap-badge">{item.done ? "Was done" : "Was open"}</span>
+        <span className="wm-ph-snap-badge">
+          {asOf ? (item.done ? "Was done" : "Was open") : item.done ? "Done" : "Open"}
+        </span>
         <button type="button" className="wm-ph-tap" aria-label="Close" onClick={onClose}>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden focusable="false">
             <path
@@ -144,7 +157,7 @@ export default function PhoneSnapshotCard({
             <Markdown source={item.details} />
           </div>
         ) : (
-          <p className="wm-ph-hint">— no details then —</p>
+          <p className="wm-ph-then-line" style={{ marginTop: 0 }}>{asOf ? "— no details then —" : "— no details —"}</p>
         )}
 
         <p className="wm-ph-sect" style={{ padding: "18px 0 6px" }}>
@@ -159,7 +172,7 @@ export default function PhoneSnapshotCard({
         {childItems.length > 0 ? (
           <ul style={{ marginLeft: -16, marginRight: -16 }}>
             {childItems.map((child) => (
-              <li key={child.id} className="wm-ph-past">
+              <li key={child.id} className={`wm-ph-past${asOf ? " wm-ph-past--then" : ""}`}>
                 <button
                   type="button"
                   onClick={() => onOpenCard(child.id)}
@@ -176,11 +189,20 @@ export default function PhoneSnapshotCard({
             ))}
           </ul>
         ) : (
-          <p className="wm-ph-hint">— none then —</p>
+          <p className="wm-ph-then-line" style={{ marginTop: 0 }}>{asOf ? "— none then —" : "— none —"}</p>
         )}
 
-        <p className="wm-ph-hint" style={{ marginTop: 24 }}>
-          As it was{asOf ? ` · ${new Date(asOf).toLocaleString()}` : ""} · read-only
+        {/* Past tense only when there is a past: at thumb = now this card is the
+            live card, read-only because the sheet is. */}
+        <p className="wm-ph-footnote">
+          {asOf ? (
+            <>
+              As it was · <span className="wm-ph-footnote__moment">{fmtMoment(asOf)}</span> ·
+              read-only
+            </>
+          ) : (
+            <>As it is · read-only</>
+          )}
         </p>
       </div>
     </div>,
