@@ -50,17 +50,66 @@ import { REVIEW_LIST } from "../lib/lists.ts";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // The frozen system prompt (plan §5).
+//
+// The shape clauses are the design: the review is a LEDGER, not an essay. One
+// verdict line, one paragraph, three fixed labelled lists, every line "Card —
+// one fact" ending in its number. Bold is banned outright, because when it
+// marked forty card names it marked nothing; position on the line does that job
+// now. The verdict is also the push title, which is why it is capped at 40
+// characters and carries no date — the week is already in the sheet's caption.
+//
+// The caps (paragraph 35-55, Moved 6, Streaks 6, Stuck 6) are a LENGTH budget,
+// not a style: on a 390x844 phone the sheet has ~740px of glass, and a full
+// week at these caps stays inside about one and a third screens. Raising any of
+// them buys a line of the week and costs a third of a screen of scrolling.
 const SYSTEM = [
   "You write a weekly review of a personal kanban board from its change log.",
   "Be concrete and personal: name specific cards, say what actually moved, and",
   "call out cards stuck in a waiting/parked column and any repeating-task streaks.",
   "On a shared board, attribute actions to the named people (@handles); on a",
   "personal board write in the second person (\"you\").",
-  "250-400 words. Markdown, starting at a level-2 heading. No preamble, no",
-  "sign-off, no offer to help — output the review itself and nothing else.",
   "NO INVENTED FACTS: every claim must be supported by the digest below. If the",
   "week was quiet, say so plainly rather than padding it.",
+  "No preamble, no sign-off, no offer to help — output the review itself and nothing else.",
+  "SHAPE, exactly:",
+  "First line: `## ` + a verdict of at most 6 words and 40 characters — no date,",
+  "no week range, no colon, no card names, no trailing period (examples:",
+  "`## Two active days, six silent`, `## Doctor done, dailies at zero`, `## A quiet week`).",
+  "Then ONE plain paragraph, 35-55 words, no bold: what kind of week it was and",
+  "the one thing worth knowing; last week's continuity goes here as one clause.",
+  "Then exactly three sections in this order, each a level-3 heading with this",
+  "exact label and a `- ` list: `### Moved` (cards completed, created, archived,",
+  "moved between columns or restructured; at most 6 lines), `### Streaks`",
+  "(repeating cards; at most 6 lines; collapse cards sharing the same number into",
+  "one line), `### Stuck` (cards untouched in a column; at most 6 lines, longest",
+  "first). Every list line is `Card name — one fact`, the fact ending with the",
+  "number when there is one (`- Brush Teeth — 61 days in Today`, `- Push — streak 2`,",
+  "`- Formation, Coding, Morning — 0, one check on the 11th`). No bold, no italic,",
+  "no links, no sub-bullets, no sentence after the number. An empty section has",
+  "the single line `- Nothing`. Optional last line: one plain sentence quoting the",
+  "daily note only if it changed or contradicts the week, at most 25 words.",
+  "150-250 words total. `**` and `_` are forbidden.",
 ].join(" ");
+
+// The shape guard. The prompt asks for a ledger; this checks it got one, and is
+// allowed to ask once more. It never blocks a post: a review that came back in
+// the old shape is still the week's only record, and the CSS flattens stray
+// bold anyway — so a failure is logged, not fatal.
+const VERDICT_RE = /^## .{6,40}$/;
+
+function shapeProblem(md) {
+  const first = md.split("\n", 1)[0] ?? "";
+  if (!VERDICT_RE.test(first)) return `first line is not a <=40-char verdict: ${JSON.stringify(first)}`;
+  const sections = (md.match(/^### /gm) ?? []).length;
+  if (sections < 3) return `only ${sections} level-3 sections (want Moved / Streaks / Stuck)`;
+  return null;
+}
+
+// Bold marks nothing in the ledger, so it never reaches the board even if the
+// model slips. Stripping beats styling it away: the markdown is the archive.
+function stripBold(md) {
+  return md.replace(/\*\*/g, "");
+}
 
 function die(code, msg) {
   console.error(`weekly-review: ${msg}`);
@@ -135,13 +184,13 @@ function runCli(bin, args, stdin, timeoutMs = 240000) {
             : `${bin} failed to start: ${e.message}`,
       }),
     );
-    child.on("close", (code) =>
-      finish(
-        code === 0
-          ? { text: out }
-          : { error: `${bin} exited ${code}${err.trim() ? `: ${err.trim()}` : ""}` },
-      ),
-    );
+    // `claude` prints some failures ("Not logged in · Please run /login") to
+    // STDOUT, so an empty stderr is not an empty explanation.
+    child.on("close", (code) => {
+      if (code === 0) return finish({ text: out });
+      const why = (err.trim() || out.trim()).slice(0, 600);
+      finish({ error: `${bin} exited ${code}${why ? `: ${why}` : ""}` });
+    });
 
     child.stdin.on("error", () => {}); // a child that exits early closes the pipe
     child.stdin.end(stdin);
@@ -290,7 +339,20 @@ if (args.dryRun) {
 const result = await generate(digest, previous);
 if (result.error) die(3, `generation failed — nothing posted.\n  ${result.error}`);
 
-const markdown = (result.text ?? "").trim();
+let markdown = stripBold((result.text ?? "").trim());
+
+// One regeneration if the shape is wrong, then post whatever came back.
+let problem = markdown.length >= 80 ? shapeProblem(markdown) : null;
+if (problem) {
+  console.error(`weekly-review: shape — ${problem}. Regenerating once.`);
+  const retry = await generate(digest, previous);
+  const retried = stripBold((retry.text ?? "").trim());
+  if (!retry.error && retried.length >= 80) {
+    markdown = retried;
+    problem = shapeProblem(markdown);
+  }
+  if (problem) console.error(`weekly-review: shape — ${problem}. Posting anyway.`);
+}
 // A CLI that "succeeds" with nothing (or a stub answer) must not overwrite a
 // real review — the sentinel is the archive, and a bad write is journaled too.
 if (markdown.length < 80) {

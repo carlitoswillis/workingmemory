@@ -536,6 +536,99 @@ body {
   font-weight: 600;
 }
 
+/* ── The weekly review, as a ledger ───────────────────────────────────────
+   Scoped to the review only (`md-body--review` next to `md-body`), because
+   `.md-body` is shared with card details, snapshot details and the note.
+
+   One serif verdict over an all-Grotesk, all-400 ledger. Every fact is one
+   line: card name first, the number last. Bold marks nothing here (the
+   generator is told not to emit it; this flattens it if it slips through),
+   italic marks nothing, and nothing is drawn — the 4/8/16/32 ladder does the
+   grouping. The review also sits directly on the card's own ground: on
+   --bg-0 the light theme's --text-lo floors at 4.22:1, while on --surface it
+   reads 5.04 and on --wash 4.91, so the inner well is gone. */
+.md-body--review strong {
+  font-weight: 400;
+  /* `.md-body strong` also lifts the colour to --text-hi. Left alone, archived
+     reviews (44 bolds each) would keep highlighting forty card names in a paler
+     twin — the exact defect this piece removed. */
+  color: inherit;
+}
+.md-body--review em {
+  font-style: normal;
+}
+.md-body--review h2 {
+  font-family: var(--font-fraunces), Georgia, serif;
+  /* The scale's display tier (13.5 x 1.2^4 = 28), not the title tier: at 23 the
+     verdict was 1.53x the 15px column header — "larger", not dominant. */
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0 0 16px;
+  text-wrap: balance;
+}
+.md-body--review h3 {
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-lo);
+  margin: 32px 0 4px;
+}
+.md-body--review p {
+  margin: 8px 0;
+}
+.md-body--review ul,
+.md-body--review ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+/* One left edge, plus the single permitted second edge: a 12px hang on wraps.
+   tabular-nums so the trailing counts line up down the right side. */
+.md-body--review li {
+  margin: 0;
+  padding: 4px 0 4px 12px;
+  text-indent: -12px;
+  font-variant-numeric: tabular-nums;
+}
+/* The optional closing sentence after the last section is a section boundary,
+   not another paragraph: 8px there read as "attached to Stuck". */
+.md-body--review ul + p,
+.md-body--review ol + p {
+  margin-top: 32px;
+}
+.md-body--review hr,
+.md-body--review blockquote {
+  display: none;
+}
+.md-body--review a {
+  text-decoration: underline;
+}
+
+/* The time machine's twin: the same ledger, one tone quieter. `.md-body` sets
+   `color` itself, so a colour on the wrapper never reaches the text — this is
+   the only way the past reads as past without a second layout. */
+.md-body--past,
+.md-body--past h2 {
+  color: var(--text-mid);
+}
+
+/* The phone shell takes the same ledger at the phone's own ladder: 15px body
+   (--p-body) and the 26px display tier the sheets already use. */
+.md-body--phone {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.md-body--phone h2 {
+  /* Phone display tier (15 x 1.2^4 = 31); 26 was the title tier. */
+  font-size: 31px;
+  font-weight: var(--p-medium);
+}
+
 ::selection {
   background: var(--now-tint);
 }
@@ -1431,7 +1524,13 @@ html:has(.wm-sheet) [data-shell="phone"] {
 /* Dynamic Type, Safari only, on top of the rem ladder above. */
 @supports (-webkit-touch-callout: none) {
   .wm-ph-title,
-  .wm-ph-body {
+  .wm-ph-body,
+  /* The review's ledger is phone body text too, so it scales with the system
+     size like everything else on the sheet. The verdict does not: it is set by
+     `.md-body--phone h2`, a separate selector, and a display line that grew
+     with Dynamic Type would stop being a display line. */
+  .md-body--phone p,
+  .md-body--phone li {
     font: -apple-system-body;
     font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   }
