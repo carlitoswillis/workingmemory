@@ -145,6 +145,18 @@ export function swipeIntent(dx: number, threshold: number = SWIPE_ACTION_PX): Sw
   return "none";
 }
 
+// The SCREEN's swipe, one level up from the row's: it moves the whole app sideways
+// (Now ↔ Lists, and off the first Lists page back to Now) rather than acting on one
+// card. Same directional lock, same 28px edge guard — only the travel is longer,
+// because getting a different screen by accident costs more than a sprung-back row.
+export type ScreenSwipe = "left" | "right" | "none";
+export const SCREEN_SWIPE_PX = 56;
+export function screenSwipeIntent(dx: number, threshold: number = SCREEN_SWIPE_PX): ScreenSwipe {
+  if (dx <= -threshold) return "left";
+  if (dx >= threshold) return "right";
+  return "none";
+}
+
 // ── Now: Today / Due today / Done today ──────────────────────────────────────
 
 export type NowItem = {

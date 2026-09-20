@@ -9,10 +9,13 @@ import PhoneReorderRows from "./PhoneReorderRows";
 import PhoneRow from "./PhoneRow";
 import { emptyCopyFor, pageIndexFor } from "./phone-logic";
 import { childrenOf } from "./phone-data";
+import { useScreenSwipe } from "./useScreenSwipe";
 
 // Lists — one horizontal pager over the board's other columns, with a sticky
 // segmented header that syncs both ways: tap a segment to jump, swipe to step to the
-// neighbour. The pager is NATIVE scroll-snap (`scroll-snap-type: x mandatory` on the
+// neighbour. A swipe that starts on a CARD is the row's (complete / Snooze / Archive)
+// and never the pager's — `.phone-row` narrows its own touch-action to `pan-y` to say
+// so — and swiping right off the first page hands you back to Now. The pager is NATIVE scroll-snap (`scroll-snap-type: x mandatory` on the
 // track, one 100%-wide snap-aligned page each, each page its own vertical scroller),
 // never a JS pan handler — that's what keeps it from racing iOS's edge-swipe-back.
 // Position is read back with an IntersectionObserver, never a scroll listener.
@@ -138,12 +141,35 @@ export default function PhoneList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, pages]);
 
+  // Page-to-page is the track's own business (native snap). This is only what
+  // happens when it runs out: parked against the left edge, a rightward swipe is the
+  // way back to Now — the screen the bottom bar keeps to the left of Lists. Asking
+  // at touch-down means a swipe back from page 3 steps one page instead, which is
+  // what it looks like it should do.
+  const swipe = useScreenSwipe(
+    (dir) => {
+      if (dir === "right") ui.setTab("now");
+    },
+    () => (trackRef.current?.scrollLeft ?? 0) <= 1,
+  );
+
   const goTo = useCallback((i: number) => {
     const track = trackRef.current;
     if (!track) return;
     setIndex(i);
     track.scrollTo({ left: i * track.clientWidth, behavior: "smooth" });
   }, []);
+
+  // A page full of cards is a page with no bare surface left to swipe from — the rows
+  // own every pixel of it, deliberately. So the hint line under the segments is a
+  // handle: it is only there when the page HAS cards, which is exactly when the page
+  // itself has run out of room to be grabbed. Same gesture, stepped by hand because
+  // this element is outside the pager's own scroller.
+  const hintSwipe = useScreenSwipe((dir) => {
+    if (dir === "left") goTo(Math.min(index + 1, pages.length - 1));
+    else if (index > 0) goTo(index - 1);
+    else ui.setTab("now");
+  });
 
   return (
     <div className="phone-lists">
@@ -183,12 +209,12 @@ export default function PhoneList({
       {/* The column's own hint — orientation for a list you're actually using, not
           furniture on an empty one you already know the point of. */}
       {pages[index] && (order[pages[index].id]?.length ?? 0) > 0 && (
-        <p className="wm-ph-hint wm-ph-pad" style={{ marginTop: 8 }}>
+        <p className="wm-ph-hint wm-ph-pad phone-lists__hint" style={{ marginTop: 8 }} {...hintSwipe}>
           {pages[index].hint}
         </p>
       )}
 
-      <div className="phone-pager" ref={trackRef}>
+      <div className="phone-pager" ref={trackRef} {...swipe}>
         {pages.map((page, i) => (
           <section
             key={page.id}

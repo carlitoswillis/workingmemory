@@ -86,6 +86,22 @@ for the past, elevation as a luminance step and a hairline rather than a shadow.
 The phone idea is one row at every depth — a sub-card is the same row as a top-level card,
 same height, same check target, no indent and no smaller type.
 
+### Phone gestures
+
+Horizontal is navigation, with one exception, and the exception is the card:
+
+- **On a card** — swipe right to complete, left to reveal Snooze and Archive. A card owns
+  every horizontal pixel of itself, so a swipe that starts on one never moves the screen.
+- **Anywhere else on a Lists page** — swipe to step to the next list, or the previous one.
+  The hint line under the segmented header is a handle for the same thing, for a page so
+  full of cards that there is nothing else left to grab.
+- **Between the screens** — swipe left on Now to reach Lists; swipe right off the first
+  list to come back. Now is the leftmost screen, so the browser's back gesture keeps the
+  left edge.
+
+`scripts/dev/assert-phone-swipe.mjs` is the guard for all of it, driven through a real
+browser with trusted touch input — the only kind that `touch-action` applies to.
+
 ### Phone sheets
 
 The Now feed is the default view; other screens open as bottom sheets:

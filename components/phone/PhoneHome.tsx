@@ -5,6 +5,8 @@ import type { Item } from "@/lib/types";
 import { effectiveDone } from "@/lib/recurrence";
 import PhoneRow from "./PhoneRow";
 import PhoneReorderRows from "./PhoneReorderRows";
+import { usePhoneUI } from "./PhoneShell";
+import { useScreenSwipe } from "./useScreenSwipe";
 import {
   applyPendingOrder,
   deriveNowSections,
@@ -48,6 +50,7 @@ export default function PhoneHome({
   // Where a row's "Later" sends a card — the Waiting column, when the board has one.
   snoozeListId?: string | null;
 }) {
+  const ui = usePhoneUI();
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
   // Where each row is standing right now, read at the moment one is tapped. A ref,
   // because the callbacks below outlive any single render.
@@ -172,8 +175,15 @@ export default function PhoneHome({
     onSettled: (id: string) => onHold(id, false),
   });
 
+  // Lists sits to the right of Now in the bottom bar, so that is where a leftward
+  // swipe goes. Nothing lives to Now's left, so a rightward one is left alone — the
+  // browser's back gesture is welcome to it.
+  const swipe = useScreenSwipe((dir) => {
+    if (dir === "left") ui.setTab("lists");
+  });
+
   return (
-    <div className="phone-scroll">
+    <div className="phone-scroll" {...swipe}>
       <Section title="Today" count={counts.today.length}>
         {todayCards.length === 0 ? (
           <Empty>Nothing claimed for today.</Empty>

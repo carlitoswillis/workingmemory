@@ -24,6 +24,7 @@ import {
   rowInitial,
   rowNext,
   sectionOf,
+  screenSwipeIntent,
   swipeIntent,
   withinSwipeZone,
   type NowItem,
@@ -167,6 +168,13 @@ ok("exactly at the inset is allowed", withinSwipeZone(28, 375), true);
 ok("a long right swipe completes", swipeIntent(80), "complete");
 ok("a long left swipe reveals the actions", swipeIntent(-80), "reveal");
 ok("a short swipe springs back", swipeIntent(30), "none");
+
+// The screen's swipe asks for more travel than the row's reveal, because it costs
+// more to get wrong: a sprung-back row is nothing, a different screen is a surprise.
+ok("a long left swipe goes to the next screen", screenSwipeIntent(-70), "left");
+ok("a long right swipe goes back", screenSwipeIntent(70), "right");
+ok("half a row's reveal is not a screen change", screenSwipeIntent(-30), "none");
+ok("the threshold itself counts", screenSwipeIntent(56), "right");
 
 // --- Now sections ------------------------------------------------------------
 

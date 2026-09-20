@@ -584,7 +584,10 @@ html:has(.wm-sheet) [data-shell="phone"] {
   padding-right: max(6px, env(safe-area-inset-right));
   border-bottom: 1px solid var(--veil-soft);
   background: var(--bg-1);
-  /* Vertical scroll is the browser's; the horizontal swipe is ours. */
+  /* Vertical scroll is the browser's; the horizontal swipe is ours — and naming
+     only `pan-y` here is also what keeps a swipe that starts on a card from panning
+     the Lists pager underneath it. The row wins on the row; the pager wins
+     everywhere else on the page. */
   touch-action: pan-y;
 }
 /* Done = one luminance step up + text to secondary. Elevation is never a shadow. */
@@ -839,6 +842,13 @@ html:has(.wm-sheet) [data-shell="phone"] {
   background: var(--surface);
   color: var(--text-hi);
 }
+/* `touch-action` is intersected DOWN the hit-test chain, so the track and its pages
+   have to name BOTH axes or one of them loses: the track saying `pan-x` while a page
+   said `pan-y` left a touch inside a page with neither, which is why the pager could
+   only ever be stepped by tapping a segment. Both axes here, and `.phone-row` alone
+   narrows it back to `pan-y` — that is what hands a swipe that starts on a card to
+   the row's own gesture (complete / Snooze / Archive) and everything else to the
+   pager. */
 .phone-pager {
   flex: 1 1 auto;
   min-height: 0;
@@ -848,10 +858,20 @@ html:has(.wm-sheet) [data-shell="phone"] {
   scroll-snap-type: x mandatory;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
 }
 .phone-pager::-webkit-scrollbar {
   display: none;
+}
+/* The hint under the segments doubles as a swipe handle for the pager (PhoneList).
+   Two things make that real: `pan-y`, so the browser doesn't pan something else with
+   it, and the padding — Chromium's touch adjustment snaps a touch to the nearest
+   CLICKABLE thing within about 10px, and the first row's body is clickable, so a
+   hint sitting flush against it loses the bottom of its own band (and a near-miss
+   tap opens that card). The gap is what it takes to own the line. */
+.phone-lists__hint {
+  padding-bottom: 12px;
+  touch-action: pan-y;
 }
 .phone-page {
   flex: 0 0 100%;
@@ -860,7 +880,8 @@ html:has(.wm-sheet) [data-shell="phone"] {
   scroll-snap-align: start;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  touch-action: pan-y;
+  /* Down the page, sideways to the next list; see the note on .phone-pager. */
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
 }
 .phone-page__rows {
