@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { brainBearerOk, resolveOwnerBoard } from "@/lib/bridge";
-import { listExists } from "@/lib/columns";
+import { captureLandingList } from "@/lib/columns";
 import { getMainDb } from "@/lib/db";
 import { pokeBoard } from "@/lib/realtime";
 
@@ -38,18 +38,16 @@ export async function POST(req: NextRequest) {
   const scope = resolveOwnerBoard(db);
   if (!scope) return new NextResponse("No owner board to push to", { status: 409 });
 
+  // Same landing rule as an in-app capture (app/actions.ts): the column asked
+  // for if it is live, else the live column LABELLED Brain Dump, else the seeded
+  // `braindump` id, else the first column. The label step is what matters here —
+  // on a board that archived its seeded Brain Dump and made a new one, the old
+  // id is dead, and the bespoke chain this replaced fell through to the FIRST
+  // column, which is Today. That is how the weekly leverage brief ended up as a
+  // checkable task at the top of the owner's day.
   const requested = typeof body.list === "string" ? body.list : "";
-  let list = requested && listExists(db, scope.boardId, requested) ? requested : "";
-  if (!list && listExists(db, scope.boardId, "braindump")) list = "braindump";
-  if (!list) {
-    const first = db
-      .prepare(
-        "select id from lists where board_id is ? and archived = 0 order by position limit 1",
-      )
-      .get(scope.boardId) as { id: string } | undefined;
-    if (!first) return new NextResponse("Board has no lists", { status: 409 });
-    list = first.id;
-  }
+  const list = captureLandingList(db, scope.boardId, requested);
+  if (!list) return new NextResponse("Board has no lists", { status: 409 });
 
   const id = randomUUID();
   db.prepare(

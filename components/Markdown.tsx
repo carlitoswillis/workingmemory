@@ -11,9 +11,15 @@ import remarkGfm from "remark-gfm";
 //
 // Links open in a new tab (board content often points elsewhere). Task-list
 // checkboxes are display-only for now — editing happens in the raw textarea.
-export default function Markdown({ source }: { source: string }) {
+export default function Markdown({
+  source,
+  className,
+}: {
+  source: string;
+  className?: string;
+}) {
   return (
-    <div className="md-body">
+    <div className={`md-body${className ? ` ${className}` : ""}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

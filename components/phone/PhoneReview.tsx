@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { usePhoneUI } from "./PhoneShell";
 import { Sheet, useSheetOpen } from "./Sheet";
 import { findReview, usePhoneBoardData } from "./phone-data";
+import { reviewWeekLabel } from "../collapsibleColumn";
 
 // The AI weekly review, on the phone. Its own component reading the same row the
 // desktop ReviewColumn reads — the one pinned, unarchived, top-level item on the
@@ -24,17 +25,6 @@ const Markdown = dynamic(() => import("../Markdown"), {
   loading: () => <span className="wm-ph-hint">rendering…</span>,
 });
 
-function whenLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-}
-
 export default function PhoneReview() {
   const { close } = usePhoneUI();
   const { open } = useSheetOpen();
@@ -44,14 +34,12 @@ export default function PhoneReview() {
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && close()} label="Weekly review" heightSvh={96}>
+      {/* One caption and nothing else. The sheet already has a title — the
+          verdict below it — and the More row that opened this sheet already
+          said "Written from your history", so the only news left is the week. */}
       <div className="wm-sheet__head" style={{ flexDirection: "column", gap: 2 }}>
-        <p className="wm-ph-title">Weekly review</p>
-        {/* One fact per line. "Written from your history" is already on the More row
-            that opened this sheet; here the only news is when it was written. */}
         <p className="wm-ph-caption">
-          {review && body
-            ? `Updated ${whenLabel(review.updated_at)}`
-            : "Written from your history"}
+          {review && body ? reviewWeekLabel(review.updated_at) : "Written from your history"}
         </p>
       </div>
 
@@ -59,7 +47,7 @@ export default function PhoneReview() {
         {body ? (
           // No card around it: the review IS the sheet's content, and an outline
           // around the only thing on screen is an accessory, not information.
-          <Markdown source={body} />
+          <Markdown source={body} className="md-body--review md-body--phone" />
         ) : (
           <p className="wm-ph-hint">
             {loading

@@ -19,18 +19,6 @@ const Markdown = dynamic(() => import("./Markdown"), {
   loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
 });
 
-// "Aug 30" / "Aug 30, 2025" — the generation date, not a live clock.
-function whenLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-}
-
 function Chevron({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -59,9 +47,10 @@ export default function ReviewColumn({ review }: { review: Item | null }) {
 
   if (!review || !body) return null;
 
-  const when = whenLabel(review.updated_at);
-  const subtitle = when ? `Written from your history · ${when}` : "Written from your history";
   const weekLabel = reviewWeekLabel(review.updated_at);
+  // One string collapsed and expanded: the week is stated once, in the caption,
+  // and never again inside the review (the verdict carries no date).
+  const subtitle = weekLabel;
 
   return (
     <section
@@ -75,7 +64,12 @@ export default function ReviewColumn({ review }: { review: Item | null }) {
           type="button"
           onClick={toggle}
           aria-expanded={!collapsed}
-          className="flex min-w-0 items-start gap-1.5 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--now)]"
+          /* The chevron hangs in the card's own 12px gutter (-ml-[18px] = chevron
+             14 + gap 4), so "Weekly review", the week caption and the verdict
+             below them share ONE left edge instead of the title sitting 20px
+             right of its own hero. It also puts the live column's head exactly
+             where the time-machine twin's head already is (no chevron there). */
+          className="-ml-[18px] flex min-w-0 items-start gap-1 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--now)]"
         >
           <Chevron collapsed={collapsed} />
           <span className="min-w-0">
@@ -83,7 +77,7 @@ export default function ReviewColumn({ review }: { review: Item | null }) {
               Weekly review
             </h2>
             <p className="mt-0.5 truncate text-[11px] leading-tight text-[var(--text-lo)]">
-              {collapsed ? weekLabel : subtitle}
+              {subtitle}
             </p>
           </span>
         </button>
@@ -94,8 +88,8 @@ export default function ReviewColumn({ review }: { review: Item | null }) {
         aria-hidden={collapsed}
       >
         <div className="wm-collapsible__inner flex h-full flex-col">
-          <div className="max-h-[70vh] flex-1 overflow-y-auto rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-hi)]">
-            <Markdown source={body} />
+          <div className="max-h-[70vh] flex-1 overflow-y-auto px-1.5 text-[var(--text-hi)]">
+            <Markdown source={body} className="md-body--review" />
           </div>
         </div>
       </div>

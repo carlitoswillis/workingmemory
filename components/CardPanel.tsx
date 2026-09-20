@@ -572,7 +572,13 @@ export default function CardPanel({
             type="button"
             onClick={() => setEditingDetails(true)}
             title="Click to edit"
-            className="block w-full rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-left transition-colors hover:border-[var(--veil)]"
+            /* No well. The details are the card's own words, not a field: on the
+               phone this surface is already transparent, and the weekly review
+               dropped the same --bg-0 box, so all three markdown surfaces in the
+               app now read as one voice. px-1 puts the first word under the
+               DETAILS label and under the title, instead of 10px right of both.
+               The border only appears on hover, where it means "click to edit". */
+            className="block w-full rounded-lg border border-transparent bg-transparent px-1 py-2 text-left transition-colors hover:border-[var(--veil-soft)]"
           >
             <Markdown source={details} />
           </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -58,6 +59,13 @@ import TimeMachineBar from "./TimeMachineBar";
 import QuickCapture from "./QuickCapture";
 import SearchOverlay from "./SearchOverlay";
 import { useLevelStack } from "./useLevelStack";
+
+// The time machine's weekly-review twin renders the same ledger as the live
+// column, so the snapshot has to go through the same renderer.
+const Markdown = dynamic(() => import("./Markdown"), {
+  ssr: true,
+  loading: () => <span className="text-sm text-[var(--text-lo)]">rendering…</span>,
+});
 
 type Grouped = Record<string, Item[]>;
 type Move = { id: string; list: string; position: number };
@@ -1303,9 +1311,12 @@ function SnapshotReviewColumn({ body }: { body: string }) {
           Weekly review
         </h2>
       </div>
-      <p className="max-h-[70vh] overflow-y-auto whitespace-pre-wrap px-1 text-[13px] leading-relaxed text-[var(--text-mid)]">
-        {body}
-      </p>
+      {/* Same ledger, one tone quieter (`md-body--past`): an archived review is
+          accepted history, not a second live voice. Same paddings as the live
+          column so the twin matches it line for line. */}
+      <div className="max-h-[70vh] overflow-y-auto px-1.5">
+        <Markdown source={body} className="md-body--review md-body--past" />
+      </div>
     </section>
   );
 }
