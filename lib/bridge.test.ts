@@ -11,7 +11,7 @@
 
 import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
-import { resolveOwnerBoard } from "./bridge.ts";
+import { brainBearerOk, completeItem, resolveOwnerBoard } from "./bridge.ts";
 import { DEFAULT_LISTS } from "./lists.ts";
 
 let failures = 0;
@@ -92,7 +92,7 @@ function addItem(
   db.prepare("update items set updated_at = ? where id = ?").run(updatedAt, id);
 }
 
-const ENV_KEYS = ["WM_OWNER_BOARD_ID", "OWNER_USERNAME"] as const;
+const ENV_KEYS = ["WM_OWNER_BOARD_ID", "OWNER_USERNAME", "BRAIN_TOKEN"] as const;
 function withEnv<T>(env: Partial<Record<(typeof ENV_KEYS)[number], string>>, fn: () => T): T {
   const saved = ENV_KEYS.map((k) => [k, process.env[k]] as const);
   for (const k of ENV_KEYS) delete process.env[k];
@@ -209,6 +209,42 @@ function withEnv<T>(env: Partial<Record<(typeof ENV_KEYS)[number], string>>, fn:
     { ownerId: "u2", boardId: "bTheirs", boardName: "Theirs" },
   );
   ok("an empty DB resolves to null", withEnv({}, () => resolveOwnerBoard(freshDb())), null);
+}
+
+// completeItem — the bearer-token check-off (POST /api/items/complete).
+{
+  const db = freshDb();
+  seed(db);
+  addItem(db, "r1", "Stretch", "bHome", "2026-09-04T00:00:00.000Z");
+  addItem(db, "o1", "Call mom", "bHome", "2026-09-04T00:00:00.000Z");
+  addItem(db, "f1", "Theirs", "bTheirs", "2026-09-04T00:00:00.000Z");
+  db.prepare("update items set recurrence = 'daily' where id = 'r1'").run();
+  const scope = { ownerId: "u1", boardId: "bHome", boardName: "Personal" };
+  const evs = (id: string) =>
+    db.prepare("select type, field, actor_id as touched_by from item_events where item_id = ? and field = 'completed_on'").all(id);
+
+  ok("recurring done sets completedOn", completeItem(db, scope, "r1", "2026-11-06", true), {
+    id: "r1", text: "Stretch", recurrence: "daily", completedOn: "2026-11-06", done: false,
+  });
+  ok("undone on another date is a no-op", completeItem(db, scope, "r1", "2026-11-05", false)?.completedOn, "2026-11-06");
+  ok("recurring undone clears it", completeItem(db, scope, "r1", "2026-11-06", false)?.completedOn, null);
+  ok("history recorded for the owner", evs("r1"), [
+    { type: "completed", field: "completed_on", touched_by: "u1" },
+    { type: "reopened", field: "completed_on", touched_by: "u1" },
+  ]);
+  ok("one-off done", completeItem(db, scope, "o1", "2026-11-06", true), {
+    id: "o1", text: "Call mom", recurrence: null, completedOn: null, done: true,
+  });
+  ok("one-off undone", completeItem(db, scope, "o1", "2026-11-06", false)?.done, false);
+  ok("foreign item is null (404)", completeItem(db, scope, "f1", "2026-11-06", true), null);
+  ok("foreign item untouched", (db.prepare("select done from items where id = 'f1'").get() as { done: number }).done, 0);
+
+  const req = (h?: string) => ({ headers: new Headers(h ? { authorization: h } : {}) }) as never;
+  withEnv({ BRAIN_TOKEN: "sekrit" }, () => {
+    ok("right bearer passes", brainBearerOk(req("Bearer sekrit")), true);
+    ok("wrong bearer is 401", brainBearerOk(req("Bearer nope")), false);
+    ok("missing bearer is 401", brainBearerOk(req()), false);
+  });
 }
 
 console.log(failures === 0 ? "\nbridge: all passed" : `\nbridge: ${failures} FAILED`);

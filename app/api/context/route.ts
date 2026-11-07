@@ -3,7 +3,7 @@ import { brainBearerOk, resolveOwnerBoard } from "@/lib/bridge";
 import { getMainDb } from "@/lib/db";
 
 // GET /api/context — the owner's active board as triage context for the
-// sibling brain app: open items ({list, label, text}) plus asOf (the newest
+// sibling brain app: open items ({id, list, label, text, recurrence, completedOn}) plus asOf (the newest
 // write, so the caller can apply its own staleness policy). Read-only and
 // ~2KB, replacing the brain app's need to pull the whole DB via /api/export.
 // Auth: `Authorization: Bearer <BRAIN_TOKEN>` (see lib/bridge.ts).
@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
 
   const items = db
     .prepare(
-      `select i.list as list, coalesce(l.label, i.list) as label, i.text as text
+      `select i.id as id, i.list as list, coalesce(l.label, i.list) as label, i.text as text,
+              case when i.recurrence = 'none' then null else i.recurrence end as recurrence,
+              i.completed_on as completedOn
          from items i
          left join lists l on l.id = i.list and l.board_id is i.board_id
         where i.board_id = ? and i.archived = 0 and i.done = 0

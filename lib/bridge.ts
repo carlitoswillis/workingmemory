@@ -119,3 +119,64 @@ export function resolveOwnerBoard(db: Database.Database): OwnerBoard | null {
 
   return boardWithName(db, owner.id, board.id);
 }
+
+export type CompletedItem = {
+  id: string;
+  text: string;
+  recurrence: string | null;
+  completedOn: string | null;
+  done: boolean;
+};
+
+// Mark one item done/undone for a day on the owner's board — the bearer-token
+// twin of setDailyDoneAction / toggleDoneAction (app/actions.ts). A plain UPDATE
+// with touched_by = the owner, so the DB triggers append history exactly as an
+// in-app check-off does. Recurring: done sets completed_on = date; undone clears
+// it only when it still equals that date. One-off: flips done. null = the item
+// is not on this board.
+export function completeItem(
+  db: Database.Database,
+  scope: OwnerBoard,
+  itemId: string,
+  date: string,
+  done: boolean,
+): CompletedItem | null {
+  type Row = { id: string; text: string; recurrence: string; completed_on: string | null; done: number };
+  const find = () =>
+    db
+      .prepare("select id, text, recurrence, completed_on, done from items where id = ? and board_id = ?")
+      .get(itemId, scope.boardId) as Row | undefined;
+  const row = find();
+  if (!row) return null;
+  if (row.recurrence && row.recurrence !== "none") {
+    if (done) {
+      db.prepare("update items set completed_on = ?, touched_by = ? where id = ? and board_id = ?").run(
+        date,
+        scope.ownerId,
+        row.id,
+        scope.boardId,
+      );
+    } else if (row.completed_on === date) {
+      db.prepare("update items set completed_on = null, touched_by = ? where id = ? and board_id = ?").run(
+        scope.ownerId,
+        row.id,
+        scope.boardId,
+      );
+    }
+  } else {
+    db.prepare("update items set done = ?, touched_by = ? where id = ? and board_id = ?").run(
+      done ? 1 : 0,
+      scope.ownerId,
+      row.id,
+      scope.boardId,
+    );
+  }
+  const after = find()!;
+  return {
+    id: after.id,
+    text: after.text,
+    recurrence: after.recurrence && after.recurrence !== "none" ? after.recurrence : null,
+    completedOn: after.completed_on,
+    done: after.done === 1,
+  };
+}
