@@ -60,6 +60,7 @@ export default function Column({
   // the dropped block on release).
   const mutedId = (id: string) => activeId != null && id !== activeId && selection.has(id);
   const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false); // the inline title input, opened by the header "+"
 
   // Daily tasks done *today* count as done; tomorrow they're open again.
   const open = items.filter((i) => !effectiveDone(i));
@@ -71,8 +72,12 @@ export default function Column({
   // A half-typed thought is never silently thrown away.
   function commitDraft() {
     const text = draft.trim();
-    if (!text) return;
+    if (!text) {
+      setAdding(false);
+      return;
+    }
     setDraft("");
+    setAdding(false);
     onAdd(list.id, text); // optimistic insert lives in Board (owns the card lists)
   }
 
@@ -139,13 +144,21 @@ export default function Column({
             {!renaming && (
               <div className="card-actions flex items-center gap-0.5">
                 <button
+                  onClick={() => setAdding(true)}
+                  aria-label={`Add a card to ${list.label}`}
+                  title="Add a card"
+                  className="wm-colctl text-[14px]"
+                >
+                  +
+                </button>
+                <button
                   onClick={() => {
                     setDraftLabel(list.label);
                     setRenaming(true);
                   }}
                   aria-label="Rename column"
                   title="Rename column"
-                  className="rounded px-1 py-0.5 text-[11px] text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-mid)]"
+                  className="wm-colctl text-[11px] hover:text-[var(--text-mid)]"
                 >
                   ✎
                 </button>
@@ -154,7 +167,7 @@ export default function Column({
                     onClick={() => onDelete(list.id)}
                     aria-label="Delete column"
                     title="Delete column"
-                    className="rounded px-1 py-0.5 text-[11px] text-[var(--text-lo)] hover:bg-[var(--surface-2)] hover:text-[var(--text-hi)]"
+                    className="wm-colctl text-[11px] hover:text-[var(--text-hi)]"
                   >
                     ✕
                   </button>
@@ -171,18 +184,26 @@ export default function Column({
         )}
       </div>
 
-      {/* A line of the column until you use it: no box at rest, the field ground
-          and hairline only on hover/focus. Always present, so touch can reach it. */}
-      <form onSubmit={submit} className="wm-addline-wrap mb-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitDraft}
-          placeholder="Add a card"
-          aria-label={`Add a card to ${list.label}`}
-          className="wm-addline"
-        />
-      </form>
+      {adding && (
+        <form onSubmit={submit} className="mb-2">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Escape") {
+                setDraft("");
+                setAdding(false);
+              }
+            }}
+            onBlur={commitDraft}
+            placeholder="Add a card"
+            aria-label={`Add a card to ${list.label}`}
+            className="wm-addline"
+          />
+        </form>
+      )}
 
       <div className="flex flex-1 flex-col gap-1.5">
         {/* Cards hold still under a drag (stillStrategy); the drop point is the line. */}

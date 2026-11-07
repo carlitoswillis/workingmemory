@@ -169,8 +169,23 @@ body {
   padding: 0;
   justify-content: center;
 }
-/* A column's capture line: an ordinary input that looks like a line of the column
-   until you use it. Always there (touch has no hover), never a box at rest. */
+/* The header's per-column controls (+, rename, delete): one 28px target, no box at rest. */
+.wm-colctl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  line-height: 1;
+  color: var(--text-lo);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.wm-colctl:hover {
+  background: var(--surface-2);
+}
+/* The inline title input a column's "+" opens: a line of the column, field ground
+   and hairline on focus. */
 .wm-addline {
   width: 100%;
   height: 30px;
@@ -193,21 +208,6 @@ body {
   background: var(--field);
   border-color: var(--veil);
 }
-.wm-addline-wrap {
-  position: relative;
-}
-.wm-addline-wrap::before {
-  content: "+";
-  position: absolute;
-  left: 13px; /* centred on the cards' check column */
-  top: 50%;
-  transform: translateY(-52%);
-  font-size: 15px;
-  line-height: 1;
-  color: var(--text-lo);
-  pointer-events: none;
-}
-
 /* Card actions: visible by default (so they work on touch); on devices that
    truly hover, reveal them on hover to stay low-key. */
 .card-actions {

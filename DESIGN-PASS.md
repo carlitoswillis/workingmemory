@@ -54,9 +54,12 @@ as a card goes stale. Every other surface steps back so that signal can be read.
 - Recency edge: `color-mix()` between `--edge-stale` and `--edge-fresh`; stale cards
   show no edge at all (it equals the card's hairline), fresh cards a warm 2px edge.
   Light and dark tuned separately. Removes the component colour literal.
-- Column capture: the boxed field becomes a quiet `+ Add a card` line under the
-  header. Same input, same Enter/blur-commits behaviour, always visible (touch-safe);
-  it gains its field ground and hairline only on focus.
+- Column capture (revised, owner decision 2026-11-07): the per-column `+ Add a card`
+  line is dropped. Capture is the global Capture button (`c`) plus a small `+` in each
+  column header, in the same `.card-actions` group as rename/delete (hidden until hover
+  or focus on fine pointers, always visible on touch; shared 28px `.wm-colctl` target).
+  Clicking `+` opens the same inline title input in that column; Enter or click-away
+  creates the card, Escape cancels, an empty blur just closes it.
 - Column drag handle: hidden at rest on fine pointers, shown on hover/focus, always
   visible on touch (the existing `.card-actions` pattern).
 - `Done · 2` becomes `Done 2` in `.wm-label`; the empty-column line becomes the
