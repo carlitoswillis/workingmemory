@@ -90,15 +90,17 @@ export default function Column({
         isNow ? "col-now" : "border-[var(--veil-soft)] bg-[var(--wash)]"
       }`}
     >
-      <div className="group/col mb-3 px-1.5 pt-1">
+      <div className="group group/col mb-3 px-1.5 pt-1">
         <div className="flex items-baseline justify-between gap-1">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {/* The handle hangs in the column's left padding, so the title and its hint
+              share one left edge whether or not the handle is showing. */}
+          <div className="relative flex min-w-0 flex-1 items-center">
             {dragHandleProps && (
               <button
                 {...dragHandleProps}
                 aria-label="Drag to reorder columns"
                 title="Drag to reorder"
-                className="cursor-grab touch-none leading-none text-[var(--text-lo)] hover:text-[var(--text-mid)] active:cursor-grabbing"
+                className="card-actions absolute -left-4 top-1/2 -translate-y-1/2 cursor-grab touch-none px-0.5 leading-none text-[var(--text-lo)] hover:text-[var(--text-mid)] active:cursor-grabbing"
               >
                 ⠿
               </button>
@@ -135,7 +137,7 @@ export default function Column({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {!renaming && (
-              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/col:opacity-100 focus-within:opacity-100">
+              <div className="card-actions flex items-center gap-0.5">
                 <button
                   onClick={() => {
                     setDraftLabel(list.label);
@@ -169,13 +171,16 @@ export default function Column({
         )}
       </div>
 
-      <form onSubmit={submit} className="mb-3">
+      {/* A line of the column until you use it: no box at rest, the field ground
+          and hairline only on hover/focus. Always present, so touch can reach it. */}
+      <form onSubmit={submit} className="wm-addline-wrap mb-2">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commitDraft}
-          placeholder="Capture a thought…"
-          className="w-full rounded-xl border border-[var(--veil-soft)] bg-[var(--field)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder:text-[var(--text-lo)] transition-colors focus:border-[var(--now)] focus:outline-none"
+          placeholder="Add a card"
+          aria-label={`Add a card to ${list.label}`}
+          className="wm-addline"
         />
       </form>
 
@@ -213,16 +218,16 @@ export default function Column({
         )}
 
         {open.length === 0 && done.length === 0 && (
-          <p className="px-1.5 pt-2 font-display text-xs italic text-[var(--text-lo)]">
-            nothing here yet
+          <p className="px-2 pt-1 text-[11px] leading-4 text-[var(--text-lo)]">
+            Nothing here yet.
           </p>
         )}
       </div>
 
       {done.length > 0 && (
         <div className="mt-4 border-t border-[var(--veil-soft)] pt-3">
-          <p className="mb-2 px-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
-            Done · {done.length}
+          <p className="wm-label mb-2 flex gap-2 px-1.5">
+            Done <span className="font-normal tabular-nums">{done.length}</span>
           </p>
           <div className="flex flex-col gap-1.5">
             {done.map((item) => (

@@ -27,7 +27,7 @@ export default function ThemeToggle() {
       onClick={toggle}
       title={light ? "Switch to dark" : "Switch to light"}
       aria-label={light ? "Switch to dark theme" : "Switch to light theme"}
-      className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-lg border border-[var(--veil-soft)] text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)]"
+      className="wm-pill wm-pill--icon shrink-0"
     >
       {light ? (
         // sun

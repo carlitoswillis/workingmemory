@@ -151,13 +151,17 @@ export default function SwipeToArchive({
     <div ref={wrapRef} className="relative overflow-hidden rounded-lg">
       <div
         aria-hidden={!open}
-        className={`absolute inset-y-0 right-0 flex ${open ? "" : "pointer-events-none"}`}
+        // At rest the layer is not painted at all: a card fading in (`card-in`) would
+        // otherwise show the Archive button through itself.
+        className={`absolute inset-y-0 right-0 flex ${open ? "" : "pointer-events-none"} ${
+          offset === 0 && !open && !archiving ? "invisible" : ""
+        }`}
         style={{ width: Math.max(OPEN_W, -offset) }}
       >
         <button
           tabIndex={open ? 0 : -1}
           onClick={archive}
-          className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg border bg-[var(--surface-2)] text-[10px] uppercase tracking-[0.14em] transition-colors ${
+          className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg border bg-[var(--surface-2)] text-[11px] font-[590] tracking-[0.02em] transition-colors ${
             armed || open
               ? "border-[var(--past)] text-[var(--past)]"
               : "border-[var(--veil-soft)] text-[var(--text-lo)]"

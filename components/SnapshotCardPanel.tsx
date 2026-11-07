@@ -47,7 +47,7 @@ export default function SnapshotCardPanel({
       <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
+        className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 wm-float"
       >
         {parent && (
           <button

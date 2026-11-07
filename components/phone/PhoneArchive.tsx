@@ -26,14 +26,17 @@ import { usePhoneBoardData } from "./phone-data";
 // board id and only read back for that same board, so nothing crosses a board.
 let cached: { boardId: string | null; items: Item[] } | null = null;
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
+// The year only when it isn't this one.
+const fmt = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" as const }),
     hour: "numeric",
     minute: "2-digit",
   });
+};
 
 export default function PhoneArchive() {
   const { close, open } = usePhoneUI();

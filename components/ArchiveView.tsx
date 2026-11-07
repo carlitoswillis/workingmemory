@@ -10,14 +10,17 @@ import type { Item } from "@/lib/types";
 // its open state, loads archived items on open via a server action, and restores a
 // row optimistically (unarchiveItemAction revalidates "/" so the board picks it back
 // up; the restore is itself logged to history by a DB trigger — see lib/schema.ts).
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
+// The year only when it isn't this one: "Nov 7, 11:06 AM", "Dec 30, 2025, 9:12 PM".
+const fmt = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" as const }),
     hour: "numeric",
     minute: "2-digit",
   });
+};
 
 export default function ArchiveView({
   boardId,
@@ -62,7 +65,7 @@ export default function ArchiveView({
       <button
         onClick={openView}
         title="Browse & restore archived items"
-        className="flex items-center gap-1.5 rounded-lg border border-[var(--veil-soft)] px-3 py-1.5 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--text-lo)] hover:text-[var(--text-hi)]"
+        className="wm-pill"
       >
         Archive
       </button>
@@ -72,7 +75,7 @@ export default function ArchiveView({
           <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]" />
           <aside
             onClick={(e) => e.stopPropagation()}
-            className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
+            className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 wm-float"
           >
             <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -120,13 +123,13 @@ export default function ArchiveView({
                 Nothing archived matches that.
               </p>
             ) : (
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col border-t border-[var(--veil-soft)]">
                 {shown.map((it) => {
                   const preview = it.details.trim();
                   return (
                     <li
                       key={it.id}
-                      className="rounded-lg border border-[var(--veil-soft)] bg-[var(--surface)] p-3"
+                      className="border-b border-[var(--veil-soft)] px-0.5 py-3"
                     >
                       <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">
@@ -138,8 +141,8 @@ export default function ArchiveView({
                               {preview}
                             </p>
                           )}
-                          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-lo)]">
-                            <span className="rounded-full border border-[var(--veil)] px-1.5 py-[1px]">
+                          <p className="mt-1 flex flex-wrap items-center gap-x-2.5 text-[11px] text-[var(--text-lo)]">
+                            <span className="text-[var(--text-mid)]">
                               {listLabels[it.list] ?? it.list}
                             </span>
                             <span>archived {fmt(it.updated_at)}</span>
@@ -147,7 +150,7 @@ export default function ArchiveView({
                         </div>
                         <button
                           onClick={() => restore(it.id)}
-                          className="shrink-0 rounded-md border border-[var(--veil)] px-2.5 py-1 text-xs text-[var(--text-mid)] transition-colors hover:border-[var(--now)] hover:text-[var(--now)]"
+                          className="-mr-1 shrink-0 rounded-md px-2 py-1 text-xs text-[var(--text-mid)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--now)]"
                         >
                           Restore
                         </button>

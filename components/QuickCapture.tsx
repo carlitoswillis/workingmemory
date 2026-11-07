@@ -78,7 +78,7 @@ export default function QuickCapture({
       aria-label="Quick capture to Brain Dump"
     >
       <div
-        className="card-in w-full max-w-md rounded-2xl border border-[var(--veil)] bg-[var(--surface)] p-4 shadow-2xl"
+        className="card-in w-full max-w-md rounded-2xl border border-[var(--veil)] bg-[var(--surface)] p-4 wm-float"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-2.5 flex items-center gap-2 px-0.5">

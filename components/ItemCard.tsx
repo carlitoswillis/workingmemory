@@ -15,7 +15,6 @@ function recencyAmount(updatedAt: string): number {
   if (!Number.isFinite(ageHours)) return 0;
   return Math.max(0, Math.min(1, Math.exp(-ageHours / 96)));
 }
-const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
 // The card's buttons sit inside the sortable wrapper, whose dnd-kit listeners own
 // Space/Enter (start a keyboard drag) and the arrows (move it) — those still stop
@@ -117,9 +116,11 @@ export default function ItemCard({
   const subTotal = childItems?.length ?? 0;
   const subDone = childItems?.filter((c) => effectiveDone(c)).length ?? 0;
 
-  // Signature: a muted warm left edge that tracks recency (no glow; dim when done).
+  // Signature: a warm left edge that tracks recency (no glow; dim when done). It is
+  // mixed between two theme tokens, so a stale card's edge IS its hairline (no edge
+  // at all) in both themes, and only what you touched lately carries warmth.
   const amt = recencyAmount(item.updated_at) * (doneLocal ? 0.18 : 1);
-  const edge = `rgb(${lerp(35, 176, amt)}, ${lerp(43, 138, amt)}, ${lerp(69, 92, amt)})`;
+  const edge = `color-mix(in srgb, var(--edge-fresh) ${Math.round(amt * 100)}%, var(--edge-stale))`;
 
   return (
     <SwipeToArchive id={item.id} onArchive={archive}>

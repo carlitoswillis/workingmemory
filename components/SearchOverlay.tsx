@@ -157,7 +157,7 @@ export default function SearchOverlay({
       aria-label="Search cards"
     >
       <div
-        className="card-in flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[var(--veil)] bg-[var(--surface)] shadow-2xl"
+        className="card-in flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[var(--veil)] bg-[var(--surface)] wm-float"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="p-4 pb-3">
@@ -202,7 +202,7 @@ export default function SearchOverlay({
                   return (
                     <li key={key}>
                       {head && (
-                        <p className="mb-1 mt-2 px-2.5 text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)] first:mt-0">
+                        <p className="mb-1 mt-2 px-2.5 wm-label first:mt-0">
                           {head}
                         </p>
                       )}

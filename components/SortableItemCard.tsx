@@ -62,7 +62,7 @@ export default function SortableItemCard(props: {
           aria-hidden
           className="pointer-events-none absolute inset-0 flex items-center justify-end rounded-lg border border-[var(--now)] pr-1.5"
         >
-          <span className="bg-[var(--surface-2)] px-1 text-[10px] uppercase tracking-[0.14em] leading-none text-[var(--now)]">
+          <span className="bg-[var(--surface-2)] px-1 text-[11px] font-[590] tracking-[0.02em] leading-none text-[var(--now)]">
             inside
           </span>
         </div>

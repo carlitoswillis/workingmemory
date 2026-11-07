@@ -87,7 +87,7 @@ export default function NoteColumn({ note }: { note: Item | null }) {
           type="button"
           onClick={toggle}
           aria-expanded={!collapsed}
-          className="flex min-w-0 items-start gap-1.5 rounded text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--now)]"
+          className="flex min-w-0 items-start gap-1.5 rounded text-left"
         >
           <Chevron collapsed={collapsed} />
           <span className="min-w-0">
@@ -124,14 +124,14 @@ export default function NoteColumn({ note }: { note: Item | null }) {
                 onBlur={save}
                 onKeyDown={(e) => e.stopPropagation()}
                 placeholder="Today's note… — markdown supported (carries over; start a new one each day)"
-                className="min-h-[160px] flex-1 resize-none rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-hi)] placeholder:text-[var(--text-lo)] focus:border-[var(--now)] focus:outline-none"
+                className="min-h-[160px] flex-1 resize-none rounded-lg border border-[var(--veil)] bg-[var(--field)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-hi)] placeholder:text-[var(--text-lo)] focus:border-[var(--text-lo)] focus:outline-none"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
                 title="Click to edit"
-                className="min-h-[160px] flex-1 rounded-lg border border-[var(--veil-soft)] bg-[var(--bg-0)] px-3 py-2.5 text-left transition-colors hover:border-[var(--veil)]"
+                className="min-h-[160px] flex-1 rounded-lg border border-transparent px-1.5 py-1 text-left transition-colors hover:border-[var(--veil-soft)] hover:bg-[var(--field)]"
               >
                 <Markdown source={body} />
               </button>

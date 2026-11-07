@@ -1103,13 +1103,13 @@ export default function Board({
                   />
                 )}
                 <div
-                  className="relative rounded-lg border border-[var(--veil)] bg-[var(--surface-2)] py-1.5 pl-2 pr-2 text-[13.5px] leading-snug text-[var(--text-hi)] shadow-2xl"
+                  className="relative rounded-lg border border-[var(--veil)] bg-[var(--surface-2)] py-1.5 pl-2 pr-2 text-[13.5px] leading-snug text-[var(--text-hi)] wm-float"
                   style={{ borderLeft: "2px solid var(--now)" }}
                 >
                   {activeItem.text}
                 </div>
                 {dragCount > 1 && (
-                  <span className="absolute -right-2 -top-2 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--now)] px-1 text-[11px] font-medium tabular-nums text-[var(--bg-0)] shadow-lg">
+                  <span className="absolute -right-2 -top-2 grid h-5 min-w-[20px] place-items-center rounded-full bg-[var(--now)] px-1 text-[11px] font-medium tabular-nums text-[var(--bg-0)]">
                     {dragCount}
                   </span>
                 )}
@@ -1122,7 +1122,7 @@ export default function Board({
       {/* Nobody guesses "hold to nest" — say it, but only while a card is in the air.
           Once armed it names the card, so a mis-hold is obvious before you let go. */}
       {!snapshot && activeItem && (
-        <div className="fixed bottom-20 left-1/2 z-40 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 py-2 text-xs shadow-2xl sm:bottom-5">
+        <div className="fixed bottom-20 left-1/2 z-40 max-w-[92vw] -translate-x-1/2 truncate rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 py-2 text-xs wm-float sm:bottom-5">
           {nestTargetId ? (
             <span className="text-[var(--text-mid)]">
               Release to put it inside{" "}
@@ -1143,7 +1143,7 @@ export default function Board({
       )}
 
       {!snapshot && !activeItem && selection.size > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl">
+        <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 wm-float">
           <span className="text-sm text-[var(--text-hi)]">
             <span className="font-medium tabular-nums">{selection.size}</span> selected
           </span>
@@ -1166,7 +1166,7 @@ export default function Board({
       )}
 
       {!snapshot && selection.size === 0 && undoHint && (
-        <div className="fixed bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl sm:bottom-5">
+        <div className="fixed bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 wm-float sm:bottom-5">
           <span className="text-sm text-[var(--text-mid)]">{undoHint}</span>
           <button
             onClick={performUndo}
@@ -1178,7 +1178,7 @@ export default function Board({
       )}
 
       {notice && (
-        <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 shadow-2xl sm:bottom-5">
+        <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] py-2 pl-4 pr-2 wm-float sm:bottom-5">
           <span className="text-sm text-[var(--text-mid)]">{notice}</span>
           <button
             onClick={() => setNotice(null)}
@@ -1195,7 +1195,7 @@ export default function Board({
             onClick={() => setSearchOpen(true)}
             title="Search this board · /"
             aria-label="Search this board"
-            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
+            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] px-4 text-sm text-[var(--text-mid)] wm-float transition-colors hover:text-[var(--text-hi)]"
           >
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
               <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -1210,7 +1210,7 @@ export default function Board({
             onClick={() => setCaptureOpen(true)}
             title="Quick capture to Brain Dump · c"
             aria-label="Quick capture to Brain Dump"
-            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] pl-3.5 pr-4 text-sm text-[var(--text-mid)] shadow-2xl transition-colors hover:text-[var(--text-hi)]"
+            className="flex h-11 items-center gap-2 rounded-full border border-[var(--veil)] bg-[var(--bg-1)] pl-3.5 pr-4 text-sm text-[var(--text-mid)] wm-float transition-colors hover:text-[var(--text-hi)]"
           >
             <span className="text-[var(--now)]" aria-hidden>
               ＋

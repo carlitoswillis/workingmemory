@@ -82,8 +82,7 @@ export default function BoardSwitcher({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs"
-        style={{ borderColor: "var(--veil)", background: "var(--surface)", color: "var(--text-mid)" }}
+        className="wm-pill"
         title="Switch or manage boards"
       >
         <span className="max-w-[9rem] truncate sm:max-w-[12rem]">{boardName}</span>
@@ -94,10 +93,10 @@ export default function BoardSwitcher({
 
       {open && (
         <div
-          className="absolute left-0 z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl border p-2 shadow-2xl sm:left-auto sm:right-0"
+          className="absolute left-0 z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] rounded-xl border p-2 wm-float sm:left-auto sm:right-0"
           style={{ borderColor: "var(--veil)", background: "var(--bg-1)" }}
         >
-          <p className="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+          <p className="px-2 pb-1 pt-1 wm-label">
             Your boards
           </p>
           <ul className="flex flex-col">
@@ -171,7 +170,7 @@ export default function BoardSwitcher({
           {/* Current board management */}
           <div className="px-1">
             <div className="flex items-center justify-between gap-2 px-1">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+              <p className="wm-label">
                 This board
               </p>
               {isOwner && !renaming && (
@@ -217,7 +216,7 @@ export default function BoardSwitcher({
                     @{m.username}
                     {m.userId === me && <span className="text-[var(--text-lo)]"> · you</span>}
                     {m.role === "owner" && (
-                      <span className="ml-1 text-[10px] uppercase tracking-wide text-[var(--text-lo)]">
+                      <span className="ml-1 text-[11px] text-[var(--text-lo)]">
                         owner
                       </span>
                     )}

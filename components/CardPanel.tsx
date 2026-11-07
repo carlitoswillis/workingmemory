@@ -462,7 +462,7 @@ export default function CardPanel({
         // to mean this box and not one of the other `card-in` overlays.
         data-panel="card"
         onClick={(e) => e.stopPropagation()}
-        className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 shadow-2xl"
+        className="card-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-[var(--veil)] bg-[var(--bg-1)] p-6 wm-float"
       >
         {/* Back arrow (left) + close (right). Back steps to the parent card's panel, or
             to the board for a top-level card — the same move as a phone swipe-back or the
@@ -534,7 +534,7 @@ export default function CardPanel({
 
         {/* Details — rendered markdown at rest, raw textarea when editing */}
         <div className="mt-4 mb-1 flex items-baseline justify-between px-1">
-          <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+          <label className="wm-label">
             Details
           </label>
           {details.trim() && (
@@ -587,7 +587,7 @@ export default function CardPanel({
         {/* Sub-cards: each is a real item (own panel + history). Click one to dive in. */}
         <div className="mt-5">
           <div className="mb-1 flex items-baseline justify-between px-1">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+            <label className="wm-label">
               Sub-cards
             </label>
             {childItems.length > 0 && (
@@ -636,7 +636,7 @@ export default function CardPanel({
 
         {/* List + archive */}
         <div className="mt-4 flex items-center gap-2">
-          <label className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">List</label>
+          <label className="wm-label w-12 shrink-0">List</label>
           <select
             value={listValue}
             onChange={(e) => {
@@ -677,7 +677,7 @@ export default function CardPanel({
         {item.list !== "note" && (
           <div className="mt-3">
             <div className="flex items-center gap-2">
-              <label className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]">
+              <label className="wm-label w-12 shrink-0">
                 Inside
               </label>
               <select
@@ -717,7 +717,7 @@ export default function CardPanel({
           <div className="mt-3">
             <div className="flex items-center gap-2">
               <label
-                className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--text-lo)]"
+                className="wm-label w-12 shrink-0"
                 htmlFor="wm-opens"
               >
                 Opens
@@ -748,7 +748,7 @@ export default function CardPanel({
               </select>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-2 px-1">
+            <div className="mt-2 flex flex-wrap items-center gap-2 pl-14">
               {linkedTo ? (
                 <>
                   {linkedMeta && (
@@ -814,14 +814,8 @@ export default function CardPanel({
             done until its weekday comes round again — the reset is derived from
             completed_on, so nothing has to run at midnight (lib/recurrence.ts). */}
         <div className="mt-3 flex items-center gap-2">
-          <span
-            aria-hidden
-            className={repeats ? "text-[var(--now)]" : "text-[var(--text-lo)]"}
-          >
-            ↻
-          </span>
-          <label className="sr-only" htmlFor="wm-repeat">
-            Repeat
+          <label className="wm-label w-12 shrink-0" htmlFor="wm-repeat">
+            Repeats
           </label>
           <select
             id="wm-repeat"
@@ -955,7 +949,7 @@ export default function CardPanel({
       <DragOverlay>
         {activeKid ? (
           <div
-            className={`rounded-lg border bg-[var(--surface-2)] py-1.5 pl-2 pr-2 text-[13.5px] leading-snug shadow-2xl ${
+            className={`rounded-lg border bg-[var(--surface-2)] py-1.5 pl-2 pr-2 text-[13.5px] leading-snug wm-float ${
               dragOut ? "border-[var(--now)] text-[var(--now)]" : "border-[var(--veil)] text-[var(--text-hi)]"
             }`}
             style={{ borderLeft: "2px solid var(--now)" }}

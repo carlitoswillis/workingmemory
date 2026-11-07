@@ -100,16 +100,7 @@ export default function BoardScreen({
             />
           )}
           {username && (
-            <a
-              href="/login"
-              className="rounded-full border px-3 py-1 text-xs"
-              style={{
-                borderColor: "var(--veil)",
-                background: "var(--surface)",
-                color: "var(--text-lo)",
-              }}
-              title="Your account"
-            >
+            <a href="/login" className="wm-pill" title="Your account">
               @{username}
             </a>
           )}

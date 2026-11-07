@@ -32,6 +32,13 @@
   --now-tint: rgba(227, 168, 102, 0.22); /* ::selection, scrubber ticks */
   --past-wash: rgba(110, 139, 196, 0.08); /* time-travel surfaces */
   --past-line: rgba(110, 139, 196, 0.4);
+  /* The recency ramp's two ends (ItemCard mixes between them): a card you touched
+     today wears a warm edge; a stale one's edge is its own hairline, i.e. none. */
+  --edge-fresh: #b0895c;
+  --edge-stale: var(--veil-soft);
+  /* One matte shadow for everything that floats (FABs, toasts, drawers, popovers):
+     a short soft drop, never a halo. */
+  --float: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
 
   /* ── The phone app's shared ladder ──────────────────────────────────────
      Declared on :root, NOT on [data-shell="phone"], because Vaul portals every
@@ -83,6 +90,9 @@ html[data-theme="light"] {
   --now-tint: rgba(160, 106, 36, 0.22);
   --past-wash: rgba(77, 107, 168, 0.08);
   --past-line: rgba(77, 107, 168, 0.4);
+  --edge-fresh: #b98443;
+  --edge-stale: var(--veil-soft);
+  --float: 0 1px 2px rgba(60, 52, 30, 0.08), 0 10px 24px -16px rgba(60, 52, 30, 0.28);
   color-scheme: light;
 }
 
@@ -114,6 +124,88 @@ body {
 .col-now {
   background: var(--now-wash);
   border-color: var(--now-line);
+}
+
+/* ── Board-wide primitives (desktop) ──────────────────────────────────────
+   One label voice: 11px, 590, sentence case. Tracked-out caps at this size are the
+   loudest quiet thing on a page, and the phone shell already retired them. */
+.wm-label {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 590;
+  letter-spacing: 0.02em;
+  color: var(--text-lo);
+}
+/* Anything that floats over the board: a hairline and a short matte drop. */
+.wm-float {
+  box-shadow: var(--float);
+}
+/* One keyboard ring on the desktop, in text colour: amber is spent on "now". */
+[data-shell="desktop"] :focus-visible {
+  outline: 2px solid var(--text-mid);
+  outline-offset: 2px;
+}
+/* The header's controls: one 28px hairline pill, whatever they do. */
+.wm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--veil-soft);
+  background: transparent;
+  color: var(--text-mid);
+  font-size: 12px;
+  line-height: 1;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.wm-pill:hover {
+  border-color: var(--veil);
+  color: var(--text-hi);
+}
+.wm-pill--icon {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+/* A column's capture line: an ordinary input that looks like a line of the column
+   until you use it. Always there (touch has no hover), never a box at rest. */
+.wm-addline {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 33px; /* the cards' title edge: 2px edge + 8px pad + 15px check + 8px gap */
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-hi);
+  font-size: 13.5px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.wm-addline::placeholder {
+  color: var(--text-lo);
+}
+.wm-addline:hover {
+  background: var(--field);
+}
+.wm-addline:focus {
+  outline: none;
+  background: var(--field);
+  border-color: var(--veil);
+}
+.wm-addline-wrap {
+  position: relative;
+}
+.wm-addline-wrap::before {
+  content: "+";
+  position: absolute;
+  left: 13px; /* centred on the cards' check column */
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-lo);
+  pointer-events: none;
 }
 
 /* Card actions: visible by default (so they work on touch); on devices that
@@ -325,7 +417,7 @@ body {
 }
 .wm-ruler__input:focus-visible,
 .wm-ruler__tap:focus-visible {
-  outline: 2px solid var(--now);
+  outline: 2px solid var(--text-mid);
   outline-offset: 2px;
 }
 
@@ -801,6 +893,14 @@ html:has(.wm-sheet) [data-shell="phone"] {
 .phone-section {
   padding: 6px 0 10px;
 }
+/* The ruler's 44px band already leaves 16px of air under its hairline; the first
+   section does not add its own on top of it. */
+.phone-scroll > .phone-section:first-child {
+  padding-top: 0;
+}
+.phone-scroll > .phone-section:first-child .phone-section__head {
+  padding-top: 4px;
+}
 .phone-section__head,
 .phone-section__toggle {
   display: flex;
@@ -947,7 +1047,7 @@ html:has(.wm-sheet) [data-shell="phone"] {
 .phone-check__tick {
   stroke-dasharray: 14;
   stroke-dashoffset: 9;
-  opacity: 0.34;
+  opacity: 0;
   transition:
     stroke-dashoffset 140ms cubic-bezier(0.2, 0, 0.2, 1),
     opacity 140ms linear;
