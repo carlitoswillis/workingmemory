@@ -19,3 +19,4 @@ npm-debug.log*
 
 # local AI-assistant session state (machine-specific, not project docs)
 /.claude/
+screens/
