@@ -79,7 +79,9 @@ async function waitForServer(url, timeoutMs = 60_000) {
 let server = null;
 let dataDir = null;
 if (!EXTERNAL) {
-  if (!existsSync(path.join(REPO_ROOT, ".next", "BUILD_ID"))) {
+  // Always rebuild unless told not to: a stale .next quietly tests old code
+  // (the guard ran against a September build for weeks before this was caught).
+  if (!existsSync(path.join(REPO_ROOT, ".next", "BUILD_ID")) || !process.env.PHONE_FLOWS_SKIP_BUILD) {
     const b = spawnSync("npx", ["next", "build"], { cwd: REPO_ROOT, stdio: "inherit" });
     if (b.status !== 0) throw new Error("next build failed");
   }
@@ -435,7 +437,7 @@ try {
 
   await page.locator(".phone-tab", { hasText: "More" }).click();
   await page.waitForSelector(".wm-sheet--ledger");
-  await page.locator(".wm-ph-row", { hasText: "Time travel" }).click();
+  await page.locator(".wm-ph-row", { hasText: "As it was" }).click();
   await page.waitForSelector(".wm-sheet--time");
   await page.waitForTimeout(500);
 
@@ -495,7 +497,7 @@ try {
   ok("no 4xx/5xx on the phone path", httpErrors.length === 0, httpErrors.join(" | "));
   await context.close();
 } catch (e) {
-  ok("the phone flow runs end to end", false, String(e.message ?? e).split("\n")[0]);
+  ok("the phone flow runs end to end", false, String(e.message ?? e).split("\n").filter((l) => l.trim()).slice(0, 3).join(" · "));
 }
 
 // ── desktop, same board, same actions ────────────────────────────────────────
@@ -510,10 +512,17 @@ try {
   await page.waitForTimeout(600);
 
   const MARK = `deskcheck-${Date.now().toString(36)}`;
-  const capture = page
-    .locator('[data-shell="desktop"] input[placeholder="Capture a thought…"]')
+  // The column's inline input opens from the header "+" (hidden until hover on
+  // pointer devices), so hover the first column header, press "+", then type.
+  const firstPlus = page
+    .locator('[data-shell="desktop"] button[aria-label^="Add a card to"]')
     .first();
-  await capture.click();
+  await firstPlus.hover();
+  await firstPlus.click({ force: true });
+  const capture = page
+    .locator('[data-shell="desktop"] input[placeholder="Add a card"]')
+    .first();
+  await capture.waitFor();
   await capture.fill(MARK);
   await capture.press("Enter");
   await page.waitForTimeout(1500);
@@ -663,7 +672,7 @@ try {
   ok("no page errors on the desktop path", pageErrors.length === 0, pageErrors.join(" | "));
   await context.close();
 } catch (e) {
-  ok("the desktop flow runs end to end", false, String(e.message ?? e).split("\n")[0]);
+  ok("the desktop flow runs end to end", false, String(e.message ?? e).split("\n").filter((l) => l.trim()).slice(0, 3).join(" · "));
 }
 
 await browser.close();
