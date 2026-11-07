@@ -379,7 +379,7 @@ card({
 
 // ---- Weekly review (sentinel list, ~120 words) ---------------------------------
 
-const REVIEW_BODY = `## Week of September 4
+const REVIEW_BODY = `## This week
 
 The board tilted toward Formation this week — you finished assessment 3 and kept the cohort thread moving, while Job search sat in Focus without a new card landing on it. Gym is on a six-day run and Shower right behind it at four; Pull and the new Formation-task habit haven't caught yet, so tomorrow's a fair day to restart one of them. Waiting still holds Interview prep and openwiki from a while back, both worth a look before they go stale — openwiki in particular has been parked since the LaunchAgent came off. Brain Dump caught two quick things, including a note to fix the commit identity once and for all. Reach out to network and Love letter to Mari are both still open; neither needs research, just time.`;
 
