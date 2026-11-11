@@ -231,3 +231,14 @@ export function markDoneByName(
   const item = completeItem(db, scope, r.id, date, true)!;
   return { marked: true, item, date };
 }
+
+// The human line the Shortcut shows in a notification.
+export function doneMessage(res: DoneByName, asked: string): string {
+  if (res.marked) {
+    const [, m, d] = res.date.split("-").map(Number);
+    return `${res.item.text} marked for ${m}/${d}`;
+  }
+  if (res.reason === "already done today") return `${res.item.text} already done today`;
+  if (res.reason === "ambiguous") return `Several items match ${asked.trim()}`;
+  return `No item named ${asked.trim()}`;
+}

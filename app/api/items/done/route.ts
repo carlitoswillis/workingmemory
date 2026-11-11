@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { brainBearerOk, markDoneByName, resolveOwnerBoard } from "@/lib/bridge";
+import { brainBearerOk, doneMessage, markDoneByName, resolveOwnerBoard } from "@/lib/bridge";
 import { getMainDb } from "@/lib/db";
 import { pokeBoard } from "@/lib/realtime";
 
@@ -19,20 +19,20 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ marked: false, error: "Body must be JSON" }, { status: 400 });
+    return NextResponse.json({ marked: false, error: "Body must be JSON", message: "Body must be JSON" }, { status: 400 });
   }
   if (typeof body.item !== "string" || !body.item.trim()) {
-    return NextResponse.json({ marked: false, error: "Need {item: string}" }, { status: 400 });
+    return NextResponse.json({ marked: false, error: "Need {item: string}", message: "Need an item name" }, { status: 400 });
   }
 
   const db = getMainDb();
   const scope = resolveOwnerBoard(db);
-  if (!scope) return NextResponse.json({ marked: false, reason: "no owner board" }, { status: 404 });
+  if (!scope) return NextResponse.json({ marked: false, reason: "no owner board", message: "No owner board" }, { status: 404 });
   const res = markDoneByName(db, scope, body.item);
   if (res.marked) {
     revalidatePath("/", "layout");
     pokeBoard(scope.boardId);
   }
   const status = !res.marked && (res.reason === "not found" || res.reason === "ambiguous") ? 404 : 200;
-  return NextResponse.json(res, { status });
+  return NextResponse.json({ ...res, message: doneMessage(res, body.item) }, { status });
 }

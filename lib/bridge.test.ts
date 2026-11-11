@@ -11,7 +11,7 @@
 
 import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
-import { brainBearerOk, completeItem, markDoneByName, resolveOwnerBoard, todayLA } from "./bridge.ts";
+import { brainBearerOk, completeItem, doneMessage, markDoneByName, resolveOwnerBoard, todayLA } from "./bridge.ts";
 import { DEFAULT_LISTS } from "./lists.ts";
 
 let failures = 0;
@@ -262,8 +262,12 @@ function withEnv<T>(env: Partial<Record<(typeof ENV_KEYS)[number], string>>, fn:
   ok("first call marks", [first.marked, (first as { date: string }).date], [true, "2026-11-10"]);
   const second = markDoneByName(db, scope, "Gym", t);
   ok("second call is already done", [second.marked, (second as { reason?: string }).reason], [false, "already done today"]);
+  ok("mark message", doneMessage(first, "gym"), "Gym marked for 11/10");
+  ok("repeat message", doneMessage(second, "gym"), "Gym already done today");
   ok("exactly one history event", (db.prepare("select count(*) as c from item_events where item_id = 'g1' and field = 'completed_on'").get() as { c: number }).c, 1);
   ok("unknown item", (markDoneByName(db, scope, "Nope", t) as { reason?: string }).reason, "not found");
+  ok("not found message", doneMessage(markDoneByName(db, scope, "Nope", t), "Nope"), "No item named Nope");
+  ok("ambiguous message", doneMessage(markDoneByName(db, scope, "Read", t), "Read"), "Several items match Read");
   ok("ambiguous substring", (markDoneByName(db, scope, "Read", t) as { reason?: string }).reason, "ambiguous");
 }
 
