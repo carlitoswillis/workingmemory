@@ -180,3 +180,54 @@ export function completeItem(
     done: after.done === 1,
   };
 }
+
+// "Today" on the owner's clock, as YYYY-MM-DD.
+export function todayLA(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+export type DoneByName =
+  | { marked: true; item: CompletedItem; date: string }
+  | { marked: false; reason: "already done today"; item: CompletedItem; date: string }
+  | { marked: false; reason: "not found" | "ambiguous"; date: string };
+
+// Idempotent "mark this item done today" by title (POST /api/items/done), for
+// callers that only know the name (an iOS Shortcut). Exact case-insensitive
+// title wins when unique; otherwise a unique substring. Active, recurring
+// items compare completed_on to today; one-offs compare done. Already done =
+// no write at all, so no spurious history.
+export function markDoneByName(
+  db: Database.Database,
+  scope: OwnerBoard,
+  name: string,
+  now: Date = new Date(),
+): DoneByName {
+  const date = todayLA(now);
+  const n = name.trim().toLowerCase();
+  type Row = { id: string; text: string; recurrence: string; completed_on: string | null; done: number };
+  const rows = db
+    .prepare("select id, text, recurrence, completed_on, done from items where board_id = ? and archived = 0 and text is not null")
+    .all(scope.boardId) as Row[];
+  const exact = rows.filter((r) => r.text.trim().toLowerCase() === n);
+  const hits = exact.length ? exact : rows.filter((r) => r.text.toLowerCase().includes(n));
+  if (!n || hits.length === 0) return { marked: false, reason: "not found", date };
+  if (hits.length > 1) return { marked: false, reason: "ambiguous", date };
+  const r = hits[0];
+  const recurring = !!r.recurrence && r.recurrence !== "none";
+  const already = recurring ? r.completed_on === date : r.done === 1;
+  if (already) {
+    return {
+      marked: false,
+      reason: "already done today",
+      date,
+      item: { id: r.id, text: r.text, recurrence: recurring ? r.recurrence : null, completedOn: r.completed_on, done: r.done === 1 },
+    };
+  }
+  const item = completeItem(db, scope, r.id, date, true)!;
+  return { marked: true, item, date };
+}

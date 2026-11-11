@@ -11,7 +11,7 @@
 
 import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
-import { brainBearerOk, completeItem, resolveOwnerBoard } from "./bridge.ts";
+import { brainBearerOk, completeItem, markDoneByName, resolveOwnerBoard, todayLA } from "./bridge.ts";
 import { DEFAULT_LISTS } from "./lists.ts";
 
 let failures = 0;
@@ -245,6 +245,26 @@ function withEnv<T>(env: Partial<Record<(typeof ENV_KEYS)[number], string>>, fn:
     ok("wrong bearer is 401", brainBearerOk(req("Bearer nope")), false);
     ok("missing bearer is 401", brainBearerOk(req()), false);
   });
+}
+
+// markDoneByName — idempotent by-name check-off (POST /api/items/done).
+{
+  const db = freshDb();
+  seed(db);
+  addItem(db, "g1", "Gym", "bHome", "2026-09-04T00:00:00.000Z");
+  db.prepare("update items set recurrence = 'daily' where id = 'g1'").run();
+  addItem(db, "a1", "Read A", "bHome", "2026-09-04T00:00:00.000Z");
+  addItem(db, "a2", "Read B", "bHome", "2026-09-04T00:00:00.000Z");
+  const scope = { ownerId: "u1", boardId: "bHome", boardName: "Personal" };
+  const t = new Date("2026-11-11T03:30:00Z"); // 19:30 on 11/10 in LA
+  ok("today is computed in LA", todayLA(t), "2026-11-10");
+  const first = markDoneByName(db, scope, "gym", t);
+  ok("first call marks", [first.marked, (first as { date: string }).date], [true, "2026-11-10"]);
+  const second = markDoneByName(db, scope, "Gym", t);
+  ok("second call is already done", [second.marked, (second as { reason?: string }).reason], [false, "already done today"]);
+  ok("exactly one history event", (db.prepare("select count(*) as c from item_events where item_id = 'g1' and field = 'completed_on'").get() as { c: number }).c, 1);
+  ok("unknown item", (markDoneByName(db, scope, "Nope", t) as { reason?: string }).reason, "not found");
+  ok("ambiguous substring", (markDoneByName(db, scope, "Read", t) as { reason?: string }).reason, "ambiguous");
 }
 
 console.log(failures === 0 ? "\nbridge: all passed" : `\nbridge: ${failures} FAILED`);
