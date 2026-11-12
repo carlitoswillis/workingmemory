@@ -3,6 +3,8 @@ import type Database from "better-sqlite3";
 import type { NextRequest } from "next/server";
 import { checkOffPatch } from "./completion.ts";
 import { boardToday } from "./clock.ts";
+import { effectiveDone } from "./recurrence.ts";
+import { isSentinelList } from "./lists.ts";
 // The brain bridge: scoped access for the sibling second-brain app
 // (~/workspace/AIA2ndBrain/brain). BRAIN_TOKEN authorizes exactly two things —
 // reading the owner's board context (GET /api/context) and pushing single
@@ -194,17 +196,20 @@ export function markDoneByName(
 ): DoneByName {
   const date = boardToday(now);
   const n = name.trim().toLowerCase();
-  type Row = { id: string; text: string; recurrence: string; completed_on: string | null; done: number };
-  const rows = db
-    .prepare("select id, text, recurrence, completed_on, done from items where board_id = ? and archived = 0 and text is not null")
-    .all(scope.boardId) as Row[];
+  type Row = { id: string; text: string; list: string; recurrence: string; completed_on: string | null; done: number };
+  // The note / review sentinel cards are not checkable items: a fuzzy name must never land on them.
+  const rows = (db
+    .prepare("select id, text, list, recurrence, completed_on, done from items where board_id = ? and archived = 0 and text is not null")
+    .all(scope.boardId) as Row[]).filter((r) => !isSentinelList(r.list));
   const exact = rows.filter((r) => r.text.trim().toLowerCase() === n);
   const hits = exact.length ? exact : rows.filter((r) => r.text.toLowerCase().includes(n));
   if (!n || hits.length === 0) return { marked: false, reason: "not found", date };
   if (hits.length > 1) return { marked: false, reason: "ambiguous", date };
   const r = hits[0];
   const recurring = !!r.recurrence && r.recurrence !== "none";
-  const already = recurring ? r.completed_on === date : r.done === 1;
+  // Done-ness is the completion machine's (a weekly card ticked on Wednesday is already
+  // done on Friday: no second write, no second "completed" event).
+  const already = effectiveDone({ recurrence: r.recurrence, completed_on: r.completed_on, done: r.done === 1 }, date);
   if (already) {
     return {
       marked: false,
