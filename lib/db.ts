@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema";
 import { buildSeed } from "./demo/seed";
 import { SESSION_COOKIE, hashPassword, verifyUserSession } from "./auth";
+import { UnauthenticatedError, classifySession, type SessionState } from "./session-state";
 import { defaultBoardId, getMembership } from "./boards";
 
 // The local store: one SQLite file under DATA_DIR (gitignored). Single-user,
@@ -299,15 +300,20 @@ function demoDb(id: string): Database.Database {
 // hosted instance (DEMO_MODE=1 + SESSION_SECRET set); locally there's no auth
 // concept at all. Tokens are stateless, so also confirm the user still exists
 // (a deleted account's token would otherwise verify forever).
-export function getRequestUserId(): string | null {
-  if (!DEMO_MODE) return null;
+export function getSessionState(): { state: SessionState; userId: string | null } {
+  if (!DEMO_MODE) return { state: "none", userId: null };
   const secret = process.env.SESSION_SECRET;
-  if (!secret) return null;
+  if (!secret) return { state: "none", userId: null };
   const token = cookies().get(SESSION_COOKIE)?.value ?? "";
-  if (!token) return null;
-  const userId = verifyUserSession(token, secret);
-  if (!userId) return null;
-  return mainDb().prepare("select 1 from users where id = ?").get(userId) ? userId : null;
+  const verified = token ? verifyUserSession(token, secret) : null;
+  const userExists =
+    !!verified && !!mainDb().prepare("select 1 from users where id = ?").get(verified);
+  const state = classifySession({ hasToken: !!token, verified, userExists });
+  return { state, userId: state === "valid" ? verified : null };
+}
+
+export function getRequestUserId(): string | null {
+  return getSessionState().userId;
 }
 
 // Is the current request a demo visitor (vs a signed-in account / local
@@ -330,7 +336,9 @@ export type BoardContext = { db: Database.Database; userId: string | null; board
 // gets a 404, never a 403 (don't confirm a board exists to someone off it).
 export function getBoardContext(requestedBoardId?: string | null): BoardContext {
   if (!DEMO_MODE) return { db: localDb(), userId: null, boardId: null };
-  const userId = getRequestUserId();
+  const { state, userId } = getSessionState();
+  // A dead session is not a visitor: fail loudly instead of writing into a demo file.
+  if (state === "invalid") throw new UnauthenticatedError();
   if (userId) {
     const db = mainDb();
     const boardId = requestedBoardId ?? defaultBoardId(db, userId);

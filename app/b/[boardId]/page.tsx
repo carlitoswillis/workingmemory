@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import BoardScreen from "@/app/BoardScreen";
-import { getRequestUserId, DEMO_MODE } from "@/lib/db";
+import { redirect } from "next/navigation";
+import { getRequestUserId, getSessionState, DEMO_MODE } from "@/lib/db";
 
 // Any board the signed-in user is a member of. "/" stays the personal board;
 // this renders the same BoardScreen scoped to a specific board (membership is
@@ -18,6 +19,7 @@ export default function BoardPage({
   // link reaches the archived source card on the other side of a conversion.
   searchParams?: { card?: string };
 }) {
+  if (DEMO_MODE && getSessionState().state === "invalid") redirect("/login");
   if (DEMO_MODE && !getRequestUserId()) notFound();
   return <BoardScreen boardId={params.boardId} openCardId={searchParams?.card} />;
 }
