@@ -25,7 +25,8 @@ import {
   type Provenance,
 } from "@/lib/doorways";
 import { setParent } from "@/lib/nesting";
-import { formatRecurrence, parseRecurrence } from "@/lib/recurrence";
+import { formatRecurrence, localToday, parseRecurrence } from "@/lib/recurrence";
+import { switchRecurrence } from "@/lib/completion";
 import { pokeBoard } from "@/lib/realtime";
 import { addBlocked, clampDemoText, clampDemoDetails } from "@/lib/demo/limits";
 import type { ListDef } from "@/lib/lists";
@@ -323,12 +324,9 @@ export async function getItemAction(
 export async function setRecurrenceAction(boardId: string | null, id: string, recurrence: string) {
   const value = formatRecurrence(parseRecurrence(recurrence));
   const { db, userId, boardId: bid } = getBoardContext(boardId);
-  db.prepare("update items set recurrence = ?, touched_by = ? where id = ? and board_id is ?").run(
-    value,
-    userId,
-    id,
-    bid,
-  );
+  // The completion machine (lib/completion.ts) decides what the switch does to
+  // done / completed_on and writes it with the recurrence in one UPDATE.
+  switchRecurrence(db, bid, id, value, userId, localToday());
   revalidateBoard(bid);
 }
 

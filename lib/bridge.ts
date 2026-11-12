@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { NextRequest } from "next/server";
-
+import { checkOffPatch } from "./completion.ts";
 // The brain bridge: scoped access for the sibling second-brain app
 // (~/workspace/AIA2ndBrain/brain). BRAIN_TOKEN authorizes exactly two things —
 // reading the owner's board context (GET /api/context) and pushing single
@@ -148,24 +148,18 @@ export function completeItem(
       .get(itemId, scope.boardId) as Row | undefined;
   const row = find();
   if (!row) return null;
-  if (row.recurrence && row.recurrence !== "none") {
-    if (done) {
-      db.prepare("update items set completed_on = ?, touched_by = ? where id = ? and board_id = ?").run(
-        date,
-        scope.ownerId,
-        row.id,
-        scope.boardId,
-      );
-    } else if (row.completed_on === date) {
-      db.prepare("update items set completed_on = null, touched_by = ? where id = ? and board_id = ?").run(
-        scope.ownerId,
-        row.id,
-        scope.boardId,
-      );
-    }
-  } else {
+  // What a check-off writes is decided by the completion machine (lib/completion.ts).
+  const patch = checkOffPatch(row, done, date);
+  if ("done" in patch) {
     db.prepare("update items set done = ?, touched_by = ? where id = ? and board_id = ?").run(
-      done ? 1 : 0,
+      patch.done,
+      scope.ownerId,
+      row.id,
+      scope.boardId,
+    );
+  } else if ("completed_on" in patch) {
+    db.prepare("update items set completed_on = ?, touched_by = ? where id = ? and board_id = ?").run(
+      patch.completed_on,
       scope.ownerId,
       row.id,
       scope.boardId,

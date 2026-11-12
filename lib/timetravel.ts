@@ -45,6 +45,9 @@ export function reconstructItemAt(
   let { text, list, done, archived } = item;
   let details = item.details ?? "";
   let completed_on = item.completed_on ?? null;
+  // Recurrence is replayed like every other field: a card that was a one-off at T and
+  // is "daily" now must be judged as a one-off at T (items_log_recurrence_v2 journals it).
+  let recurrence = item.recurrence;
   let parent_id = item.parent_id ?? null;
 
   const after = events
@@ -71,6 +74,9 @@ export function reconstructItemAt(
       case "completed_on":
         completed_on = e.old_value;
         break;
+      case "recurrence":
+        recurrence = e.old_value ?? "none";
+        break;
       // Nesting (move into / out of another card). old_value null = it was a
       // top-level board card at that moment.
       case "parent":
@@ -92,7 +98,7 @@ export function reconstructItemAt(
     // day" (daily) / "for that week" (weekly). (completed_on events only exist from
     // 2026-07-03 on; older moments fall back to whatever completed_on survives, which
     // mirrors pre-streaks behavior.) Non-repeating items keep the reverted `done` flag.
-    done: effectiveDone({ recurrence: item.recurrence, completed_on, done }, localDateOf(t)),
+    done: effectiveDone({ recurrence, completed_on, done }, localDateOf(t)),
     parent_id,
     existed: bornAt <= tt,
     archived,
