@@ -42,8 +42,17 @@ export type RowEvent =
   | { type: "undo" } // the inline Undo button
   | { type: "window-elapsed" } // UNDO_MS passed
   | { type: "collapsed" } // the collapse transition finished
-  | { type: "failed"; message: string } // the server action rejected
+  // the server action rejected. `revertTo` is what the server still holds (the value
+  // BEFORE the failed write); without it the flip is simply negated.
+  | { type: "failed"; message: string; revertTo?: boolean }
   | { type: "sync"; checked: boolean }; // fresh server truth arrived
+
+// Writes from one row are numbered. Only the NEWEST write decides what the server ends
+// up holding (server actions run in order), so a rejection from any older write is stale
+// and must be ignored.
+export function isLatestWrite(seq: number, latest: number): boolean {
+  return seq === latest;
+}
 
 export function rowInitial(checked: boolean): RowState {
   return { checked, phase: "idle", error: null, animate: false };
@@ -68,7 +77,15 @@ export function rowNext(state: RowState, event: RowEvent): RowState {
     case "failed":
       // Put the checkbox back where the server left it and pin the reason. The row
       // is the failure surface; nothing floats — and a reverted flip is not a moment.
-      return { checked: !state.checked, phase: "error", error: event.message, animate: false };
+      // `revertTo` pins the box to the server's value rather than negating whatever the
+      // row shows NOW: a late rejection of an earlier write must not flip it again
+      // after an Undo has already put it right.
+      return {
+        checked: event.revertTo ?? !state.checked,
+        phase: "error",
+        error: event.message,
+        animate: false,
+      };
     case "sync":
       // Revalidation must not yank a row out from under a finger mid-window.
       if (state.phase === "undo" || state.phase === "collapsing") return state;
