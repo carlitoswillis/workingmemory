@@ -74,7 +74,8 @@ export async function middleware(req: NextRequest) {
   // either way (lib/session-state.ts). Without this the request fell through to the
   // throwaway demo board and a capture reported success into a file swept after 24 h.
   const gate = sessionGate({
-    state: sessionToken && !signedIn ? "invalid" : "none",
+    // No SESSION_SECRET = accounts are off (lib/db.ts reads that as "none"), so never "invalid".
+    state: secret && sessionToken && !signedIn ? "invalid" : "none",
     method: req.method,
     path: req.nextUrl.pathname,
     hasAuthorization: req.headers.has("authorization"),
