@@ -1,11 +1,12 @@
 import { getBoardContext } from "@/lib/db";
 import { getBoardHighWater } from "@/lib/queries";
-import { subscribeBoard } from "@/lib/realtime";
+import { boardVersion, subscribeBoard } from "@/lib/realtime";
 
 // Server-Sent Events stream for one board (shared boards, phase 2). A GET whose
 // response never finishes: the client's EventSource holds it open and we push a
 // frame whenever the board changes. Notify-then-pull — each frame carries only the
-// board's high-water mark (max item_events.id); the client refetches through its
+// board's high-water mark (max item_events.id) and its poke counter (writes that
+// journal nothing, like reorders, still bump it); the client refetches through its
 // normal path (router.refresh), so a dropped frame costs freshness, not correctness.
 //
 // Auth is the same choke point as everything else: getBoardContext(boardId) verifies
@@ -46,7 +47,8 @@ export async function GET(req: Request, { params }: { params: { boardId: string 
           closed = true;
         }
       };
-      const poke = () => send(`data: ${JSON.stringify({ h: getBoardHighWater(db, bid) })}\n\n`);
+      const poke = () =>
+        send(`data: ${JSON.stringify({ h: getBoardHighWater(db, bid), v: boardVersion(bid) })}\n\n`);
 
       // Initial frame: the current high-water mark, so a client that reconnects can
       // tell whether it missed changes while disconnected.

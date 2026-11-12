@@ -27,6 +27,7 @@ import type { ListId, ListDef } from "@/lib/lists";
 import { NOTE_LIST, REVIEW_LIST, MAX_LISTS, isSentinelList } from "@/lib/lists";
 import { anchorAt, cardAt } from "@/lib/dnd";
 import { effectiveDone } from "@/lib/recurrence";
+import { frameChanged, parsePokeFrame, type PokeFrame } from "@/lib/pokeframe";
 import { UndoStack, boardMode, canMutate, cardSignature } from "@/lib/boardmode";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
@@ -649,7 +650,7 @@ export default function Board({
   // higher mark than `lastSeen`) is exactly how we catch changes missed while away.
   useEffect(() => {
     if (!boardId) return;
-    let lastSeen: number | null = null; // null until the baseline (first) frame
+    let lastSeen: PokeFrame | null = null; // null until the baseline (first) frame
     let timer: ReturnType<typeof setTimeout> | null = null;
     let connected = false;
 
@@ -671,18 +672,11 @@ export default function Board({
       connected = true;
     };
     es.onmessage = (e) => {
-      let h: unknown;
-      try {
-        h = JSON.parse(e.data).h;
-      } catch {
-        return;
-      }
-      if (typeof h !== "number") return;
-      if (lastSeen === null) lastSeen = h; // baseline: don't refresh on connect
-      else if (h > lastSeen) {
-        lastSeen = h;
-        schedule();
-      }
+      const frame = parsePokeFrame(e.data);
+      if (!frame) return;
+      const changed = frameChanged(lastSeen, frame);
+      lastSeen = frame; // the first frame is the baseline: no refresh on connect
+      if (changed) schedule();
     };
     es.onerror = () => {
       connected = false; // EventSource retries on its own; nothing to do
