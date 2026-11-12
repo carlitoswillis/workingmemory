@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
 import { archiveItemAction, moveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/actions";
-import { effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
+import { effectiveDone, parseRecurrence } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "../board-context";
 import PhoneDoorwayChip from "./PhoneDoorwayChip";
@@ -84,7 +85,7 @@ export default function PhoneRow({
 }) {
   const boardId = useBoardId();
   const ui = usePhoneUI();
-  const day = today ?? localToday();
+  const day = today ?? boardToday();
   const rec = parseRecurrence(item.recurrence);
   const repeats = rec.kind !== "none";
   const truth = checked ?? effectiveDone(item, day);

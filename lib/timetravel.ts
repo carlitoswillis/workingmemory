@@ -2,6 +2,7 @@ import type { Item, ItemEvent } from "./types";
 import type { ListId } from "./lists";
 // .ts extension so plain-node tests can import this module (see lib/columns.ts).
 import { describeRecurrence, effectiveDone, parseRecurrence } from "./recurrence.ts";
+import { boardDayOf } from "./clock.ts";
 import { isSentinelList } from "./lists.ts";
 
 // A reconstructed item as it was at some past moment T.
@@ -21,15 +22,6 @@ function asBool(v: string | null): boolean {
 }
 
 const ms = (iso: string) => new Date(iso).getTime();
-
-// The local calendar date (YYYY-MM-DD) of an ISO instant — same convention as
-// lib/recurrence.ts localToday(), for judging a daily task "done" at time t.
-function localDateOf(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 /**
  * Reconstruct one item's state at time `t` by starting from its CURRENT values
@@ -98,7 +90,7 @@ export function reconstructItemAt(
     // day" (daily) / "for that week" (weekly). (completed_on events only exist from
     // 2026-07-03 on; older moments fall back to whatever completed_on survives, which
     // mirrors pre-streaks behavior.) Non-repeating items keep the reverted `done` flag.
-    done: effectiveDone({ recurrence, completed_on, done }, localDateOf(t)),
+    done: effectiveDone({ recurrence, completed_on, done }, boardDayOf(t)),
     parent_id,
     existed: bornAt <= tt,
     archived,

@@ -1,4 +1,6 @@
 import type { Item } from "./types";
+// .ts extension so plain-node tests can import this module (see lib/columns.ts).
+import { boardToday } from "./clock.ts";
 
 // Recurring cards. `items.recurrence` is a short string, so adding a kind needs no
 // migration: "none" | "daily" | "weekly:<0-6>" (0 = Sunday). Weekly arrived
@@ -6,7 +8,7 @@ import type { Item } from "./types";
 // the card STAYS done until its weekday comes round again, then reopens itself.
 //
 // Done-ness for a repeating card is derived, never stored: `completed_on` holds the
-// local date it was last checked off, and the card counts as done while that date
+// board-zone date (lib/clock.ts) it was last checked off, and the card counts as done while that date
 // falls inside the CURRENT period (today for daily, this week-since-its-weekday for
 // weekly). That's what makes the reset automatic — nothing runs at midnight — and
 // what lets the time machine ask "was it done back then?" by passing a past date in.
@@ -25,14 +27,6 @@ export const WEEKDAYS = [
   "Friday",
   "Saturday",
 ];
-
-// Local calendar date as YYYY-MM-DD (the day boundary is the user's local midnight).
-export function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 // Date arithmetic on the date PARTS via UTC, so no timezone can shift a day.
 export function addDays(day: string, delta: number): string {
@@ -80,7 +74,7 @@ export function periodStart(day: string, weekday: number): string {
 // Is a repeating card done AS OF `today`? Non-repeating cards just use their flag.
 export function effectiveDone(
   item: Pick<Item, "recurrence" | "completed_on" | "done">,
-  today: string = localToday(),
+  today: string = boardToday(),
 ): boolean {
   const r = parseRecurrence(item.recurrence);
   if (r.kind === "daily") return item.completed_on === today;
@@ -92,7 +86,7 @@ export function effectiveDone(
 }
 
 // When does a checked-off card come back? Used for the panel's one-line explanation.
-export function resetsOn(r: Recurrence, today: string = localToday()): string | null {
+export function resetsOn(r: Recurrence, today: string = boardToday()): string | null {
   if (r.kind === "daily") return addDays(today, 1);
   if (r.kind === "weekly") return addDays(periodStart(today, r.weekday), 7);
   return null;

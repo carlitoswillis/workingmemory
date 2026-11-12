@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { NextRequest } from "next/server";
 import { checkOffPatch } from "./completion.ts";
+import { boardToday } from "./clock.ts";
 // The brain bridge: scoped access for the sibling second-brain app
 // (~/workspace/AIA2ndBrain/brain). BRAIN_TOKEN authorizes exactly two things —
 // reading the owner's board context (GET /api/context) and pushing single
@@ -175,16 +176,6 @@ export function completeItem(
   };
 }
 
-// "Today" on the owner's clock, as YYYY-MM-DD.
-export function todayLA(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-}
-
 export type DoneByName =
   | { marked: true; item: CompletedItem; date: string }
   | { marked: false; reason: "already done today"; item: CompletedItem; date: string }
@@ -201,7 +192,7 @@ export function markDoneByName(
   name: string,
   now: Date = new Date(),
 ): DoneByName {
-  const date = todayLA(now);
+  const date = boardToday(now);
   const n = name.trim().toLowerCase();
   type Row = { id: string; text: string; recurrence: string; completed_on: string | null; done: number };
   const rows = db

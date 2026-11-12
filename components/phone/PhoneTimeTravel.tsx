@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timelineDataAction } from "@/app/actions";
 import { isSentinelList } from "@/lib/lists";
-import { localToday } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import {
   diffBoardSince,
   nothingChangedPhrase,
@@ -168,7 +168,7 @@ export default function PhoneTimeTravel() {
       timeline.events,
       new Date(current).toISOString(),
       new Date(now).toISOString(),
-      { listLabels, today: localToday() },
+      { listLabels, today: boardToday() },
     );
   }, [timeline, current, now, listLabels]);
 

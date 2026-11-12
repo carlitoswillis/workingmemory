@@ -10,6 +10,7 @@
 
 import { effectiveDone, parseRecurrence } from "../../lib/recurrence.ts";
 import { isSentinelList } from "../../lib/lists.ts";
+import { boardDayOf } from "../../lib/clock.ts";
 
 // ── The row's completion state machine ───────────────────────────────────────
 //
@@ -173,15 +174,12 @@ export type NowItem = {
 export type NowSection = "today" | "due" | "done";
 export type NowSections<T> = { today: T[]; due: T[]; done: T[] };
 
-// The local calendar day an ISO timestamp falls on. The DB writes UTC ISO strings
-// (lib/schema.ts ISO_NOW), so the Date does the conversion and the parts are read
-// back in the browser's zone — the same day boundary localToday() uses.
+// The board-zone calendar day an ISO timestamp falls on (lib/clock.ts — the same day
+// boundary boardToday() uses).
 export function localDayOf(iso: string): string | null {
   const t = new Date(iso);
   if (Number.isNaN(t.getTime())) return null;
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(
-    t.getDate(),
-  ).padStart(2, "0")}`;
+  return boardDayOf(t);
 }
 
 // Which of Now's three sections an item belongs to — or null for "not on Now at

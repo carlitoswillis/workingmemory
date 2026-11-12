@@ -4,7 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
 import { archiveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/actions";
-import { describeRecurrence, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
+import { describeRecurrence, effectiveDone, parseRecurrence } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId, useDoorways } from "./board-context";
 import SwipeToArchive, { SwipeStill } from "./SwipeToArchive";
@@ -90,7 +91,7 @@ export default function ItemCard({
     if (repeats) {
       // Repeating cards record the DAY they were checked off; done-ness is derived
       // from it (today for daily, this week for weekly — see lib/recurrence.ts).
-      startTransition(() => setDailyDoneAction(boardId, item.id, next ? localToday() : null));
+      startTransition(() => setDailyDoneAction(boardId, item.id, next ? boardToday() : null));
     } else {
       startTransition(() => toggleDoneAction(boardId, item.id, next));
     }
@@ -98,7 +99,7 @@ export default function ItemCard({
 
   // Streak follows the optimistic checkbox: fold doneLocal in before counting, so
   // checking off shows the new streak instantly.
-  const today = localToday();
+  const today = boardToday();
   const streak = repeats
     ? streakFor(
         daysWithLiveCheck(item.completed_days ?? [], today, item.recurrence, doneLocal, item.completed_on),

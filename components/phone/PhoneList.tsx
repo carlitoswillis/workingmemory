@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "@/lib/types";
 import type { ListDef } from "@/lib/lists";
-import { effectiveDone, localToday } from "@/lib/recurrence";
+import { effectiveDone } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { usePhoneUI } from "./PhoneShell";
 import PhoneReorderRows from "./PhoneReorderRows";
 import PhoneRow from "./PhoneRow";
@@ -37,7 +38,7 @@ export default function PhoneList({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const segRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [index, setIndex] = useState(0);
-  const today = localToday();
+  const today = boardToday();
 
   // Long-press the segmented header to manage columns (add / rename / delete /
   // reorder — PhoneListsManage). 500ms / 10px: long enough that swiping the strip

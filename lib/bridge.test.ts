@@ -11,7 +11,8 @@
 
 import Database from "better-sqlite3";
 import { CREATE_TABLES, CREATE_TRIGGERS, migrateDb } from "./schema.ts";
-import { brainBearerOk, completeItem, doneMessage, markDoneByName, resolveOwnerBoard, todayLA } from "./bridge.ts";
+import { brainBearerOk, completeItem, doneMessage, markDoneByName, resolveOwnerBoard } from "./bridge.ts";
+import { boardToday } from "./clock.ts";
 import { DEFAULT_LISTS } from "./lists.ts";
 
 let failures = 0;
@@ -257,7 +258,7 @@ function withEnv<T>(env: Partial<Record<(typeof ENV_KEYS)[number], string>>, fn:
   addItem(db, "a2", "Read B", "bHome", "2026-09-04T00:00:00.000Z");
   const scope = { ownerId: "u1", boardId: "bHome", boardName: "Personal" };
   const t = new Date("2026-11-11T03:30:00Z"); // 19:30 on 11/10 in LA
-  ok("today is computed in LA", todayLA(t), "2026-11-10");
+  ok("today is computed in LA", boardToday(t), "2026-11-10");
   const first = markDoneByName(db, scope, "gym", t);
   ok("first call marks", [first.marked, (first as { date: string }).date], [true, "2026-11-10"]);
   const second = markDoneByName(db, scope, "Gym", t);

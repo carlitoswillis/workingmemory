@@ -8,6 +8,7 @@ import {
   subCountPhrases,
   DIFF_KINDS,
 } from "./timetravel.ts";
+import { boardDayOf } from "./clock.ts";
 
 let failures = 0;
 function eq(label: string, got: unknown, want: unknown) {
@@ -111,12 +112,7 @@ const D = {
   NOW: "2026-06-11T12:00:00.000Z",
 };
 
-// The same local-calendar-date convention lib/timetravel.ts and lib/recurrence.ts
-// use, so the repeating-card cases read the same in every timezone the tests run in.
-const localDate = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
+const localDate = (iso: string) => boardDayOf(iso); // the one clock (lib/clock.ts)
 const dayT = localDate(D.T);
 const dayNow = localDate(D.NOW);
 

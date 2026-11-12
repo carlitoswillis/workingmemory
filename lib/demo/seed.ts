@@ -1,3 +1,4 @@
+import { boardDayOf } from "../clock.ts";
 // Fabricated board + history for demo mode (see lib/db.ts). Pure and
 // dependency-free so it's unit-testable with plain `node`.
 //
@@ -72,12 +73,8 @@ export function buildSeed(now: Date): {
   const ago = (hours: number, minutes = 0): string =>
     new Date(now.getTime() - (hours * 60 + minutes) * 60_000).toISOString();
 
-  const ymd = (daysAgo: number): string => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - daysAgo);
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  };
+  // completed_on dates are board-clock days (lib/clock.ts), the same clock done-ness uses.
+  const ymd = (daysAgo: number): string => boardDayOf(new Date(now.getTime() - daysAgo * 86_400_000));
 
   const script: Step[] = [
     // ---- Week 3 (the beginning): project kickoff + first captures ----------

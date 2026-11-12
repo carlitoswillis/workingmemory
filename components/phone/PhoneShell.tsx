@@ -10,7 +10,7 @@ import {
   type BoardOption,
   type DoorwayInfo,
 } from "../board-context";
-import { localToday } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { useLevelStack } from "../useLevelStack";
 import Dateline from "../Dateline";
 import { PhoneDataProvider, type PhoneBoardValue } from "./phone-data";
@@ -237,7 +237,7 @@ export default function PhoneShell({
   // Find/More sit over the screen you were on, so the content behind a sheet is the
   // last board tab, not a fifth blank page.
   const screen = tab === "now" || tab === "lists" ? tab : baseTabRef.current;
-  const today = localToday();
+  const today = boardToday();
 
   return (
     <BoardIdProvider value={boardId}>
