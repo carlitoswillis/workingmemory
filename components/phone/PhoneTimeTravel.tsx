@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { timelineDataAction } from "@/app/actions";
 import { isSentinelList } from "@/lib/lists";
-import { localToday } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import {
   diffBoardSince,
   nothingChangedPhrase,
@@ -72,7 +72,8 @@ export default function PhoneTimeTravel() {
   const shared = usePhoneTimeline();
   const [own, setOwn] = useState<{ items: Item[]; events: ItemEvent[] } | null>(null);
   const timeline = shared.provided ? shared.timeline : own;
-  const [now] = useState(() => Date.now());
+  const [mountedAt] = useState(() => Date.now());
+  const now = shared.provided ? Math.max(mountedAt, shared.now) : mountedAt;
   const [valueMs, setValueMs] = useState<number | null>(null); // null = live
   // "Board then" vs "What changed" — a view of the same scrubbed moment, not a
   // second control. Plain state: the sheet remounts fresh every time it opens
@@ -168,7 +169,7 @@ export default function PhoneTimeTravel() {
       timeline.events,
       new Date(current).toISOString(),
       new Date(now).toISOString(),
-      { listLabels, today: localToday() },
+      { listLabels, today: boardToday() },
     );
   }, [timeline, current, now, listLabels]);
 

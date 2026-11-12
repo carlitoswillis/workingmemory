@@ -10,6 +10,7 @@
 
 import { effectiveDone, parseRecurrence } from "../../lib/recurrence.ts";
 import { isSentinelList } from "../../lib/lists.ts";
+import { boardDayOf } from "../../lib/clock.ts";
 
 // ── The row's completion state machine ───────────────────────────────────────
 //
@@ -41,8 +42,17 @@ export type RowEvent =
   | { type: "undo" } // the inline Undo button
   | { type: "window-elapsed" } // UNDO_MS passed
   | { type: "collapsed" } // the collapse transition finished
-  | { type: "failed"; message: string } // the server action rejected
+  // the server action rejected. `revertTo` is what the server still holds (the value
+  // BEFORE the failed write); without it the flip is simply negated.
+  | { type: "failed"; message: string; revertTo?: boolean }
   | { type: "sync"; checked: boolean }; // fresh server truth arrived
+
+// Writes from one row are numbered. Only the NEWEST write decides what the server ends
+// up holding (server actions run in order), so a rejection from any older write is stale
+// and must be ignored.
+export function isLatestWrite(seq: number, latest: number): boolean {
+  return seq === latest;
+}
 
 export function rowInitial(checked: boolean): RowState {
   return { checked, phase: "idle", error: null, animate: false };
@@ -67,7 +77,15 @@ export function rowNext(state: RowState, event: RowEvent): RowState {
     case "failed":
       // Put the checkbox back where the server left it and pin the reason. The row
       // is the failure surface; nothing floats — and a reverted flip is not a moment.
-      return { checked: !state.checked, phase: "error", error: event.message, animate: false };
+      // `revertTo` pins the box to the server's value rather than negating whatever the
+      // row shows NOW: a late rejection of an earlier write must not flip it again
+      // after an Undo has already put it right.
+      return {
+        checked: event.revertTo ?? !state.checked,
+        phase: "error",
+        error: event.message,
+        animate: false,
+      };
     case "sync":
       // Revalidation must not yank a row out from under a finger mid-window.
       if (state.phase === "undo" || state.phase === "collapsing") return state;
@@ -173,15 +191,12 @@ export type NowItem = {
 export type NowSection = "today" | "due" | "done";
 export type NowSections<T> = { today: T[]; due: T[]; done: T[] };
 
-// The local calendar day an ISO timestamp falls on. The DB writes UTC ISO strings
-// (lib/schema.ts ISO_NOW), so the Date does the conversion and the parts are read
-// back in the browser's zone — the same day boundary localToday() uses.
+// The board-zone calendar day an ISO timestamp falls on (lib/clock.ts — the same day
+// boundary boardToday() uses).
 export function localDayOf(iso: string): string | null {
   const t = new Date(iso);
   if (Number.isNaN(t.getTime())) return null;
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(
-    t.getDate(),
-  ).padStart(2, "0")}`;
+  return boardDayOf(t);
 }
 
 // Which of Now's three sections an item belongs to — or null for "not on Now at
@@ -350,4 +365,13 @@ export function applyReorder<T extends { id: string; position: number }>(
   const [moved] = reordered.splice(from, 1);
   reordered.splice(to, 0, moved);
   return reordered.map((item, index) => ({ ...item, position: slots[index] }));
+}
+
+// A cheap fingerprint of the live board: changes whenever a card is added/removed or
+// touched (every write bumps updated_at). The provider refetches when it changes, so
+// the log the ruler and "What changed" read never lags the cards on screen.
+export function timelineRevision(items: { id: string; updated_at: string }[]): string {
+  let latest = "";
+  for (const it of items) if (it.updated_at > latest) latest = it.updated_at;
+  return `${items.length}|${latest}`;
 }

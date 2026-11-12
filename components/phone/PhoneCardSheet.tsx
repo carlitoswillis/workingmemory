@@ -14,7 +14,8 @@ import {
   toggleDoneAction,
   unarchiveItemAction,
 } from "@/app/actions";
-import { WEEKDAYS, effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
+import { WEEKDAYS, effectiveDone, parseRecurrence } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import type { Item } from "@/lib/types";
 import PhoneCardDoorway from "./PhoneCardDoorway";
@@ -297,7 +298,7 @@ function CardBody({
   onArchived(): void;
   run(fn: () => void): void;
 }) {
-  const today = localToday();
+  const today = boardToday();
   const rec = parseRecurrence(item.recurrence);
 
   // Optimistic completion, exactly as §3 requires: the flip is local and immediate,

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Item } from "@/lib/types";
 import { archiveItemAction, moveItemAction, setDailyDoneAction, toggleDoneAction } from "@/app/actions";
-import { effectiveDone, localToday, parseRecurrence } from "@/lib/recurrence";
+import { effectiveDone, parseRecurrence } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { daysWithLiveCheck, streakFor } from "@/lib/streaks";
 import { useBoardId } from "../board-context";
 import PhoneDoorwayChip from "./PhoneDoorwayChip";
@@ -16,6 +17,7 @@ import {
   rowHeldInPlace,
   rowInitial,
   rowNext,
+  isLatestWrite,
   swipeIntent,
   withinSwipeZone,
   type RowEvent,
@@ -84,7 +86,7 @@ export default function PhoneRow({
 }) {
   const boardId = useBoardId();
   const ui = usePhoneUI();
-  const day = today ?? localToday();
+  const day = today ?? boardToday();
   const rec = parseRecurrence(item.recurrence);
   const repeats = rec.kind !== "none";
   const truth = checked ?? effectiveDone(item, day);
@@ -92,6 +94,7 @@ export default function PhoneRow({
   const [state, setState] = useState<RowState>(() => rowInitial(truth));
   const stateRef = useRef(state);
   const [, startTransition] = useTransition();
+  const writeSeq = useRef(0); // numbers this row's writes (see isLatestWrite)
 
   // One place where an event becomes the next state — and where the parent is told
   // what changed. Kept out of the setState updater so React's double-invocation in
@@ -171,11 +174,16 @@ export default function PhoneRow({
   }, [streak]);
 
   function fire(next: boolean) {
+    const seq = ++writeSeq.current;
     startTransition(() => {
       const promise = repeats
         ? setDailyDoneAction(boardId, item.id, next ? day : null)
         : toggleDoneAction(boardId, item.id, next);
-      promise.catch(() => apply({ type: "failed", message: "Couldn’t save — tap to retry" }));
+      promise.catch(() => {
+        // A rejection from a write that a newer tap/Undo has superseded is stale.
+        if (!isLatestWrite(seq, writeSeq.current)) return;
+        apply({ type: "failed", message: "Couldn’t save — tap to retry", revertTo: !next });
+      });
     });
   }
 

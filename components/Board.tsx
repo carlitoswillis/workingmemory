@@ -27,6 +27,8 @@ import type { ListId, ListDef } from "@/lib/lists";
 import { NOTE_LIST, REVIEW_LIST, MAX_LISTS, isSentinelList } from "@/lib/lists";
 import { anchorAt, cardAt } from "@/lib/dnd";
 import { effectiveDone } from "@/lib/recurrence";
+import { frameChanged, parsePokeFrame, type PokeFrame } from "@/lib/pokeframe";
+import { UndoStack, boardMode, canMutate, cardSignature } from "@/lib/boardmode";
 import { reconstructBoardAt, type BoardItemAt } from "@/lib/timetravel";
 import {
   addItemAction,
@@ -376,16 +378,26 @@ export default function Board({
   const activeRef = useRef<string | null>(null);
   activeRef.current = activeId;
   const timeTravelingRef = useRef(false);
-  timeTravelingRef.current = snapshot !== null;
+  const mode = boardMode(snapshot);
+  timeTravelingRef.current = mode === "rewound";
 
   // Undo for moves: capture each dragged card's origin (list+position) at drag start,
   // push a "put it back" step on a stack when the move lands, and ⌘/Ctrl-Z (or the Undo
   // pill) runs it. A step is a closure rather than a plain list of positions because
   // nesting has to undo two things (the parent AND where the card sat on the board).
   const dragOriginRef = useRef<Move[]>([]);
-  const undoStack = useRef<{ label: string; run: () => void }[]>([]);
+  const undoStack = useRef(new UndoStack());
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [undoHint, setUndoHint] = useState<string | null>(null);
+
+  function currentSignature(id: string): string {
+    const c = itemsRef.current;
+    for (const k of Object.keys(c)) {
+      const it = c[k].find((x) => x.id === id);
+      if (it) return cardSignature(it);
+    }
+    return cardSignature(null);
+  }
 
   function captureOrigins(ids: string[]): Move[] {
     const c = itemsRef.current;
@@ -402,8 +414,13 @@ export default function Board({
     return out;
   }
 
-  function pushUndo(label: string, run: () => void) {
-    undoStack.current.push({ label, run });
+  function pushUndo(label: string, ids: string[], run: () => void) {
+    if (!canMutate(mode)) return;
+    // Remember what the cards look like right after the gesture (this runs after the
+    // optimistic update): the entry refuses to run if they have changed since.
+    const expect: Record<string, string> = {};
+    for (const id of ids) expect[id] = currentSignature(id);
+    undoStack.current.push({ label, ids, expect, at: Date.now(), run });
     setUndoHint(label);
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoHint(null), 6000);
@@ -412,7 +429,7 @@ export default function Board({
   // The common case: put these cards back where they were on the board.
   function pushMoveUndo(prev: Move[], label: string) {
     if (prev.length === 0) return;
-    pushUndo(label, () => {
+    pushUndo(label, prev.map((m) => m.id), () => {
       applyMoves(prev);
       reorderItemsAction(boardId, prev);
     });
@@ -438,6 +455,7 @@ export default function Board({
   // at once) and undoable — which is what lets the desktop affordance be a single
   // click, where the phone gesture has to be a deliberate long swipe.
   function archiveCards(ids: string[]) {
+    if (!canMutate(mode)) return;
     const c = itemsRef.current;
     const gone = Object.values(c)
       .flat()
@@ -453,6 +471,7 @@ export default function Board({
 
     pushUndo(
       gone.length > 1 ? `Archived ${gone.length} cards` : `Archived “${gone[0].text}”`,
+      gone.map((g) => g.id),
       () => {
         const cur = itemsRef.current;
         const back: Grouped = { ...cur };
@@ -472,10 +491,14 @@ export default function Board({
   }
 
   function performUndo() {
-    const step = undoStack.current.pop();
+    if (!canMutate(mode)) return; // rewound: the screen is a read-only past
+    const res = undoStack.current.pop(Date.now(), currentSignature);
     setUndoHint(null);
-    if (!step) return;
-    startTransition(() => step.run());
+    if (!res.ok) {
+      if (res.reason !== "empty") setNotice("That move is out of date, so it was not undone.");
+      return;
+    }
+    startTransition(() => res.entry.run());
   }
 
   // Optimistic add: drop a temp card into its list immediately, then persist. When the
@@ -483,6 +506,7 @@ export default function Board({
   // row (same end-of-list position), so the swap is seamless. Same manual-optimistic
   // pattern the drag handlers use — not useOptimistic, which would fight itemsRef.
   function addCard(listId: string, text: string) {
+    if (!canMutate(mode)) return;
     const t = text.trim();
     if (!t || !listById.has(listId)) return;
     const nowIso = new Date().toISOString();
@@ -581,7 +605,7 @@ export default function Board({
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     if (typing) return;
     // Quick-capture (live board only): ⌘/Ctrl-K or a bare "c". Not while time-traveling.
-    const canCapture = snapshot === null && !captureOpen && !searchOpen;
+    const canCapture = canMutate(mode) && !captureOpen && !searchOpen;
     // Search: "/" — the same live-board rule (a past card has no panel to open).
     if (canCapture && e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
@@ -601,14 +625,15 @@ export default function Board({
     if (e.key === "Escape") clearSelection();
     // "a" archives what's selected — the keyboard twin of the selection bar's button.
     // Only with a selection, so a stray keypress on an idle board does nothing.
-    if (snapshot === null && selection.size > 0 && e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (canMutate(mode) && selection.size > 0 && e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       archiveCards([...selection]);
       return;
     }
     if ((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")) {
       e.preventDefault();
-      performUndo();
+      if (canMutate(mode)) performUndo(); // never while the time machine shows a past moment
+      return;
     }
   };
   useEffect(() => {
@@ -625,7 +650,7 @@ export default function Board({
   // higher mark than `lastSeen`) is exactly how we catch changes missed while away.
   useEffect(() => {
     if (!boardId) return;
-    let lastSeen: number | null = null; // null until the baseline (first) frame
+    let lastSeen: PokeFrame | null = null; // null until the baseline (first) frame
     let timer: ReturnType<typeof setTimeout> | null = null;
     let connected = false;
 
@@ -647,18 +672,11 @@ export default function Board({
       connected = true;
     };
     es.onmessage = (e) => {
-      let h: unknown;
-      try {
-        h = JSON.parse(e.data).h;
-      } catch {
-        return;
-      }
-      if (typeof h !== "number") return;
-      if (lastSeen === null) lastSeen = h; // baseline: don't refresh on connect
-      else if (h > lastSeen) {
-        lastSeen = h;
-        schedule();
-      }
+      const frame = parsePokeFrame(e.data);
+      if (!frame) return;
+      const changed = frameChanged(lastSeen, frame);
+      lastSeen = frame; // the first frame is the baseline: no refresh on connect
+      if (changed) schedule();
     };
     es.onerror = () => {
       connected = false; // EventSource retries on its own; nothing to do
@@ -688,6 +706,10 @@ export default function Board({
   function pickMoment(ms: number) {
     if (!timeline) return;
     const clamped = Math.max(minMs, Math.min(ms, now));
+    // Entering the past: whatever was undoable on the live board is no longer reachable.
+    undoStack.current.clear();
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoHint(null);
     setValueMs(clamped);
     setSnapshot(reconstructBoardAt(timeline.items, timeline.events, new Date(clamped).toISOString()));
   }
@@ -903,6 +925,7 @@ export default function Board({
       const parentText = Object.values(before).flat().find((i) => i.id === parentId)?.text;
       pushUndo(
         ids.length > 1 ? `Nested ${ids.length} cards` : "Nested card",
+        ids,
         () => {
           // Two steps: back out onto the board, then back into the exact slot it left.
           setParentAction(boardId, ids, null).then(() => reorderItemsAction(boardId, origins));
@@ -913,7 +936,7 @@ export default function Board({
         if (err) {
           itemsRef.current = before;
           setItemsByList(before);
-          undoStack.current.pop();
+          undoStack.current.discardLast();
           setUndoHint(null);
           setNotice(err);
         } else if (parentText) {

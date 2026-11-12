@@ -36,7 +36,8 @@ import {
 } from "@/app/actions";
 import { createBoardFromCardAction } from "@/app/boards/actions";
 import type { Provenance } from "@/lib/doorways";
-import { WEEKDAYS, addDays, describeRecurrence, effectiveDone, formatRecurrence, localToday, parseRecurrence, periodStart } from "@/lib/recurrence";
+import { WEEKDAYS, addDays, describeRecurrence, effectiveDone, formatRecurrence, parseRecurrence, periodStart } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { daysWithLiveCheck, prevDay, streakFor } from "@/lib/streaks";
 import dynamic from "next/dynamic";
 import SortableItemCard from "./SortableItemCard";
@@ -388,7 +389,7 @@ export default function CardPanel({
   // the last 8 weeks (weekly). completed_days comes from the event log via
   // lib/queries.ts; the live checkbox is folded in so the display tracks an
   // optimistic toggle without waiting for the refetch.
-  const today = localToday();
+  const today = boardToday();
   const dayset = daysWithLiveCheck(
     item.completed_days ?? [],
     today,
@@ -416,7 +417,7 @@ export default function CardPanel({
   }
   function toggleDone() {
     if (repeats) {
-      startTransition(() => setDailyDoneAction(boardId, item.id, effDone ? null : localToday()));
+      startTransition(() => setDailyDoneAction(boardId, item.id, effDone ? null : boardToday()));
     } else {
       startTransition(() => toggleDoneAction(boardId, item.id, !item.done));
     }

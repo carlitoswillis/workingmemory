@@ -10,7 +10,7 @@ import {
   type BoardOption,
   type DoorwayInfo,
 } from "../board-context";
-import { localToday } from "@/lib/recurrence";
+import { boardToday } from "@/lib/clock";
 import { useLevelStack } from "../useLevelStack";
 import Dateline from "../Dateline";
 import { PhoneDataProvider, type PhoneBoardValue } from "./phone-data";
@@ -237,7 +237,7 @@ export default function PhoneShell({
   // Find/More sit over the screen you were on, so the content behind a sheet is the
   // last board tab, not a fifth blank page.
   const screen = tab === "now" || tab === "lists" ? tab : baseTabRef.current;
-  const today = localToday();
+  const today = boardToday();
 
   return (
     <BoardIdProvider value={boardId}>
@@ -245,7 +245,7 @@ export default function PhoneShell({
         <BoardDataProvider value={boardData}>
           <PhoneDataProvider value={phoneData}>
             <PhoneUIContext.Provider value={ui}>
-              <PhoneTimelineProvider>
+              <PhoneTimelineProvider items={items}>
               <div data-shell="phone" className="phone-shell">
                 {/* On Now, the top of the screen IS the dateline: the date, the
                     moment you are standing on, and a ruler of every real change with
@@ -299,8 +299,9 @@ export default function PhoneShell({
 // the thumb can actually reach it. Until the event log lands the band is just the
 // track and the dot — a hairline with an amber end, never a loading bar.
 function PhoneNowDateline({ today, onOpen }: { today: string; onOpen: () => void }) {
-  const { timeline } = usePhoneTimeline();
-  const [now] = useState(() => Date.now());
+  const { timeline, now: fetchedAt } = usePhoneTimeline();
+  const [mountedAt] = useState(() => Date.now());
+  const now = Math.max(mountedAt, fetchedAt);
   const markers = useMemo(() => markersOf(timeline, now), [timeline, now]);
   return (
     <Dateline

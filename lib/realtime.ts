@@ -27,7 +27,22 @@ function bus(): EventEmitter {
 // but keep the mapping total.
 const chan = (boardId: string | null) => `board:${boardId ?? "local"}`;
 
+// Per-board change counter, bumped by every poke. Reorders and column edits write no
+// item_events row, so the event high-water mark alone cannot tell a client that
+// "something changed"; this counter can. It lives in memory (one process, see above):
+// a restart resets it, which is why clients compare for INEQUALITY, never "greater".
+const versions = (): Map<string, number> => {
+  const x = g as unknown as { __wmVersions?: Map<string, number> };
+  return (x.__wmVersions ??= new Map());
+};
+
+export function boardVersion(boardId: string | null): number {
+  return versions().get(chan(boardId)) ?? 0;
+}
+
 export function pokeBoard(boardId: string | null): void {
+  const m = versions();
+  m.set(chan(boardId), (m.get(chan(boardId)) ?? 0) + 1);
   bus().emit(chan(boardId));
 }
 

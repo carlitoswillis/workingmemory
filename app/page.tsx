@@ -1,4 +1,5 @@
-import { isDemoRequest } from "@/lib/db";
+import { redirect } from "next/navigation";
+import { getSessionState, isDemoRequest } from "@/lib/db";
 import BoardScreen from "./BoardScreen";
 import Landing from "./Landing";
 
@@ -8,6 +9,8 @@ import Landing from "./Landing";
 export const dynamic = "force-dynamic";
 
 export default function Home({ searchParams }: { searchParams?: { card?: string } }) {
+  // A session cookie that no longer verifies is not a visitor: sign in again.
+  if (getSessionState().state === "invalid") redirect("/login");
   if (isDemoRequest()) return <Landing />;
   return <BoardScreen openCardId={searchParams?.card} />;
 }

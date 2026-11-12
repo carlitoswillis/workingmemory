@@ -1,7 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { NextRequest } from "next/server";
-
+import { checkOffPatch } from "./completion.ts";
+import { boardToday } from "./clock.ts";
+import { effectiveDone } from "./recurrence.ts";
+import { isSentinelList } from "./lists.ts";
 // The brain bridge: scoped access for the sibling second-brain app
 // (~/workspace/AIA2ndBrain/brain). BRAIN_TOKEN authorizes exactly two things —
 // reading the owner's board context (GET /api/context) and pushing single
@@ -148,24 +151,18 @@ export function completeItem(
       .get(itemId, scope.boardId) as Row | undefined;
   const row = find();
   if (!row) return null;
-  if (row.recurrence && row.recurrence !== "none") {
-    if (done) {
-      db.prepare("update items set completed_on = ?, touched_by = ? where id = ? and board_id = ?").run(
-        date,
-        scope.ownerId,
-        row.id,
-        scope.boardId,
-      );
-    } else if (row.completed_on === date) {
-      db.prepare("update items set completed_on = null, touched_by = ? where id = ? and board_id = ?").run(
-        scope.ownerId,
-        row.id,
-        scope.boardId,
-      );
-    }
-  } else {
+  // What a check-off writes is decided by the completion machine (lib/completion.ts).
+  const patch = checkOffPatch(row, done, date);
+  if ("done" in patch) {
     db.prepare("update items set done = ?, touched_by = ? where id = ? and board_id = ?").run(
-      done ? 1 : 0,
+      patch.done,
+      scope.ownerId,
+      row.id,
+      scope.boardId,
+    );
+  } else if ("completed_on" in patch) {
+    db.prepare("update items set completed_on = ?, touched_by = ? where id = ? and board_id = ?").run(
+      patch.completed_on,
       scope.ownerId,
       row.id,
       scope.boardId,
@@ -179,16 +176,6 @@ export function completeItem(
     completedOn: after.completed_on,
     done: after.done === 1,
   };
-}
-
-// "Today" on the owner's clock, as YYYY-MM-DD.
-export function todayLA(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Los_Angeles",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
 }
 
 export type DoneByName =
@@ -207,19 +194,22 @@ export function markDoneByName(
   name: string,
   now: Date = new Date(),
 ): DoneByName {
-  const date = todayLA(now);
+  const date = boardToday(now);
   const n = name.trim().toLowerCase();
-  type Row = { id: string; text: string; recurrence: string; completed_on: string | null; done: number };
-  const rows = db
-    .prepare("select id, text, recurrence, completed_on, done from items where board_id = ? and archived = 0 and text is not null")
-    .all(scope.boardId) as Row[];
+  type Row = { id: string; text: string; list: string; recurrence: string; completed_on: string | null; done: number };
+  // The note / review sentinel cards are not checkable items: a fuzzy name must never land on them.
+  const rows = (db
+    .prepare("select id, text, list, recurrence, completed_on, done from items where board_id = ? and archived = 0 and text is not null")
+    .all(scope.boardId) as Row[]).filter((r) => !isSentinelList(r.list));
   const exact = rows.filter((r) => r.text.trim().toLowerCase() === n);
   const hits = exact.length ? exact : rows.filter((r) => r.text.toLowerCase().includes(n));
   if (!n || hits.length === 0) return { marked: false, reason: "not found", date };
   if (hits.length > 1) return { marked: false, reason: "ambiguous", date };
   const r = hits[0];
   const recurring = !!r.recurrence && r.recurrence !== "none";
-  const already = recurring ? r.completed_on === date : r.done === 1;
+  // Done-ness is the completion machine's (a weekly card ticked on Wednesday is already
+  // done on Friday: no second write, no second "completed" event).
+  const already = effectiveDone({ recurrence: r.recurrence, completed_on: r.completed_on, done: r.done === 1 }, date);
   if (already) {
     return {
       marked: false,

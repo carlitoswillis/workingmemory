@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyUserSessionEdge } from "./lib/auth-edge";
+import { sessionGate } from "./lib/session-state";
 
 // Hosted-mode edge middleware. With DEMO_MODE off it does nothing at all.
 //
@@ -67,6 +68,26 @@ export async function middleware(req: NextRequest) {
     !!secret &&
     !!sessionToken &&
     (await verifyUserSessionEdge(sessionToken, secret)) !== null;
+
+  // A session cookie that no longer verifies (expired, secret rotated) is NOT a visitor:
+  // send page loads to /login and refuse writes with a 401, clearing the dead cookie
+  // either way (lib/session-state.ts). Without this the request fell through to the
+  // throwaway demo board and a capture reported success into a file swept after 24 h.
+  const gate = sessionGate({
+    // No SESSION_SECRET = accounts are off (lib/db.ts reads that as "none"), so never "invalid".
+    state: secret && sessionToken && !signedIn ? "invalid" : "none",
+    method: req.method,
+    path: req.nextUrl.pathname,
+    hasAuthorization: req.headers.has("authorization"),
+  });
+  if (gate !== "pass") {
+    const res =
+      gate === "login"
+        ? NextResponse.redirect(new URL("/login", req.url))
+        : NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    res.cookies.delete(SESSION_COOKIE);
+    return res;
+  }
 
   // Auth attempts get their own, much stricter limits (per IP, not per visitor
   // cookie — an attacker can mint cookies freely).

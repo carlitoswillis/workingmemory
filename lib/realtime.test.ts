@@ -5,7 +5,8 @@
 // count to baseline. Every SSE reconnect adds a listener, so a leak here is the one
 // real failure mode of the real-time design (plan §8).
 
-import { pokeBoard, subscribeBoard, boardListenerCount } from "./realtime.ts";
+import { pokeBoard, subscribeBoard, boardListenerCount, boardVersion } from "./realtime.ts";
+import { frameChanged, parsePokeFrame } from "./pokeframe.ts";
 
 let failures = 0;
 function ok(label: string, got: unknown, want: unknown) {
@@ -59,6 +60,24 @@ ok("poke after full unsubscribe hits nobody", aHits, 2);
 // simulate churn: many connect/disconnect cycles must not accumulate listeners
 for (let i = 0; i < 100; i++) subscribeBoard(A, () => {})();
 ok("100 connect/disconnect cycles leave no listeners", boardListenerCount(A), 0);
+
+// version counter: a poke changes the frame even when no history row was written
+// (a reorder or a column rename journals nothing, so the high-water mark stays put).
+{
+  const before = boardVersion("board-V");
+  pokeBoard("board-V");
+  const after = boardVersion("board-V");
+  ok("a poke bumps the board version", after, before + 1);
+  ok("another board's version is untouched", boardVersion("board-W"), 0);
+  const base = { h: 7, v: before };
+  ok("same h, new v => refresh", frameChanged(base, { h: 7, v: after }), true);
+  ok("identical frame => no refresh", frameChanged(base, { h: 7, v: before }), false);
+  ok("first frame is only a baseline", frameChanged(null, base), false);
+  ok("server restart (v resets lower) still refreshes", frameChanged({ h: 7, v: 40 }, { h: 7, v: 1 }), true);
+  ok("h falling (card moved boards) refreshes", frameChanged({ h: 9, v: 1 }, { h: 4, v: 1 }), true);
+  ok("old-shape frame without v parses", parsePokeFrame('{"h":3}'), { h: 3, v: 0 });
+  ok("garbage frame is ignored", parsePokeFrame("nope"), null);
+}
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
