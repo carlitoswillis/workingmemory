@@ -27,6 +27,7 @@ import {
   sectionOf,
   screenSwipeIntent,
   swipeIntent,
+  timelineRevision,
   withinSwipeZone,
   type NowItem,
   type NowSection,
@@ -89,6 +90,18 @@ ok("collapse finished releases the row to its new section", gone, {
 });
 ok("released rows are no longer held", rowHeldInPlace(gone), false);
 ok("a stray collapsed event outside the collapse is ignored", rowNext(tapped, { type: "collapsed" }), tapped);
+
+// The phone's timeline provider refetches when this fingerprint changes.
+{
+  const a = [{ id: "1", updated_at: "2026-06-01T10:00:00.000Z" }];
+  ok("same board, same revision", timelineRevision(a), timelineRevision([...a]));
+  ok(
+    "an edit (newer updated_at) changes the revision",
+    timelineRevision(a) !== timelineRevision([{ id: "1", updated_at: "2026-06-01T10:05:00.000Z" }]),
+    true,
+  );
+  ok("a new card changes the revision", timelineRevision(a) !== timelineRevision([...a, { id: "2", updated_at: "2026-06-01T09:00:00.000Z" }]), true);
+}
 
 // Tap (write 1 = done) then Undo (write 2 = not done): the stale rejection of write 1 is
 // ignored, and even if it were applied, revertTo pins the box to the server's value.

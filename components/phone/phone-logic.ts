@@ -366,3 +366,12 @@ export function applyReorder<T extends { id: string; position: number }>(
   reordered.splice(to, 0, moved);
   return reordered.map((item, index) => ({ ...item, position: slots[index] }));
 }
+
+// A cheap fingerprint of the live board: changes whenever a card is added/removed or
+// touched (every write bumps updated_at). The provider refetches when it changes, so
+// the log the ruler and "What changed" read never lags the cards on screen.
+export function timelineRevision(items: { id: string; updated_at: string }[]): string {
+  let latest = "";
+  for (const it of items) if (it.updated_at > latest) latest = it.updated_at;
+  return `${items.length}|${latest}`;
+}
